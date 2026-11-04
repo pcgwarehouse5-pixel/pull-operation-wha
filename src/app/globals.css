@@ -1,0 +1,38 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f5f7fa;
+  --foreground: #1a1f2b;
+  --muted: #5b6475;
+  --card: #ffffff;
+  --border: #dde2ea;
+  --primary: #1e40af;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #10141c;
+    --foreground: #e8ebf1;
+    --muted: #a0a8b8;
+    --card: #181d27;
+    --border: #2a3140;
+    --primary: #7fa2ff;
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-card: var(--card);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  /* ฟอนต์ไทยที่มีในเครื่องอยู่แล้ว ไม่ต้องดาวน์โหลด */
+  --font-sans: "Noto Sans Thai", "Leelawadee UI", "Sarabun", Tahoma, sans-serif;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}
