@@ -1,38 +1,37 @@
 @import "tailwindcss";
 
-:root {
-  --background: #f5f7fa;
-  --foreground: #1a1f2b;
-  --muted: #5b6475;
-  --card: #ffffff;
-  --border: #dde2ea;
-  --primary: #1e40af;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #10141c;
-    --foreground: #e8ebf1;
-    --muted: #a0a8b8;
-    --card: #181d27;
-    --border: #2a3140;
-    --primary: #7fa2ff;
-  }
-}
-
+/* สีของแอป (โทนน้ำเงินองค์กร อ่านง่ายกลางแจ้ง) */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-muted: var(--muted);
-  --color-card: var(--card);
-  --color-border: var(--border);
-  --color-primary: var(--primary);
-  /* ฟอนต์ไทยที่มีในเครื่องอยู่แล้ว ไม่ต้องดาวน์โหลด */
   --font-sans: "Noto Sans Thai", "Leelawadee UI", "Sarabun", Tahoma, sans-serif;
+
+  --color-brand: #1e3a8a; /* สีหลัก */
+  --color-brand-2: #27479f; /* สีหลักตอนชี้ */
+  --color-ok: #1f8a4c; /* สำเร็จ / ใช้งานอยู่ */
+  --color-warn: #e9b23c; /* รอดำเนินการ / เตือน */
+  --color-bad: #c62828; /* ผิดพลาด / ปิดใช้งาน */
+  --color-paper: #f2f4f9; /* พื้นหลัง */
+  --color-line: #dce1ec; /* เส้นแบ่ง */
+  --color-muted: #5b6480; /* ตัวหนังสือรอง */
+  --color-ink: #141a3c; /* ตัวหนังสือหลัก */
+}
+
+html {
+  color-scheme: light;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--color-paper);
+  color: var(--color-ink);
   font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.55;
+  -webkit-tap-highlight-color: transparent;
+  font-feature-settings: "tnum" 1;
+}
+
+/* โฟกัสเห็นชัด เวลาใช้คีย์บอร์ด */
+:focus-visible {
+  outline: 3px solid var(--color-warn);
+  outline-offset: 2px;
+  border-radius: 10px;
 }

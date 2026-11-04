@@ -7,20 +7,28 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "typecheck": "next typegen && tsc --noEmit"
+    "typecheck": "next typegen && tsc --noEmit",
+    "test": "node --no-warnings --test \"tests/*.test.mjs\"",
+    "db:setup": "node scripts/db-setup.mjs",
+    "create-admin": "node scripts/create-admin.mjs",
+    "db:check": "node scripts/check-connection.mjs",
+    "db:security": "node scripts/check-security.mjs"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.118.0",
     "next": "16.4.3",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.15",
     "@tailwindcss/turbopack": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.4.3",
+    "pg": "^8.23.1",
     "tailwindcss": "^4",
     "typescript": "^5"
   },
