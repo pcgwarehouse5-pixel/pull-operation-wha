@@ -6,6 +6,7 @@ import { useApp } from "@/components/AuthProvider";
 import { Alert, Badge, Button, Card, Empty, Field, Loading, Modal, PageIntro, inputCls } from "@/components/ui";
 import { Icon } from "@/components/Icon";
 import { SkillsManager } from "@/components/SkillsManager";
+import { HolidaysManager } from "@/components/HolidaysManager";
 import { errText, fetchAll, sb } from "@/lib/supabase";
 import type { DropdownOption } from "@/lib/types";
 
@@ -14,7 +15,8 @@ const CATEGORIES: { key: string; label: string; hint: string }[] = [
   { key: "position", label: "ตำแหน่ง", hint: "ตำแหน่งงานที่เลือกได้ในข้อมูลพนักงาน" },
   { key: "__skills", label: "ทักษะ", hint: "ทักษะแยกตามตำแหน่ง ใช้ติ๊กในข้อมูลพนักงาน และใช้จัดกำลังคน" },
   { key: "employment_type", label: "ประเภทพนักงาน", hint: "เช่น พนักงานรายเดือน คนงานรายวัน MOU" },
-  { key: "shift_type", label: "รหัสกะ", hint: "รหัสกะพร้อมเวลาเริ่ม-เลิก และสีในตารางกะ" },
+  { key: "shift_type", label: "รหัสกะ", hint: "รหัสกะพร้อมเวลาเริ่ม-เลิก และสีในตารางกะ (รหัสที่ไม่มีเวลา เช่น OFF HOL นับเป็นวันหยุด)" },
+  { key: "__holidays", label: "วันหยุดนักขัตฤกษ์", hint: "ปฏิทินวันหยุดของบริษัท ใช้เติม HOL ในตารางกะ" },
   { key: "leave_type", label: "ประเภทการลา", hint: "ใช้ในใบลา" },
   { key: "ot_reason", label: "เหตุผล OT", hint: "ตัวเลือกเหตุผลตอนขอ OT" },
   { key: "kpi_category", label: "หัวข้อ KPI", hint: "หัวข้อประเมินรายเดือน" },
@@ -32,10 +34,11 @@ export default function SettingsPage() {
   const meta = CATEGORIES.find((c) => c.key === cat)!;
   const isShift = cat === "shift_type";
   const isSkills = cat === "__skills";
+  const isHolidays = cat === "__holidays";
 
   const load = useCallback(async () => {
     setRows(null);
-    if (cat === "__skills") return;
+    if (cat.startsWith("__")) return;
     if (demo) {
       setRows([...demo.PREVIEW_OPTIONS, ...demo.PREVIEW_EXTRA_OPTIONS].filter((o) => o.category === cat));
       return;
@@ -72,7 +75,7 @@ export default function SettingsPage() {
       <PageIntro
         title="ตั้งค่าตัวเลือก"
         action={
-          !isSkills && (
+          !isSkills && !isHolidays && (
             <Button onClick={openNew}>
               <Icon name="plus" size={20} /> เพิ่ม{meta.label}
             </Button>
@@ -102,6 +105,8 @@ export default function SettingsPage() {
       {err && <div className="mb-3"><Alert tone="error">{err}</Alert></div>}
       {isSkills ? (
         <SkillsManager />
+      ) : isHolidays ? (
+        <HolidaysManager />
       ) : !rows ? (
         <Loading />
       ) : rows.length === 0 ? (

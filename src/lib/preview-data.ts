@@ -39,6 +39,9 @@ export const PREVIEW_EXTRA_OPTIONS: DropdownOption[] = [
   { id: "o5", category: "employment_type", value: "monthly_employee", label: "พนักงานรายเดือน", sort_order: 1, extra: {}, is_active: true },
   { id: "o6", category: "employment_type", value: "mou", label: "MOU", sort_order: 2, extra: {}, is_active: true },
   { id: "o7", category: "employment_type", value: "daily_worker", label: "คนงานรายวัน", sort_order: 3, extra: {}, is_active: true },
+  { id: "o9", category: "shift_type", value: "GN_5", label: "20:00-05:00", sort_order: 2, extra: { start_time: "20:00", end_time: "05:00", bg: "#3b82f6" }, is_active: true },
+  { id: "o10", category: "shift_type", value: "OFF", label: "หยุด", sort_order: 3, extra: { bg: "#ef4444" }, is_active: true },
+  { id: "o11", category: "shift_type", value: "HOL", label: "นักขัตฤกษ์", sort_order: 4, extra: { bg: "#f59e0b" }, is_active: true },
   { id: "o8", category: "subcontractor_company", value: "บริษัทตัวอย่าง", label: "บริษัทตัวอย่าง", sort_order: 1, extra: {}, is_active: true },
 ];
 
@@ -68,5 +71,41 @@ export function previewEmployees(): Employee[] {
     travel_eligible: false,
     show_in_ot_report: true,
     auto_check_in: false,
+  }));
+}
+
+export const PREVIEW_HOLIDAYS = [
+  { id: "h1", holiday_date: "2026-12-05", name: "วันหยุดตัวอย่าง 1" },
+  { id: "h2", holiday_date: "2026-12-31", name: "วันหยุดตัวอย่าง 2" },
+];
+
+// ตารางกะสมมติ: หมุนกะเช้า/ดึก หยุดวันอาทิตย์
+export function previewShifts(dates: string[]) {
+  const ids = ["p1", "p2", "preview-me"];
+  return ids.flatMap((id, i) =>
+    dates.map((d, j) => {
+      const dow = new Date(d + "T00:00:00Z").getUTCDay();
+      return { user_id: id, work_date: d, shift_code: dow === 0 ? "OFF" : (Math.floor(j / 7) + i) % 2 ? "GN_5" : "STD1", holiday_work: null, is_volunteer: false };
+    }),
+  );
+}
+
+// พนักงานในตารางกะของโหมดดูดีไซน์ (รวมผู้ใช้เดโม)
+export function previewRoster(wh: string) {
+  const list = previewEmployees().filter((e) => e.warehouse_id === wh);
+  if (wh === W5) list.push({ ...list[0], id: "preview-me", employee_code: "DEMO01", first_name_th: "ผู้ใช้", nickname: "เดโม", position: "RT" });
+  return list;
+}
+
+// ตารางกะของเพื่อนร่วมคลัง (หน้า "ตารางกะของฉัน")
+export function previewTeam(dates: string[], meId: string) {
+  const names: Record<string, [string, string | null, string]> = { p1: ["ผู้ทดลอง", "หนึ่ง", "RT"], p2: ["ทดสอบ", null, "Checker"], "preview-me": ["ผู้ใช้", "เดโม", "RT"] };
+  return previewShifts(dates).map((r) => ({
+    ...r,
+    holiday_work: null as "OFF" | "HOL" | null,
+    user_id: r.user_id === "preview-me" ? meId : r.user_id,
+    first_name_th: names[r.user_id][0],
+    nickname: names[r.user_id][1],
+    position: names[r.user_id][2],
   }));
 }

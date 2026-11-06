@@ -93,3 +93,28 @@ test("ตำแหน่งที่ใช้อยู่แต่ไม่ม�
   assert.match(added.id, /^[0-9a-f-]{36}$/, "รายการที่เพิ่มต้องมี ID");
   assert.ok(out.options.every((o) => o.id), "ทุกรายการมี ID");
 });
+
+test("ตารางกะ: จับคู่รหัสพนักงาน แปลงทำงานวันหยุด ตั้งเดือนเดิมเป็นประกาศแล้ว และข้ามที่ใช้ไม่ได้", () => {
+  const out = transform({
+    ...src,
+    dropdown_options: [
+      ...src.dropdown_options,
+      { id: "s1", category: "shift_type", value: "STD1", label: "08:00-17:00", extra: {} },
+      { id: "s2", category: "shift_type", value: "GN_5", label: "20:00-05:00", extra: {} },
+    ],
+    shift_schedules: [
+      { employee_code: "0001", schedule_date: "2026-10-01", shift_type: "STD1", ot_type: null, is_volunteer: false },
+      { employee_code: "0001", schedule_date: "2026-10-02", shift_type: "GN_5", ot_type: "HOL", is_volunteer: false },
+      { employee_code: "0001", schedule_date: "2026-10-02", shift_type: "STD1", ot_type: null }, // ซ้ำวัน
+      { employee_code: "0002", schedule_date: "2026-11-01", shift_type: "XX" }, // รหัสกะไม่รู้จัก
+      { employee_code: "0003", schedule_date: "2026-10-01", shift_type: "STD1" }, // คลังที่ไม่ย้าย
+    ],
+  });
+  assert.deepEqual(out.shifts, [
+    { user_id: "u1", work_date: "2026-10-01", shift_code: "STD1", holiday_work: null, is_volunteer: false },
+    { user_id: "u1", work_date: "2026-10-02", shift_code: "GN_5", holiday_work: "HOL", is_volunteer: false },
+  ]);
+  assert.deepEqual(out.scheduleMonths, [{ warehouse_id: W5, month: "2026-10-01", status: "published" }]);
+  assert.ok(out.issues.some((i) => i.type.startsWith("รหัสกะไม่มี") && i.code === "XX"));
+  assert.ok(out.issues.some((i) => i.type.startsWith("ตารางกะของคนที่ไม่ได้ย้าย") && i.code === "0003"));
+});

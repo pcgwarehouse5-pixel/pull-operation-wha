@@ -13,6 +13,9 @@ const PATHS = {
   plus: "M12 5v14M5 12h14",
   search: "M11 18a7 7 0 100-14 7 7 0 000 14zM21 21l-5-5",
   back: "M15 5l-7 7 7 7",
+  calendar: "M4 6a1 1 0 011-1h14a1 1 0 011 1v14H4zM4 10h16M8 3v4M16 3v4",
+  tool: "M14.7 6.3a4 4 0 00-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 005.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z",
+  next: "M9 5l7 7-7 7",
 } as const;
 
 export type IconName = keyof typeof PATHS;

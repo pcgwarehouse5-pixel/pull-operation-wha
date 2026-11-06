@@ -1,7 +1,8 @@
-// ย้ายข้อมูลจากแอปเดิม (Lovable export) เข้าแอปใหม่: คลัง WH5/WH32, พนักงาน, คลังที่ดูแล, ตัวเลือกตั้งค่า, ทักษะ, อัตรากำลัง
+// ย้ายข้อมูลจากแอปเดิม (Lovable export) เข้าแอปใหม่: คลัง WH5/WH32, พนักงาน, คลังที่ดูแล, ตัวเลือกตั้งค่า, ทักษะ, อัตรากำลัง, ตารางกะ
 // ใช้:
 //   node scripts/import-lovable.mjs              ซ้อม: ตรวจและสรุปอย่างเดียว ไม่เขียนอะไร
 //   node scripts/import-lovable.mjs --apply      นำเข้าจริง (รันซ้ำได้: ของที่มีแล้วจะอัปเดต/ข้าม ไม่ซ้ำ)
+//   node scripts/import-lovable.mjs --apply --shifts-only   นำเข้าเฉพาะตารางกะ (ไม่แตะข้อมูลพนักงานที่แก้ในแอปแล้ว)
 //   เลือกโฟลเดอร์ export เอง: --dir lovable-data/export-YYYYMMDD-HHMM (ค่าเริ่มต้น = โฟลเดอร์ล่าสุด)
 // บัญชีใหม่ทุกคนใช้รหัสผ่านเริ่มต้น (DEFAULT_USER_PASSWORD) และต้องตั้งรหัสใหม่ตอนเข้าครั้งแรก
 import fs from "node:fs";
@@ -12,6 +13,7 @@ import { transform } from "./lib/lovable-transform.mjs";
 process.loadEnvFile(".env.local");
 const e = process.env;
 const APPLY = process.argv.includes("--apply");
+const SHIFTS_ONLY = process.argv.includes("--shifts-only");
 const dirArg = process.argv.indexOf("--dir");
 const dir =
   dirArg > 0
@@ -41,14 +43,16 @@ const read = (t) => {
   return fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, "utf8").replace(/^﻿/, "")) : [];
 };
 const src = Object.fromEntries(
-  ["warehouses", "profiles", "user_roles", "warehouse_access_permissions", "dropdown_options", "skills", "employee_skills", "organization_budget"].map((t) => [t, read(t)]),
+  ["warehouses", "profiles", "user_roles", "warehouse_access_permissions", "dropdown_options", "skills", "employee_skills", "organization_budget", "shift_schedules"].map((t) => [t, read(t)]),
 );
 const out = transform(src);
 
-async function all(table, cols) {
+async function all(table, cols, orderBy) {
   const rows = [];
   for (let from = 0; ; from += 1000) {
-    const { data, error } = await admin.from(table).select(cols).range(from, from + 999);
+    let q = admin.from(table).select(cols);
+    if (orderBy) q = q.order(orderBy);
+    const { data, error } = await q.range(from, from + 999);
     if (error) throw error;
     rows.push(...data);
     if (data.length < 1000) return rows;
@@ -65,7 +69,7 @@ async function allAuthUsers() {
 }
 
 // ---------- ตรวจกับฐานข้อมูลปัจจุบัน (อ่านอย่างเดียว) ----------
-const [dbWh, dbProfiles, dbOptions, dbUw, authUsers, dbSkills, dbEs, dbBudgets] = await Promise.all([
+const [dbWh, dbProfiles, dbOptions, dbUw, authUsers, dbSkills, dbEs, dbBudgets, dbShifts, dbMonths] = await Promise.all([
   all("warehouses", "id, code"),
   all("profiles", "id, employee_code, status"),
   all("dropdown_options", "category, value"),
@@ -74,6 +78,8 @@ const [dbWh, dbProfiles, dbOptions, dbUw, authUsers, dbSkills, dbEs, dbBudgets] 
   all("skills", "id, position, name"),
   all("employee_skills", "user_id, skill_id"),
   all("headcount_budgets", "warehouse_id, position"),
+  all("shift_schedules", "user_id, work_date", "id"),
+  all("schedule_months", "warehouse_id, month"),
 ]);
 const whById = new Set(dbWh.map((w) => w.id));
 const whCodeOwner = Object.fromEntries(dbWh.map((w) => [w.code, w.id]));
@@ -106,6 +112,10 @@ const newSkills = out.skills.filter((s) => !skillById.has(s.id) && !skillByName.
 const okSkill = new Set([...skillById, ...newSkills.map((s) => s.id)]);
 const esKey = new Set(dbEs.map((x) => `${x.user_id}|${x.skill_id}`));
 const newEs = out.employeeSkills.filter((x) => okSkill.has(x.skill_id) && !esKey.has(`${x.user_id}|${x.skill_id}`));
+const shiftKey = new Set(dbShifts.map((s) => `${s.user_id}|${s.work_date}`));
+const newShifts = out.shifts.filter((s) => !shiftKey.has(`${s.user_id}|${s.work_date}`));
+const monthKey = new Set(dbMonths.map((m) => `${m.warehouse_id}|${m.month}`));
+const newMonths = out.scheduleMonths.filter((m) => !monthKey.has(`${m.warehouse_id}|${m.month}`));
 const budgetKey = new Set(dbBudgets.map((b) => `${b.warehouse_id}|${b.position}`));
 const newBudgets = out.budgets.filter((b) => !budgetKey.has(`${b.warehouse_id}|${b.position}`));
 
@@ -122,6 +132,7 @@ console.log(`คลังเพิ่มเติมที่ดูแล: ${out
 console.log(`ตัวเลือกตั้งค่า: ${out.options.length} รายการ (ใหม่ ${newOpts.length}) | ตำแหน่งที่เพิ่มเข้ารายการ: ${out.addedPositions.length}`);
 console.log(`ทักษะ: ${out.skills.length} รายการ (ใหม่ ${newSkills.length}) | ทักษะของพนักงาน: ${out.employeeSkills.length} (ใหม่ ${newEs.length})`);
 console.log(`อัตรากำลัง (ใส่ให้คลัง 5): ${out.budgets.length} ตำแหน่ง (ใหม่ ${newBudgets.length}) — มีอยู่แล้วจะไม่ทับค่าที่แก้ในแอป`);
+console.log(`ตารางกะ: ${out.shifts.length} วัน-คน (ใหม่ ${newShifts.length}) — มีอยู่แล้วจะไม่ทับที่แก้ในแอป | เดือนที่ประกาศ: ${out.scheduleMonths.map((m) => `${whCode[m.warehouse_id]} ${m.month.slice(0, 7)}`).join(", ")} (ใหม่ ${newMonths.length})`);
 if (out.issues.length) {
   console.log(`\nรายการที่ข้าม/ต้องรู้ (${out.issues.length}):`);
   for (const i of out.issues) console.log(`  - ${i.type}: ${i.code}${i.detail ? ` (${i.detail})` : ""}`);
@@ -148,6 +159,11 @@ const fail = (step, err) => {
   process.exit(1);
 };
 
+let created = 0;
+if (SHIFTS_ONLY) {
+  if (plan.create.length) fail("ตรวจก่อนนำเข้า", new Error(`มีพนักงานใหม่ ${plan.create.length} คนที่ยังไม่มีบัญชี ให้รันแบบเต็มก่อน`));
+  console.log("\nโหมดเฉพาะตารางกะ: ข้ามคลัง พนักงาน ตัวเลือก ทักษะ และอัตรากำลัง");
+} else {
 if (newWh.length) {
   const { error } = await retry(() => admin.from("warehouses").insert(newWh));
   if (error) fail("คลัง", error);
@@ -158,7 +174,6 @@ if (newOpts.length) {
 }
 console.log(`\nนำเข้าคลัง ${newWh.length} และตัวเลือก ${newOpts.length} แล้ว`);
 
-let created = 0;
 for (const p of plan.create) {
   if (!authById.has(p.id)) {
     const { error } = await retry(() =>
@@ -209,11 +224,21 @@ if (newBudgets.length) {
   const { error } = await retry(() => admin.from("headcount_budgets").insert(newBudgets));
   if (error) fail("อัตรากำลัง", error);
 }
+}
+// ตารางกะ (หลังมีบัญชีและรหัสกะครบ) แล้วตั้งเดือนเดิมเป็น "ประกาศแล้ว"
+for (let i = 0; i < newShifts.length; i += 1000) {
+  const { error } = await retry(() => admin.from("shift_schedules").upsert(newShifts.slice(i, i + 1000), { onConflict: "user_id,work_date", ignoreDuplicates: true }));
+  if (error) fail(`ตารางกะชุดที่ ${i / 1000 + 1}`, error);
+}
+if (newMonths.length) {
+  const { error } = await retry(() => admin.from("schedule_months").upsert(newMonths.map((m) => ({ ...m, published_at: new Date().toISOString() })), { onConflict: "warehouse_id,month", ignoreDuplicates: true }));
+  if (error) fail("สถานะตารางกะ", error);
+}
 await admin.from("audit_logs").insert({
   action: "import",
   table_name: "profiles",
-  new_data: { source: dir, warehouses: newWh.length, options: newOpts.length, created, updated: plan.update.length, user_warehouses: newUw.length, skills: newSkills.length, employee_skills: newEs.length, budgets: newBudgets.length },
+  new_data: { source: dir, shifts_only: SHIFTS_ONLY, warehouses: newWh.length, options: newOpts.length, created, updated: plan.update.length, user_warehouses: newUw.length, skills: newSkills.length, employee_skills: newEs.length, budgets: newBudgets.length, shifts: newShifts.length, schedule_months: newMonths.length },
 });
 console.log(
-  `\nเสร็จ: สร้างบัญชี ${created} | อัปเดต ${plan.update.length} | คลังเพิ่มเติม ${newUw.length} | ทักษะ ${newSkills.length} | ทักษะพนักงาน ${newEs.length} | อัตรากำลัง ${newBudgets.length}`,
+  `\nเสร็จ: สร้างบัญชี ${created} | อัปเดต ${SHIFTS_ONLY ? 0 : plan.update.length} | คลังเพิ่มเติม ${newUw.length} | ทักษะ ${newSkills.length} | ทักษะพนักงาน ${newEs.length} | อัตรากำลัง ${newBudgets.length} | ตารางกะ ${newShifts.length} วัน-คน`,
 );

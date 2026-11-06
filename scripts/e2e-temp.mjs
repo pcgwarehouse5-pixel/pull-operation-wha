@@ -13,6 +13,8 @@ const WH = "ZZTEST";
 const USERS = [
   { code: "ztest-admin", first: "ทดสอบแอดมิน", role: "admin", must: false },
   { code: "ztest-emp", first: "ทดสอบพนักงาน", role: "employee", must: true },
+  { code: "ztest-sup", first: "ทดสอบหัวหน้า", role: "supervisor", must: false },
+  { code: "ztest-emp2", first: "ทดสอบพนักงานสอง", role: "employee", must: false },
 ];
 
 async function findUser(code) {

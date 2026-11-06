@@ -125,5 +125,40 @@ export function transform(src) {
         .map((b) => ({ warehouse_id: wh5.id, position: clean(b.position), budget_count: Number(b.budget_count) }))
     : [];
 
-  return { warehouses, profiles, userWarehouses, options, addedPositions, issues, skills, employeeSkills, budgets };
+  // ตารางกะ: จับคู่ด้วยรหัสพนักงาน (เฉพาะคนที่ย้าย) · ot_type OFF/HOL เดิม = ทำงานในวันหยุด
+  const byCode = new Map(profiles.map((p) => [p.employee_code.toLowerCase(), p]));
+  const shiftCodes = new Set(options.filter((o) => o.category === "shift_type").map((o) => o.value));
+  const shiftKey = new Set();
+  const shifts = [];
+  const months = new Map();
+  const missingShift = new Map();
+  for (const s of src.shift_schedules ?? []) {
+    const code = clean(s.employee_code)?.toLowerCase();
+    const p = code && byCode.get(code);
+    const date = String(s.schedule_date ?? "").slice(0, 10);
+    const shift = clean(s.shift_type);
+    if (!p) {
+      missingShift.set(s.employee_code, (missingShift.get(s.employee_code) ?? 0) + 1);
+      continue;
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !shift) continue;
+    if (!shiftCodes.has(shift)) {
+      issues.push({ type: "รหัสกะไม่มีในตัวเลือก (ข้าม)", code: shift, detail: `${p.employee_code} ${date}` });
+      continue;
+    }
+    const k = `${p.id}|${date}`;
+    if (shiftKey.has(k)) continue;
+    shiftKey.add(k);
+    const hw = s.ot_type === "OFF" || s.ot_type === "HOL" ? s.ot_type : null;
+    shifts.push({ user_id: p.id, work_date: date, shift_code: shift, holiday_work: hw, is_volunteer: s.is_volunteer === true });
+    months.set(`${p.warehouse_id}|${date.slice(0, 7)}-01`, true);
+  }
+  for (const [code, n] of missingShift) issues.push({ type: "ตารางกะของคนที่ไม่ได้ย้าย (ข้าม)", code: code ?? "(ว่าง)", detail: `${n} วัน` });
+  // เดือนที่มีตารางกะเดิม = ประกาศแล้ว (พนักงานเห็นเหมือนแอปเดิม)
+  const scheduleMonths = [...months.keys()].map((k) => {
+    const [warehouse_id, month] = k.split("|");
+    return { warehouse_id, month, status: "published" };
+  });
+
+  return { warehouses, profiles, userWarehouses, options, addedPositions, issues, skills, employeeSkills, budgets, shifts, scheduleMonths };
 }

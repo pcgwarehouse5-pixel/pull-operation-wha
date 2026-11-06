@@ -22,7 +22,7 @@ console.log(`ฟังก์ชัน ${fns.rows.length} ตัว | authenticat
 await c.end();
 // ลองอ่านผ่าน API ด้วยกุญแจสาธารณะโดยไม่ล็อกอิน
 const anon = createClient(e.NEXT_PUBLIC_SUPABASE_URL, e.NEXT_PUBLIC_SUPABASE_ANON_KEY, { auth: { persistSession: false } });
-for (const t of ["profiles", "warehouses", "audit_logs", "dropdown_options", "user_warehouses"]) {
+for (const t of ["profiles", "warehouses", "audit_logs", "dropdown_options", "user_warehouses", "skills", "employee_skills", "headcount_budgets", "shift_schedules", "schedule_months", "holidays"]) {
   const { data, error } = await anon.from(t).select("*").limit(1);
   const blocked = !!error || (data ?? []).length === 0;
   if (!blocked) bad++;
@@ -31,5 +31,10 @@ for (const t of ["profiles", "warehouses", "audit_logs", "dropdown_options", "us
 const r = await anon.rpc("set_user_access", { p_user: "00000000-0000-0000-0000-000000000000", p_role: "super_admin", p_home: null });
 console.log("API ไม่ล็อกอิน เรียก set_user_access:", r.error ? "ถูกปฏิเสธ" : "ผ่าน (อันตราย!)");
 if (!r.error) bad++;
+for (const [fn, args] of [["team_schedule", { p_month: "2026-01-01" }], ["apply_shifts", { p_wh: "00000000-0000-0000-0000-000000000000", p_rows: [], p_source: "x" }], ["schedule_history", { p_wh: "00000000-0000-0000-0000-000000000000", p_month: "2026-01-01" }]]) {
+  const x = await anon.rpc(fn, args);
+  console.log(`API ไม่ล็อกอิน เรียก ${fn}:`, x.error ? "ถูกปฏิเสธ" : "ผ่าน (อันตราย!)");
+  if (!x.error) bad++;
+}
 console.log(bad ? `พบปัญหา ${bad} จุด` : "ผ่านทั้งหมด");
 process.exit(bad ? 1 : 0);
