@@ -10,6 +10,7 @@ export type NavItem = {
   icon: IconName;
   minRole?: AppRole; // บทบาทขั้นต่ำที่เห็นเมนูนี้
   onlyRole?: AppRole; // เฉพาะบทบาทนี้
+  short?: string; // ชื่อสั้นบนแถบล่างของมือถือ
 };
 
 export const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
@@ -17,7 +18,9 @@ export const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
     title: "ของฉัน",
     items: [
       { key: "home", href: "/", label: "หน้าหลัก", desc: "ภาพรวมของฉัน", icon: "home" },
-      { key: "my-shifts", href: "/my-shifts", label: "ตารางกะของฉัน", desc: "กะของฉันและเพื่อนร่วมคลัง", icon: "calendar" },
+      { key: "attendance", href: "/attendance", label: "ลงเวลา", desc: "กดเข้า-ออกงาน ดูเวลาย้อนหลัง ขอแก้เวลา", icon: "pin" },
+      { key: "leave", href: "/leave", label: "ลางาน", desc: "ยื่นใบลา ดูวันลาคงเหลือ", icon: "leave" },
+      { key: "my-shifts", href: "/my-shifts", label: "ตารางกะของฉัน", desc: "กะของฉันและเพื่อนร่วมคลัง", icon: "calendar", short: "กะของฉัน" },
       { key: "profile", href: "/profile", label: "ข้อมูลของฉัน", desc: "ข้อมูลส่วนตัวและรหัสผ่าน", icon: "user" },
     ],
   },
@@ -26,6 +29,8 @@ export const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
     items: [
       { key: "employees", href: "/employees", label: "ทะเบียนพนักงาน", desc: "ข้อมูล ทักษะ ลาออก นำเข้า Excel", icon: "users", minRole: "supervisor" },
       { key: "shifts", href: "/shifts", label: "ตารางกะ", desc: "วางกะ ประกาศ นำเข้า/ส่งออก", icon: "calendar", minRole: "supervisor" },
+      { key: "team-attendance", href: "/attendance/team", label: "ติดตามการเข้างาน", desc: "มา/สาย/ขาด รายวัน สรุปรายเดือน อนุมัติแก้เวลา", icon: "clock", minRole: "supervisor", short: "การเข้างาน" },
+      { key: "leave-approvals", href: "/leave/approvals", label: "อนุมัติใบลา", desc: "อนุมัติ/ตีกลับ ยื่นใบลาแทนพนักงาน", icon: "check", minRole: "supervisor", short: "อนุมัติลา" },
       { key: "organization", href: "/organization", label: "ผังองค์กร", desc: "อัตรากำลังเทียบคนจริง", icon: "grid", minRole: "supervisor" },
     ],
   },
@@ -49,11 +54,15 @@ export function navFor(role: AppRole) {
 
 // ปุ่มบนแถบล่างของมือถือ (ที่เหลืออยู่ในปุ่ม "เมนู")
 export function bottomKeys(role: AppRole): string[] {
-  return ROLE_RANK[role] >= 2 ? ["home", "shifts", "employees"] : ["home", "my-shifts", "profile"];
+  return ROLE_RANK[role] >= 2 ? ["home", "attendance", "shifts", "team-attendance"] : ["home", "attendance", "leave", "my-shifts"];
 }
 
 export function activeKey(pathname: string): string | null {
   if (pathname === "/") return "home";
-  for (const g of NAV_GROUPS) for (const i of g.items) if (i.href !== "/" && pathname.startsWith(i.href)) return i.key;
-  return null;
+  // เลือกเมนูที่ตรงยาวที่สุด (/attendance/team ไม่ใช่ /attendance)
+  let best: NavItem | null = null;
+  for (const g of NAV_GROUPS)
+    for (const i of g.items)
+      if (i.href !== "/" && (pathname === i.href || pathname.startsWith(i.href + "/")) && (!best || i.href.length > best.href.length)) best = i;
+  return best?.key ?? null;
 }

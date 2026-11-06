@@ -7,6 +7,7 @@ import { Alert, Badge, Button, Card, Empty, Field, Loading, Modal, PageIntro, in
 import { Icon } from "@/components/Icon";
 import { SkillsManager } from "@/components/SkillsManager";
 import { HolidaysManager } from "@/components/HolidaysManager";
+import { RulesManager } from "@/components/RulesManager";
 import { errText, fetchAll, sb } from "@/lib/supabase";
 import type { DropdownOption } from "@/lib/types";
 
@@ -17,6 +18,7 @@ const CATEGORIES: { key: string; label: string; hint: string }[] = [
   { key: "employment_type", label: "ประเภทพนักงาน", hint: "เช่น พนักงานรายเดือน คนงานรายวัน MOU" },
   { key: "shift_type", label: "รหัสกะ", hint: "รหัสกะพร้อมเวลาเริ่ม-เลิก และสีในตารางกะ (รหัสที่ไม่มีเวลา เช่น OFF HOL นับเป็นวันหยุด)" },
   { key: "__holidays", label: "วันหยุดนักขัตฤกษ์", hint: "ปฏิทินวันหยุดของบริษัท ใช้เติม HOL ในตารางกะ" },
+  { key: "__rules", label: "กฎลงเวลา/ลา", hint: "เวลาผ่อนผัน ขั้นอนุมัติลา โควตาวันลา (ทุกค่ามีวันที่เริ่มใช้)" },
   { key: "leave_type", label: "ประเภทการลา", hint: "ใช้ในใบลา" },
   { key: "ot_reason", label: "เหตุผล OT", hint: "ตัวเลือกเหตุผลตอนขอ OT" },
   { key: "kpi_category", label: "หัวข้อ KPI", hint: "หัวข้อประเมินรายเดือน" },
@@ -35,6 +37,7 @@ export default function SettingsPage() {
   const isShift = cat === "shift_type";
   const isSkills = cat === "__skills";
   const isHolidays = cat === "__holidays";
+  const isRules = cat === "__rules";
 
   const load = useCallback(async () => {
     setRows(null);
@@ -75,7 +78,7 @@ export default function SettingsPage() {
       <PageIntro
         title="ตั้งค่าตัวเลือก"
         action={
-          !isSkills && !isHolidays && (
+          !isSkills && !isHolidays && !isRules && (
             <Button onClick={openNew}>
               <Icon name="plus" size={20} /> เพิ่ม{meta.label}
             </Button>
@@ -107,6 +110,8 @@ export default function SettingsPage() {
         <SkillsManager />
       ) : isHolidays ? (
         <HolidaysManager />
+      ) : isRules ? (
+        <RulesManager />
       ) : !rows ? (
         <Loading />
       ) : rows.length === 0 ? (

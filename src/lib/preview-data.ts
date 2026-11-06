@@ -109,3 +109,73 @@ export function previewTeam(dates: string[], meId: string) {
     position: names[r.user_id][2],
   }));
 }
+
+// ---------- ลงเวลา/ลา (ข้อมูลสมมติ) ----------
+export function previewAttendance(dates: string[], userId: string, today: string) {
+  const sts = ["ok", "late", "ok", "ok", "no_out", "ok", "off"] as const;
+  return dates.map((d, i) => {
+    const past = d < today;
+    const status = d === today ? "working" : past ? sts[i % 7] : "upcoming";
+    const st = status === "off" ? null : `${d}T08:00:00+07:00`;
+    return {
+      user_id: userId, work_date: d, shift_code: status === "off" ? "OFF" : "STD1",
+      shift_start: st, shift_end: st && `${d}T17:00:00+07:00`,
+      first_in: past || d === today ? (status === "off" ? null : `${d}T0${status === "late" ? "8:12" : "7:52"}:00+07:00`) : null,
+      last_out: past && status !== "no_out" && status !== "off" ? `${d}T17:04:00+07:00` : null,
+      punch_count: past ? 2 : 0, leave_type: null, leave_period: null, status,
+      late_min: status === "late" ? 12 : 0, early_min: 0, pending_correction: status === "no_out" && i < 7,
+    };
+  });
+}
+
+export function previewTeamAttendance(dates: string[], today: string) {
+  const people = [["p1", "D0001", "ผู้ทดลอง", "หนึ่ง", "RT"], ["p2", "D0002", "ทดสอบ", null, "Checker"], ["preview-me", "DEMO01", "ผู้ใช้", "เดโม", "RT"]] as const;
+  return people.flatMap(([id, code, first, nick, pos], k) =>
+    previewAttendance(dates, id, today).map((r, i) => ({
+      ...r,
+      status: k === 1 && r.status === "ok" && i % 3 === 0 ? "absent" : r.status,
+      employee_code: code, first_name_th: first, last_name_th: "ตัวอย่าง", nickname: nick, position: pos,
+    })),
+  );
+}
+
+export const PREVIEW_LEAVE_TYPES = [
+  { id: "lt1", category: "leave_type", value: "sick", label: "ป่วย", sort_order: 1, extra: {}, is_active: true },
+  { id: "lt2", category: "leave_type", value: "personal", label: "กิจ", sort_order: 2, extra: {}, is_active: true },
+  { id: "lt3", category: "leave_type", value: "vacation", label: "พักผ่อน", sort_order: 3, extra: {}, is_active: true },
+];
+
+export function previewLeaves(userId: string) {
+  return [
+    { id: "lr1", user_id: userId, leave_type: "sick", start_date: "2026-11-03", end_date: "2026-11-03", period: "full" as const, days: 1, reason: "ไข้หวัด (ตัวอย่าง)", attachment_path: null, status: "approved" as const, steps_required: 1, steps_done: 1, over_quota: false, created_by: userId, created_at: "2026-11-03T07:00:00Z" },
+    { id: "lr2", user_id: "p1", leave_type: "vacation", start_date: "2026-11-20", end_date: "2026-11-24", period: "full" as const, days: 4, reason: "กลับบ้าน (ตัวอย่าง)", attachment_path: null, status: "pending" as const, steps_required: 2, steps_done: 1, over_quota: false, created_by: "p1", created_at: "2026-11-05T07:00:00Z" },
+    { id: "lr3", user_id: "p2", leave_type: "personal", start_date: "2026-11-12", end_date: "2026-11-12", period: "morning" as const, days: 0.5, reason: "ติดต่อราชการ (ตัวอย่าง)", attachment_path: null, status: "pending" as const, steps_required: 1, steps_done: 0, over_quota: true, created_by: "p2", created_at: "2026-11-06T02:00:00Z" },
+  ];
+}
+
+export const PREVIEW_BALANCE = [
+  { leave_type: "sick", label: "ป่วย", quota: 30, approved: 1, pending: 0, remaining: 29 },
+  { leave_type: "personal", label: "กิจ", quota: 6, approved: 0, pending: 0.5, remaining: 5.5 },
+  { leave_type: "vacation", label: "พักผ่อน", quota: 6, approved: 0, pending: 4, remaining: 2 },
+];
+
+export function previewCorrections(userId: string) {
+  return [
+    { id: "c1", user_id: userId, work_date: "2026-11-05", check_in: null, check_out: "17:05:00", reason: "ลืมกดออก (ตัวอย่าง)", status: "pending" as const, decision_note: null, created_at: "2026-11-06T01:00:00Z" },
+  ];
+}
+
+const PREVIEW_PEOPLE: Record<string, { employee_code: string; first_name_th: string; last_name_th: string | null; nickname: string | null; position: string | null }> = {
+  p1: { employee_code: "D0001", first_name_th: "ผู้ทดลอง", last_name_th: "ตัวอย่าง", nickname: "หนึ่ง", position: "RT" },
+  p2: { employee_code: "D0002", first_name_th: "ทดสอบ", last_name_th: "ตัวอย่าง", nickname: null, position: "Checker" },
+};
+
+// ใบลาของคนในคลัง (หน้าอนุมัติ)
+export function previewLeaveQueue(meId: string) {
+  return previewLeaves(meId).filter((r) => PREVIEW_PEOPLE[r.user_id]).map((r) => ({ ...r, profiles: PREVIEW_PEOPLE[r.user_id] }));
+}
+
+// คำขอแก้เวลาของคนในคลัง (หน้าติดตาม)
+export function previewFixQueue() {
+  return previewCorrections("p1").map((c) => ({ ...c, profiles: PREVIEW_PEOPLE.p1 }));
+}

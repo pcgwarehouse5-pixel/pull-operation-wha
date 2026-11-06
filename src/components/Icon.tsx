@@ -16,6 +16,9 @@ const PATHS = {
   calendar: "M4 6a1 1 0 011-1h14a1 1 0 011 1v14H4zM4 10h16M8 3v4M16 3v4",
   tool: "M14.7 6.3a4 4 0 00-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 005.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z",
   next: "M9 5l7 7-7 7",
+  pin: "M12 21s-7-6.2-7-11a7 7 0 0114 0c0 4.8-7 11-7 11zM12 12.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5z",
+  leave: "M5 4h11l3 3v13H5zM9 12h6M9 16h4M15 4v4h4",
+  check: "M5 12l5 5L20 7",
 } as const;
 
 export type IconName = keyof typeof PATHS;

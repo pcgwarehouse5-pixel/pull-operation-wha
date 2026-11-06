@@ -49,7 +49,6 @@ export default function HomePage() {
           </li>
         ))}
       </ul>
-      <p className="mt-6 text-center text-[14px] text-muted">ลงเวลา ตารางกะ ลา OT และรายงาน จะเพิ่มในโมดูลถัดไป</p>
     </AppShell>
   );
 }

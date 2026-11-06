@@ -40,7 +40,7 @@ if (cmd === "passwords") {
   await setTestPasswords();
   console.log("ตั้งรหัสสุ่มให้บัญชีทดสอบแล้ว (เก็บใน .env.e2e.local)");
 } else if (cmd === "create") {
-  const { data: wh, error: we } = await admin.from("warehouses").insert({ code: WH, name: "คลังทดสอบชั่วคราว (ลบได้)" }).select("id").single();
+  const { data: wh, error: we } = await admin.from("warehouses").insert({ code: WH, name: "คลังทดสอบชั่วคราว (ลบได้)", latitude: 13.0, longitude: 100.0, checkin_radius_m: 100 }).select("id").single();
   if (we) throw we;
   for (const u of USERS) {
     const { data, error } = await admin.auth.admin.createUser({ email: `${u.code}@${domain}`, password: e.DEFAULT_USER_PASSWORD, email_confirm: true });
@@ -54,6 +54,11 @@ if (cmd === "passwords") {
   // ลบทุกบัญชีที่ขึ้นต้นด้วย ztest- (รวมบัญชีที่สร้างระหว่างทดสอบปุ่มเพิ่มผู้ใช้)
   const { data: tests } = await admin.from("profiles").select("id").ilike("employee_code", "ztest-%");
   const ids = (tests ?? []).map((t) => t.id);
+  // ไฟล์แนบใบลาของบัญชีทดสอบ
+  for (const id of ids) {
+    const { data: files } = await admin.storage.from("leave-attachments").list(id);
+    if (files?.length) await admin.storage.from("leave-attachments").remove(files.map((x) => `${id}/${x.name}`));
+  }
   for (const id of ids) {
     const { error } = await admin.auth.admin.deleteUser(id);
     if (error) throw error;

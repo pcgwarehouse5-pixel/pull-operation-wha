@@ -142,7 +142,7 @@ export function AppShell({
                   <span className={`flex h-8 w-12 items-center justify-center rounded-full ${on ? "bg-[#eaf0fb]" : ""}`}>
                     <Icon name={i.icon} />
                   </span>
-                  {i.label}
+                  {i.short ?? i.label}
                 </Link>
               </li>
             );
