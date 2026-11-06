@@ -1,4 +1,4 @@
-// ย้ายข้อมูลจากแอปเดิม (Lovable export) เข้าแอปใหม่: คลัง WH5/WH32, พนักงาน, คลังที่ดูแล, ตัวเลือกตั้งค่า
+// ย้ายข้อมูลจากแอปเดิม (Lovable export) เข้าแอปใหม่: คลัง WH5/WH32, พนักงาน, คลังที่ดูแล, ตัวเลือกตั้งค่า, ทักษะ, อัตรากำลัง
 // ใช้:
 //   node scripts/import-lovable.mjs              ซ้อม: ตรวจและสรุปอย่างเดียว ไม่เขียนอะไร
 //   node scripts/import-lovable.mjs --apply      นำเข้าจริง (รันซ้ำได้: ของที่มีแล้วจะอัปเดต/ข้าม ไม่ซ้ำ)
@@ -36,8 +36,13 @@ async function retry(fn) {
   }
 }
 
-const read = (t) => JSON.parse(fs.readFileSync(path.join(dir, `${t}.json`), "utf8").replace(/^﻿/, ""));
-const src = Object.fromEntries(["warehouses", "profiles", "user_roles", "warehouse_access_permissions", "dropdown_options"].map((t) => [t, read(t)]));
+const read = (t) => {
+  const f = path.join(dir, `${t}.json`);
+  return fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, "utf8").replace(/^﻿/, "")) : [];
+};
+const src = Object.fromEntries(
+  ["warehouses", "profiles", "user_roles", "warehouse_access_permissions", "dropdown_options", "skills", "employee_skills", "organization_budget"].map((t) => [t, read(t)]),
+);
 const out = transform(src);
 
 async function all(table, cols) {
@@ -60,12 +65,15 @@ async function allAuthUsers() {
 }
 
 // ---------- ตรวจกับฐานข้อมูลปัจจุบัน (อ่านอย่างเดียว) ----------
-const [dbWh, dbProfiles, dbOptions, dbUw, authUsers] = await Promise.all([
+const [dbWh, dbProfiles, dbOptions, dbUw, authUsers, dbSkills, dbEs, dbBudgets] = await Promise.all([
   all("warehouses", "id, code"),
   all("profiles", "id, employee_code, status"),
   all("dropdown_options", "category, value"),
   all("user_warehouses", "user_id, warehouse_id"),
   allAuthUsers(),
+  all("skills", "id, position, name"),
+  all("employee_skills", "user_id, skill_id"),
+  all("headcount_budgets", "warehouse_id, position"),
 ]);
 const whById = new Set(dbWh.map((w) => w.id));
 const whCodeOwner = Object.fromEntries(dbWh.map((w) => [w.code, w.id]));
@@ -92,6 +100,14 @@ for (const p of out.profiles) {
 const newWh = out.warehouses.filter((w) => !whById.has(w.id));
 const newOpts = out.options.filter((o) => !optKey.has(`${o.category}|${o.value}`));
 const newUw = out.userWarehouses.filter((x) => !uwKey.has(`${x.user_id}|${x.warehouse_id}`));
+const skillById = new Set(dbSkills.map((s) => s.id));
+const skillByName = new Set(dbSkills.map((s) => `${s.position}|${s.name}`));
+const newSkills = out.skills.filter((s) => !skillById.has(s.id) && !skillByName.has(`${s.position}|${s.name}`));
+const okSkill = new Set([...skillById, ...newSkills.map((s) => s.id)]);
+const esKey = new Set(dbEs.map((x) => `${x.user_id}|${x.skill_id}`));
+const newEs = out.employeeSkills.filter((x) => okSkill.has(x.skill_id) && !esKey.has(`${x.user_id}|${x.skill_id}`));
+const budgetKey = new Set(dbBudgets.map((b) => `${b.warehouse_id}|${b.position}`));
+const newBudgets = out.budgets.filter((b) => !budgetKey.has(`${b.warehouse_id}|${b.position}`));
 
 const count = (rows, f) => Object.entries(rows.reduce((a, r) => ((a[f(r)] = (a[f(r)] || 0) + 1), a), {})).map(([k, n]) => `${k} ${n}`).join(", ");
 const whCode = Object.fromEntries(out.warehouses.map((w) => [w.id, w.code]));
@@ -104,6 +120,8 @@ console.log(`  บทบาท: ${count(out.profiles, (p) => p.role)} | สถ�
 console.log(`  ประเภทพนักงาน: ${count(out.profiles, (p) => p.employment_type ?? "-")}`);
 console.log(`คลังเพิ่มเติมที่ดูแล: ${out.userWarehouses.length} รายการ (ใหม่ ${newUw.length})`);
 console.log(`ตัวเลือกตั้งค่า: ${out.options.length} รายการ (ใหม่ ${newOpts.length}) | ตำแหน่งที่เพิ่มเข้ารายการ: ${out.addedPositions.length}`);
+console.log(`ทักษะ: ${out.skills.length} รายการ (ใหม่ ${newSkills.length}) | ทักษะของพนักงาน: ${out.employeeSkills.length} (ใหม่ ${newEs.length})`);
+console.log(`อัตรากำลัง (ใส่ให้คลัง 5): ${out.budgets.length} ตำแหน่ง (ใหม่ ${newBudgets.length}) — มีอยู่แล้วจะไม่ทับค่าที่แก้ในแอป`);
 if (out.issues.length) {
   console.log(`\nรายการที่ข้าม/ต้องรู้ (${out.issues.length}):`);
   for (const i of out.issues) console.log(`  - ${i.type}: ${i.code}${i.detail ? ` (${i.detail})` : ""}`);
@@ -178,9 +196,24 @@ if (newUw.length) {
   const { error } = await retry(() => admin.from("user_warehouses").insert(newUw));
   if (error) fail("คลังเพิ่มเติม", error);
 }
+// ทักษะ → ทักษะของพนักงาน (หลังสร้างบัญชีครบ) → อัตรากำลัง
+if (newSkills.length) {
+  const { error } = await retry(() => admin.from("skills").insert(newSkills));
+  if (error) fail("รายการทักษะ", error);
+}
+for (let i = 0; i < newEs.length; i += 500) {
+  const { error } = await retry(() => admin.from("employee_skills").upsert(newEs.slice(i, i + 500), { onConflict: "user_id,skill_id", ignoreDuplicates: true }));
+  if (error) fail("ทักษะของพนักงาน", error);
+}
+if (newBudgets.length) {
+  const { error } = await retry(() => admin.from("headcount_budgets").insert(newBudgets));
+  if (error) fail("อัตรากำลัง", error);
+}
 await admin.from("audit_logs").insert({
   action: "import",
   table_name: "profiles",
-  new_data: { source: dir, warehouses: newWh.length, options: newOpts.length, created, updated: plan.update.length, user_warehouses: newUw.length },
+  new_data: { source: dir, warehouses: newWh.length, options: newOpts.length, created, updated: plan.update.length, user_warehouses: newUw.length, skills: newSkills.length, employee_skills: newEs.length, budgets: newBudgets.length },
 });
-console.log(`\nเสร็จ: สร้างบัญชี ${created} | อัปเดต ${plan.update.length} | คลังเพิ่มเติม ${newUw.length}`);
+console.log(
+  `\nเสร็จ: สร้างบัญชี ${created} | อัปเดต ${plan.update.length} | คลังเพิ่มเติม ${newUw.length} | ทักษะ ${newSkills.length} | ทักษะพนักงาน ${newEs.length} | อัตรากำลัง ${newBudgets.length}`,
+);

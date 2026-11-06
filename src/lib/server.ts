@@ -50,6 +50,59 @@ export async function writeAudit(admin: SupabaseClient, row: { actor_id: string;
   await admin.from("audit_logs").insert({ ...row, table_name: "profiles" });
 }
 
+// ช่องข้อมูลพนักงานที่รับจากหน้าจอได้ (นอกเหนือจากนี้ถูกตัดทิ้ง)
+export const EMPLOYEE_FIELDS = [
+  "title",
+  "first_name_th",
+  "last_name_th",
+  "nickname",
+  "position",
+  "department",
+  "employment_type",
+  "subcontractor_company",
+  "salary_code",
+  "phone",
+  "line_id",
+  "birth_date",
+] as const;
+
+export function pickEmployeeFields(src: Record<string, unknown>): Record<string, string | null> {
+  const out: Record<string, string | null> = {};
+  for (const k of EMPLOYEE_FIELDS) {
+    if (!(k in src)) continue;
+    const v = typeof src[k] === "string" ? (src[k] as string).replace(/\s+/g, " ").trim() : "";
+    out[k] = v === "" || v === "-" ? null : v.slice(0, 120);
+  }
+  if (out.birth_date && !/^\d{4}-\d{2}-\d{2}$/.test(out.birth_date)) out.birth_date = null;
+  return out;
+}
+
+// สร้างบัญชีล็อกอิน + ข้อมูลพนักงาน (รหัสผ่านเริ่มต้น ต้องตั้งใหม่ตอนเข้าครั้งแรก) ถ้าบันทึกข้อมูลไม่ผ่านจะลบบัญชีทิ้ง
+export async function createEmployeeAccount(
+  admin: SupabaseClient,
+  p: { employee_code: string; warehouse_id: string | null; role: string; fields: Record<string, string | null> },
+): Promise<{ id?: string; error?: string }> {
+  const { data, error } = await admin.auth.admin.createUser({
+    email: `${p.employee_code.toLowerCase()}@${LOGIN_DOMAIN}`,
+    password: defaultPassword(),
+    email_confirm: true,
+  });
+  if (error) return { error: /already/i.test(error.message) ? "รหัสพนักงานนี้มีบัญชีอยู่แล้ว" : error.message };
+  const { error: pe } = await admin.from("profiles").insert({
+    ...p.fields,
+    id: data.user.id,
+    employee_code: p.employee_code,
+    warehouse_id: p.warehouse_id,
+    role: p.role,
+    must_change_password: true,
+  });
+  if (pe) {
+    await admin.auth.admin.deleteUser(data.user.id);
+    return { error: /duplicate/i.test(pe.message) ? "รหัสพนักงานนี้มีอยู่แล้ว" : pe.message };
+  }
+  return { id: data.user.id };
+}
+
 export function json(body: unknown, status = 200) {
   return Response.json(body, { status });
 }

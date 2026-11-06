@@ -21,6 +21,13 @@ export const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
     ],
   },
   {
+    title: "พนักงาน",
+    items: [
+      { key: "employees", href: "/employees", label: "ทะเบียนพนักงาน", desc: "ข้อมูล ทักษะ ลาออก นำเข้า Excel", icon: "users", minRole: "supervisor" },
+      { key: "organization", href: "/organization", label: "ผังองค์กร", desc: "อัตรากำลังเทียบคนจริง", icon: "grid", minRole: "supervisor" },
+    ],
+  },
+  {
     title: "จัดการ",
     items: [
       { key: "users", href: "/users", label: "ผู้ใช้และสิทธิ์", desc: "บทบาท คลัง และรีเซ็ตรหัสผ่าน", icon: "key", minRole: "admin" },
@@ -40,7 +47,7 @@ export function navFor(role: AppRole) {
 
 // ปุ่มบนแถบล่างของมือถือ (ที่เหลืออยู่ในปุ่ม "เมนู")
 export function bottomKeys(role: AppRole): string[] {
-  return ROLE_RANK[role] >= 3 ? ["home", "users", "profile"] : ["home", "profile"];
+  return ROLE_RANK[role] >= 3 ? ["home", "employees", "users"] : ROLE_RANK[role] >= 2 ? ["home", "employees", "profile"] : ["home", "profile"];
 }
 
 export function activeKey(pathname: string): string | null {

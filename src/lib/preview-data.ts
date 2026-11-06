@@ -1,5 +1,5 @@
 // ข้อมูลสมมติของโหมดดูดีไซน์ (ไม่ใช่ข้อมูลพนักงานจริง) โหลดเฉพาะตอน npm run dev
-import type { AppRole, AuditLog, DropdownOption, Profile, Warehouse } from "./types";
+import type { AppRole, AuditLog, DropdownOption, Employee, HeadcountBudget, Profile, Skill, Warehouse } from "./types";
 
 // ข้อมูลสมมติทั้งหมด (ไม่ใช่ข้อมูลพนักงานจริง)
 const W5 = "preview-wh-5";
@@ -34,3 +34,39 @@ export const PREVIEW_AUDIT: AuditLog[] = [
   { id: 2, created_at: "2026-11-04T09:15:00Z", actor_id: "p3", action: "update", table_name: "profiles", record_id: "p1", warehouse_id: W5, old_data: { position: "Picker" }, new_data: { position: "RT" } },
   { id: 1, created_at: "2026-11-04T08:00:00Z", actor_id: "p1", action: "login", table_name: "profiles", record_id: "p1", warehouse_id: W5, old_data: null, new_data: null },
 ];
+
+export const PREVIEW_EXTRA_OPTIONS: DropdownOption[] = [
+  { id: "o5", category: "employment_type", value: "monthly_employee", label: "พนักงานรายเดือน", sort_order: 1, extra: {}, is_active: true },
+  { id: "o6", category: "employment_type", value: "mou", label: "MOU", sort_order: 2, extra: {}, is_active: true },
+  { id: "o7", category: "employment_type", value: "daily_worker", label: "คนงานรายวัน", sort_order: 3, extra: {}, is_active: true },
+  { id: "o8", category: "subcontractor_company", value: "บริษัทตัวอย่าง", label: "บริษัทตัวอย่าง", sort_order: 1, extra: {}, is_active: true },
+];
+
+export const PREVIEW_SKILLS: Skill[] = [
+  { id: "s1", position: "RT", name: "RT ยกรับ (ตัวอย่าง)", sort_order: 1, is_active: true },
+  { id: "s2", position: "RT", name: "RT ยกจ่าย (ตัวอย่าง)", sort_order: 2, is_active: true },
+  { id: "s3", position: "Checker", name: "เช็ครับ (ตัวอย่าง)", sort_order: 1, is_active: true },
+];
+
+export const PREVIEW_BUDGETS: HeadcountBudget[] = [
+  { id: "b1", warehouse_id: W5, position: "RT", budget_count: 3 },
+  { id: "b2", warehouse_id: W5, position: "Checker", budget_count: 2 },
+];
+
+// ข้อมูลพนักงานแบบเต็มสำหรับหน้าทะเบียน
+export function previewEmployees(): Employee[] {
+  return PREVIEW_USERS.map((p, i) => ({
+    ...p,
+    salary_code: null,
+    birth_date: null,
+    subcontractor_company: null,
+    resigned_date: i === 3 ? "2026-10-31" : null,
+    status: i === 3 ? "resigned" : "active",
+    exclude_from_shift: false,
+    show_in_org_chart: true,
+    ot_eligible: true,
+    travel_eligible: false,
+    show_in_ot_report: true,
+    auto_check_in: false,
+  }));
+}

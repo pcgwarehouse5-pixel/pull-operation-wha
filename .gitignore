@@ -50,3 +50,6 @@ lovable-source/
 # 2FA recovery codes / backup codes - never commit
 *recovery-codes*
 *backup-codes*
+
+# local database backups (real employee data) - never commit
+backups/

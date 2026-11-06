@@ -55,6 +55,37 @@ export type Profile = {
   created_at: string;
 };
 
+// ข้อมูลพนักงานแบบเต็ม (หน้าทะเบียนพนักงาน)
+export type Employee = Profile & {
+  department: string | null;
+  salary_code: string | null;
+  birth_date: string | null;
+  subcontractor_company: string | null;
+  resigned_date: string | null;
+  exclude_from_shift: boolean;
+  show_in_org_chart: boolean;
+  ot_eligible: boolean;
+  travel_eligible: boolean;
+  show_in_ot_report: boolean;
+  auto_check_in: boolean;
+};
+
+export type Skill = { id: string; position: string; name: string; sort_order: number; is_active: boolean };
+
+export type HeadcountBudget = { id: string; warehouse_id: string; position: string; budget_count: number };
+
+export const TITLES = ["นาย", "นาง", "นางสาว"];
+
+// ตัวเลือกการคำนวณ/การแสดงผลของพนักงาน (ใช้ในโมดูลตารางกะ ลงเวลา และ OT)
+export const EMPLOYEE_FLAGS: { key: keyof Employee; label: string; hint: string }[] = [
+  { key: "ot_eligible", label: "คำนวณ OT", hint: "ปิดสำหรับตำแหน่งที่ไม่ได้รับค่าล่วงเวลา" },
+  { key: "show_in_ot_report", label: "แสดงในรายงาน OT", hint: "" },
+  { key: "travel_eligible", label: "ได้ค่าเดินทาง", hint: "" },
+  { key: "exclude_from_shift", label: "ไม่แสดงในตารางกะ", hint: "เช่น ผู้บริหาร หรือพนักงานสำนักงาน" },
+  { key: "show_in_org_chart", label: "แสดงในผังองค์กร", hint: "" },
+  { key: "auto_check_in", label: "Check In อัตโนมัติตามกะ", hint: "ใช้ในโมดูลลงเวลา" },
+];
+
 export type DropdownOption = {
   id: string;
   category: string;

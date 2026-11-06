@@ -36,7 +36,27 @@ const src = {
     { user_id: "u7", warehouse_id: W35 },
   ],
   dropdown_options: [{ id: "o1", category: "position", value: "RT", label: "RT", sort_order: 3, extra: {}, is_active: true }],
+  skills: [
+    { id: "k1", position: "RT", name: "RT ยกรับ" },
+    { id: "k2", position: "RT", name: " " },
+  ],
+  employee_skills: [
+    { user_id: "u1", skill_id: "k1" },
+    { user_id: "u3", skill_id: "k1" },
+    { user_id: "u1", skill_id: "k2" },
+  ],
+  organization_budget: [
+    { position: "RT", budget_count: 6 },
+    { position: "GA_2", budget_count: 0 },
+  ],
 };
+
+test("ทักษะและอัตรากำลัง: ย้ายเฉพาะของคนที่ย้าย และใส่อัตรากำลังให้คลัง 5", () => {
+  const out = transform(src);
+  assert.deepEqual(out.skills.map((s) => s.id), ["k1"], "ข้ามทักษะที่ไม่มีชื่อ");
+  assert.deepEqual(out.employeeSkills, [{ user_id: "u1", skill_id: "k1" }], "ไม่ย้ายทักษะของคนนอกขอบเขต/ทักษะที่ถูกข้าม");
+  assert.deepEqual(out.budgets, [{ warehouse_id: W5, position: "RT", budget_count: 6 }], "ข้ามตำแหน่งที่ตั้งเป็น 0");
+});
 
 test("ย้ายเฉพาะคลัง 5 และ 32 พร้อมเปลี่ยนรหัส/ชื่อคลัง", () => {
   const out = transform(src);

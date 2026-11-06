@@ -5,12 +5,14 @@ import { AppShell } from "@/components/AppShell";
 import { useApp } from "@/components/AuthProvider";
 import { Alert, Badge, Button, Card, Empty, Field, Loading, Modal, PageIntro, inputCls } from "@/components/ui";
 import { Icon } from "@/components/Icon";
+import { SkillsManager } from "@/components/SkillsManager";
 import { errText, fetchAll, sb } from "@/lib/supabase";
 import type { DropdownOption } from "@/lib/types";
 
 // หมวดที่แก้ได้ในหน้านี้ (ผังองค์กรและการตั้งค่าช่องข้อมูลจะมีหน้าของตัวเองในโมดูลถัดไป)
 const CATEGORIES: { key: string; label: string; hint: string }[] = [
   { key: "position", label: "ตำแหน่ง", hint: "ตำแหน่งงานที่เลือกได้ในข้อมูลพนักงาน" },
+  { key: "__skills", label: "ทักษะ", hint: "ทักษะแยกตามตำแหน่ง ใช้ติ๊กในข้อมูลพนักงาน และใช้จัดกำลังคน" },
   { key: "employment_type", label: "ประเภทพนักงาน", hint: "เช่น พนักงานรายเดือน คนงานรายวัน MOU" },
   { key: "shift_type", label: "รหัสกะ", hint: "รหัสกะพร้อมเวลาเริ่ม-เลิก และสีในตารางกะ" },
   { key: "leave_type", label: "ประเภทการลา", hint: "ใช้ในใบลา" },
@@ -29,11 +31,13 @@ export default function SettingsPage() {
   const [form, setForm] = useState<Form | null>(null);
   const meta = CATEGORIES.find((c) => c.key === cat)!;
   const isShift = cat === "shift_type";
+  const isSkills = cat === "__skills";
 
   const load = useCallback(async () => {
     setRows(null);
+    if (cat === "__skills") return;
     if (demo) {
-      setRows(demo.PREVIEW_OPTIONS.filter((o) => o.category === cat));
+      setRows([...demo.PREVIEW_OPTIONS, ...demo.PREVIEW_EXTRA_OPTIONS].filter((o) => o.category === cat));
       return;
     }
     try {
@@ -68,9 +72,11 @@ export default function SettingsPage() {
       <PageIntro
         title="ตั้งค่าตัวเลือก"
         action={
-          <Button onClick={openNew}>
-            <Icon name="plus" size={20} /> เพิ่ม{meta.label}
-          </Button>
+          !isSkills && (
+            <Button onClick={openNew}>
+              <Icon name="plus" size={20} /> เพิ่ม{meta.label}
+            </Button>
+          )
         }
       >
         รายการตัวเลือกที่ใช้ทั้งแอป (มีผลกับทุกคลัง)
@@ -94,7 +100,9 @@ export default function SettingsPage() {
       <p className="mb-3 px-1 text-[14px] text-muted">{meta.hint}</p>
 
       {err && <div className="mb-3"><Alert tone="error">{err}</Alert></div>}
-      {!rows ? (
+      {isSkills ? (
+        <SkillsManager />
+      ) : !rows ? (
         <Loading />
       ) : rows.length === 0 ? (
         <Empty>ยังไม่มีรายการในหมวดนี้</Empty>

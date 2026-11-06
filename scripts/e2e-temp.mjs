@@ -66,7 +66,8 @@ if (cmd === "passwords") {
   if (targets.length) {
     const { error: a1 } = await admin.from("audit_logs").delete().in("record_id", targets);
     const { error: a2 } = await admin.from("audit_logs").delete().in("actor_id", ids.length ? ids : ["00000000-0000-0000-0000-000000000000"]);
-    if (a1 || a2) throw a1 || a2;
+    const { error: a3 } = wh ? await admin.from("audit_logs").delete().eq("warehouse_id", wh.id) : { error: null };
+    if (a1 || a2 || a3) throw a1 || a2 || a3;
   }
   fs.rmSync(".env.e2e.local", { force: true });
   console.log(`ลบบัญชีทดสอบ ${ids.length} บัญชี, คลังทดสอบ ${wh ? 1 : 0} คลัง และประวัติที่เกี่ยวข้องแล้ว`);

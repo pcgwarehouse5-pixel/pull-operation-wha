@@ -109,5 +109,21 @@ export function transform(src) {
   for (const v of addedPositions)
     options.push({ id: crypto.randomUUID(), category: "position", value: v, label: v, sort_order: ++sort, extra: {}, is_active: true });
 
-  return { warehouses, profiles, userWarehouses, options, addedPositions, issues };
+  // ทักษะ (ใช้ ID เดิม) และทักษะของพนักงานที่ย้าย
+  const skills = (src.skills ?? []).map((s) => ({ id: s.id, position: clean(s.position), name: clean(s.name), sort_order: 0, is_active: true })).filter((s) => s.position && s.name);
+  const skillIds = new Set(skills.map((s) => s.id));
+  const movedIds = new Set(profiles.map((p) => p.id));
+  const employeeSkills = (src.employee_skills ?? [])
+    .filter((x) => movedIds.has(x.user_id) && skillIds.has(x.skill_id))
+    .map((x) => ({ user_id: x.user_id, skill_id: x.skill_id }));
+
+  // อัตรากำลัง: แอปเดิมตั้งรวมไม่แยกคลัง → ใส่ให้คลัง 5 ก่อน (แก้ภายหลังในแอป) ข้ามตำแหน่งที่ตั้งเป็น 0
+  const wh5 = whOld.find((w) => w.code === "WH05");
+  const budgets = wh5
+    ? (src.organization_budget ?? [])
+        .filter((b) => clean(b.position) && Number(b.budget_count) > 0)
+        .map((b) => ({ warehouse_id: wh5.id, position: clean(b.position), budget_count: Number(b.budget_count) }))
+    : [];
+
+  return { warehouses, profiles, userWarehouses, options, addedPositions, issues, skills, employeeSkills, budgets };
 }

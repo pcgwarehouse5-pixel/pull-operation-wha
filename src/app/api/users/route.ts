@@ -1,6 +1,6 @@
 // จัดการบัญชีผู้ใช้: สร้างใหม่ และรีเซ็ตรหัสผ่านกลับเป็นค่าเริ่มต้น
 // ใช้กุญแจระดับระบบเฉพาะฝั่งเซิร์ฟเวอร์ และตรวจสิทธิ์ด้วยฟังก์ชันในฐานข้อมูลทุกครั้ง
-import { LOGIN_DOMAIN, defaultPassword, getCaller, json, userClient, writeAudit } from "@/lib/server";
+import { createEmployeeAccount, defaultPassword, getCaller, json, pickEmployeeFields, userClient, writeAudit } from "@/lib/server";
 import { assignableRoles, type AppRole } from "@/lib/types";
 
 const CODE_RE = /^[A-Za-z0-9._-]{1,30}$/;
@@ -46,27 +46,11 @@ export async function POST(req: Request) {
         if (!can) return json({ error: "คุณไม่มีสิทธิ์เพิ่มผู้ใช้ในคลังนี้" }, 403);
       }
 
-      const { data: created, error: ce } = await caller.admin.auth.admin.createUser({
-        email: `${code.toLowerCase()}@${LOGIN_DOMAIN}`,
-        password: defaultPassword(),
-        email_confirm: true,
-      });
-      if (ce) return json({ error: /already/i.test(ce.message) ? "รหัสพนักงานนี้มีบัญชีอยู่แล้ว" : ce.message }, 400);
-      const { error: pe } = await caller.admin.from("profiles").insert({
-        id: created.user.id,
-        employee_code: code,
-        first_name_th: firstName,
-        last_name_th: lastName || null,
-        warehouse_id: warehouseId,
-        role,
-        must_change_password: true,
-      });
-      if (pe) {
-        await caller.admin.auth.admin.deleteUser(created.user.id);
-        return json({ error: /duplicate/i.test(pe.message) ? "รหัสพนักงานนี้มีอยู่แล้ว" : pe.message }, 400);
-      }
-      await writeAudit(caller.admin, { actor_id: caller.me.id, action: "user_create", record_id: created.user.id, warehouse_id: warehouseId, new_data: { employee_code: code, role } });
-      return json({ ok: true });
+      const fields = { ...pickEmployeeFields(body), first_name_th: firstName, last_name_th: lastName || null };
+      const created = await createEmployeeAccount(caller.admin, { employee_code: code, warehouse_id: warehouseId, role, fields });
+      if (created.error) return json({ error: created.error }, 400);
+      await writeAudit(caller.admin, { actor_id: caller.me.id, action: "user_create", record_id: created.id!, warehouse_id: warehouseId, new_data: { employee_code: code, role } });
+      return json({ ok: true, id: created.id });
     }
 
     return json({ error: "ไม่รู้จักคำสั่งนี้" }, 400);
