@@ -179,3 +179,62 @@ export function previewLeaveQueue(meId: string) {
 export function previewFixQueue() {
   return previewCorrections("p1").map((c) => ({ ...c, profiles: PREVIEW_PEOPLE.p1 }));
 }
+
+export const PREVIEW_NOTIFICATIONS = [
+  { id: 3, kind: "leave_pending", title: "ใบลารออนุมัติ: ผู้ทดลอง (หนึ่ง)", body: "ลาพักผ่อน 4 วัน (20 พ.ย. – 24 พ.ย.)", link: "/leave/approvals", created_at: "2026-11-06T03:00:00Z", read_at: null },
+  { id: 2, kind: "missing_in", title: "ยังไม่ได้ลงเวลาเข้างาน", body: "กะ STD1 เริ่ม 08:00 น. ถ้ามาแล้วให้กดเข้างาน หรือขอแก้เวลา", link: "/attendance", created_at: "2026-11-06T01:35:00Z", read_at: null },
+  { id: 1, kind: "schedule", title: "ประกาศตารางกะ ธันวาคม 2569 แล้ว", body: "ดูกะของคุณได้ที่เมนู ตารางกะของฉัน", link: "/my-shifts", created_at: "2026-11-05T09:00:00Z", read_at: "2026-11-05T10:00:00Z" },
+];
+
+// OT สมมติ (หน้า OT / รายงาน)
+type OtDay = "normal" | "OFF" | "HOL";
+type OtApproval = "pending" | "approved" | "changed" | "rejected";
+export function previewOt(from: string) {
+  const ym = from.slice(0, 7);
+  const mk = (id: string, d: string, nh: number, nr: number | null, oh: number, or: number | null, dt: OtDay, ap: OtApproval) => ({
+    user_id: id,
+    work_date: `${ym}-${d}`,
+    day_type: dt,
+    shift_code: dt === "normal" ? "STD1" : "OFF",
+    first_in: `${ym}-${d}T07:55:00+07:00`,
+    last_out: `${ym}-${d}T${dt === "normal" ? "19:10" : "19:30"}:00+07:00`,
+    normal_hours: nh,
+    normal_rate: nr,
+    ot_hours: oh,
+    ot_rate: or,
+    approval: ap,
+    decided_by_name: ap === "approved" ? "ทดสอบ" : null,
+    decided_at: ap === "approved" ? `${ym}-${d}T12:00:00Z` : null,
+    note: null,
+    ...PREVIEW_PEOPLE[id],
+    salary_code: null,
+    employment_type: "monthly_employee",
+  });
+  return [
+    mk("p1", "02", 0, null, 2, 1.5, "normal", "approved"),
+    mk("p1", "06", 8, 1, 2.5, 3, "OFF", "approved"),
+    mk("p2", "03", 0, null, 1.5, 1.5, "normal", "pending"),
+    mk("p2", "04", 0, null, 1, 1.5, "normal", "changed"),
+  ];
+}
+
+// เบี้ยขยัน / ค่าเดินทาง / สรุปลา / ภาพรวม (สมมติ)
+export function previewDiligence(start: string, end: string) {
+  return [
+    { user_id: "p1", period_start: start, period_end: end, absent: 0, late: 0, no_punch: 0, leave_days: 0, streak: 3, amount: 500, qualified: true, ...PREVIEW_PEOPLE.p1, salary_code: null },
+    { user_id: "p2", period_start: start, period_end: end, absent: 1, late: 2, no_punch: 0, leave_days: 0, streak: 0, amount: 0, qualified: false, ...PREVIEW_PEOPLE.p2, salary_code: null },
+  ];
+}
+export function previewTravel() {
+  return [{ user_id: "p1", days: 21, amount: 630, ...PREVIEW_PEOPLE.p1, salary_code: null }];
+}
+export function previewLeaveSummary() {
+  return [
+    { user_id: "p1", leave_type: "sick", days: 1, requests: 1, ...PREVIEW_PEOPLE.p1 },
+    { user_id: "p2", leave_type: "personal", days: 0.5, requests: 1, ...PREVIEW_PEOPLE.p2 },
+  ];
+}
+export const PREVIEW_DASHBOARD = [
+  { warehouse_id: W5, code: "WH5", name: "คลัง 5 (ตัวอย่าง)", headcount: 117, scheduled: 98, present: 90, late: 4, waiting: 3, absent: 1, on_leave: 4, mtd_absent: 6, mtd_leave_days: 12.5, mtd_ot_hours: 186, mtd_ot_pending: 9 },
+  { warehouse_id: W32, code: "WH32", name: "คลัง 32 (ตัวอย่าง)", headcount: 74, scheduled: 60, present: 57, late: 2, waiting: 1, absent: 0, on_leave: 2, mtd_absent: 2, mtd_leave_days: 5, mtd_ot_hours: 94.5, mtd_ot_pending: 0 },
+];

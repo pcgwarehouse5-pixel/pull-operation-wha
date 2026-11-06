@@ -35,3 +35,29 @@ body {
   outline-offset: 2px;
   border-radius: 10px;
 }
+
+/* พิมพ์รายงาน A4: ซ่อนส่วนของแอป แสดงเฉพาะเนื้อหารายงาน */
+@media print {
+  @page {
+    size: A4;
+    margin: 12mm;
+  }
+  html,
+  body {
+    background: #fff !important;
+  }
+  .print-page {
+    break-after: page;
+  }
+  .print-page:last-child {
+    break-after: auto;
+  }
+  .print-table {
+    font-size: 11px;
+  }
+  .print-table th,
+  .print-table td {
+    border: 1px solid #000 !important;
+    padding: 3px 4px !important;
+  }
+}

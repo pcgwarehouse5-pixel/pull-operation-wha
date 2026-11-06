@@ -158,7 +158,7 @@ test("ค่าตั้งค่า: ทุกคนอ่านได้ ผ�
   await assert.rejects(add(U.admin5), /row-level security/);
   await add(U.exec);
   assert.ok((await as(db, U.emp5, () => rows(db, `select * from public.app_settings`))).length >= 8);
-  assert.equal((await rows(db, `select count(*)::int as c from public.audit_logs where table_name = 'app_settings'`))[0].c, 1);
+  assert.equal((await rows(db, `select count(*)::int as c from public.audit_logs where table_name = 'app_settings' and actor_id = $1`, [U.exec]))[0].c, 1);
 });
 
 // ---------------- ใบลา ----------------

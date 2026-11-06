@@ -38,6 +38,8 @@ export async function setup() {
   for (const f of fs.readdirSync(dir).filter((x) => x.endsWith(".sql")).sort()) {
     await db.exec(fs.readFileSync(new URL(f, dir), "utf8"));
   }
+  // เทสต์ส่วนใหญ่จำลองว่าเริ่มใช้ลงเวลาในแอปแล้ว (เทสต์วันเริ่มใช้ลบค่านี้เอง)
+  await db.exec(`insert into public.app_settings (key, effective_from, value) values ('attendance.go_live_date', '2000-01-02', '"2000-01-02"')`);
   // งานตั้งต้นทำแบบ "เซิร์ฟเวอร์" (ไม่มีผู้ใช้ล็อกอิน) เหมือนสคริปต์ย้ายข้อมูล
   await db.exec(`
     insert into public.warehouses (id, code, name) values ('${WH5}', 'WH5', 'คลัง 5'), ('${WH32}', 'WH32', 'คลัง 32');

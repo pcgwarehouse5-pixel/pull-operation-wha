@@ -2,7 +2,7 @@
 
 export type AttendanceStatus =
   | "ok" | "late" | "early" | "late_early" | "working" | "no_out" | "no_in" | "absent" | "waiting" | "upcoming"
-  | "leave" | "leave_half" | "off" | "off_worked" | "no_shift" | "no_shift_worked";
+  | "leave" | "leave_half" | "off" | "off_worked" | "no_shift" | "no_shift_worked" | "not_tracked";
 
 export type AttendanceRow = {
   user_id: string;
@@ -48,6 +48,7 @@ export const STATUS: Record<AttendanceStatus, { label: string; tone: Tone }> = {
   off_worked: { label: "ทำงานวันหยุด", tone: "blue" },
   no_shift: { label: "ไม่มีกะ", tone: "slate" },
   no_shift_worked: { label: "มาทำงาน (ไม่มีกะ)", tone: "blue" },
+  not_tracked: { label: "ก่อนเริ่มใช้ลงเวลา", tone: "slate" },
 };
 
 /** สถานะที่ต้องตามต่อ (ใช้กรองในหน้าติดตาม) */

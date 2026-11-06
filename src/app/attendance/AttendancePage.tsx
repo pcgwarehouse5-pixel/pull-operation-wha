@@ -7,6 +7,7 @@ import { useApp } from "@/components/AuthProvider";
 import { Alert, Badge, Button, Card, Empty, Loading } from "@/components/ui";
 import { Icon } from "@/components/Icon";
 import { CorrectionModal } from "@/components/attendance/CorrectionModal";
+import { MyOt } from "@/components/attendance/MyOt";
 import { errText, sb } from "@/lib/supabase";
 import { shortDay, thaiTime } from "@/lib/format";
 import { addMonths, currentMonth, monthDates, thaiMonthLabel, todayIso } from "@/lib/shifts";
@@ -272,6 +273,7 @@ export default function AttendancePage() {
       <div className="mt-3 text-center">
         <Button variant="ghost" size="sm" onClick={() => setFix(today)}>ขอแก้เวลาวันอื่น</Button>
       </div>
+      <MyOt ym={ym} />
       {corrs.some((c) => c.status !== "pending") && (
         <details className="mt-3 rounded-2xl bg-white p-3 ring-1 ring-line">
           <summary className="cursor-pointer font-semibold">ประวัติคำขอแก้เวลา</summary>

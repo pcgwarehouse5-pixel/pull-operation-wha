@@ -54,6 +54,13 @@ if (cmd === "passwords") {
   // ลบทุกบัญชีที่ขึ้นต้นด้วย ztest- (รวมบัญชีที่สร้างระหว่างทดสอบปุ่มเพิ่มผู้ใช้)
   const { data: tests } = await admin.from("profiles").select("id").ilike("employee_code", "ztest-%");
   const ids = (tests ?? []).map((t) => t.id);
+  // แจ้งเตือนที่บัญชีจริง (เช่น ผู้บริหาร) ได้รับจากใบลา/คำขอแก้เวลาของบัญชีทดสอบ
+  if (ids.length) {
+    const { data: lv } = await admin.from("leave_requests").select("id").in("user_id", ids);
+    const { data: cr } = await admin.from("attendance_corrections").select("id").in("user_id", ids);
+    for (const x of lv ?? []) await admin.from("notifications").delete().like("dedup_key", `leave:${x.id}:%`);
+    for (const x of cr ?? []) await admin.from("notifications").delete().like("dedup_key", `corr:${x.id}:%`);
+  }
   // ไฟล์แนบใบลาของบัญชีทดสอบ
   for (const id of ids) {
     const { data: files } = await admin.storage.from("leave-attachments").list(id);

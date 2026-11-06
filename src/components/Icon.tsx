@@ -19,6 +19,9 @@ const PATHS = {
   pin: "M12 21s-7-6.2-7-11a7 7 0 0114 0c0 4.8-7 11-7 11zM12 12.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5z",
   leave: "M5 4h11l3 3v13H5zM9 12h6M9 16h4M15 4v4h4",
   check: "M5 12l5 5L20 7",
+  bell: "M6 16V11a6 6 0 1112 0v5l2 2H4zM10 20a2 2 0 004 0",
+  chart: "M4 20V10M10 20V4M16 20v-7M22 20H2",
+  ot: "M12 21a9 9 0 100-18 9 9 0 000 18zM12 7v5h4M17 3l3 3",
 } as const;
 
 export type IconName = keyof typeof PATHS;

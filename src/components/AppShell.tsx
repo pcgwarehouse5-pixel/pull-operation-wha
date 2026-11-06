@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { useApp } from "./AuthProvider";
 import { Icon } from "./Icon";
+import { NotificationBell } from "./NotificationBell";
 import { ROLE_LABEL, ROLE_RANK, fullName, type AppRole } from "@/lib/types";
 import { activeKey, bottomKeys, navFor } from "@/lib/nav";
 
@@ -115,6 +116,7 @@ export function AppShell({
           )}
           {home && <span className="hidden flex-1 lg:block" />}
           {actions}
+          <NotificationBell />
         </div>
       </header>
 

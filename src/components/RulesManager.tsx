@@ -1,7 +1,8 @@
 "use client";
 
-// กฎลงเวลา/ลา (หน้าตั้งค่า): ทุกค่ามีวันที่เริ่มใช้ เปลี่ยนค่า = เพิ่มค่าใหม่ ค่าเก่ายังใช้กับวันก่อนหน้า
-// ผู้บริหาร/ผู้ดูแลระบบสูงสุดแก้กฎได้ · แอดมินคลังขึ้นไปตั้งโควตารายคนได้
+// กฎลงเวลา / ลา / OT / เบี้ยขยัน / ค่าเดินทาง / แจ้งเตือน (หน้าตั้งค่า)
+// ทุกค่ามีวันที่เริ่มใช้: เปลี่ยนค่า = เพิ่มค่าใหม่ ค่าเก่ายังใช้กับวันก่อนหน้า
+// ผู้บริหาร/ผู้ดูแลระบบสูงสุดแก้กฎได้ · แอดมินคลังขึ้นไปตั้งโควตาวันลารายคนได้
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useApp } from "./AuthProvider";
 import { Alert, Badge, Button, Card, Field, Loading, Modal, inputCls } from "./ui";
@@ -13,24 +14,49 @@ import { isGlobal, isManager } from "@/lib/types";
 import { todayIso } from "@/lib/shifts";
 
 type Setting = { key: string; effective_from: string; value: unknown; note: string | null; created_at: string };
-type Kind = "number" | "quota" | "types";
-const META: { key: string; label: string; unit?: string; hint: string; kind: Kind; min?: number; max?: number }[] = [
-  { key: "attendance.late_grace_minutes", label: "เวลาผ่อนผันก่อนนับว่าสาย", unit: "นาที", hint: "เข้างานช้ากว่าเวลาเริ่มกะไม่เกินค่านี้ ยังนับว่าปกติ", kind: "number", min: 0, max: 120 },
-  { key: "attendance.early_leave_grace_minutes", label: "เวลาผ่อนผันก่อนนับว่าออกก่อน", unit: "นาที", hint: "", kind: "number", min: 0, max: 120 },
-  { key: "attendance.no_out_after_hours", label: "เลยเวลาเลิกกะกี่ชั่วโมงจึงนับว่าลืมออก", unit: "ชั่วโมง", hint: "", kind: "number", min: 1, max: 12 },
-  { key: "attendance.max_gps_accuracy_m", label: "ความคลาดเคลื่อน GPS สูงสุดที่ยอมรับ", unit: "เมตร", hint: "ถ้า GPS คลาดเคลื่อนมากกว่านี้ ระบบให้ลองใหม่ (รัศมีของแต่ละคลังตั้งในหน้า \"คลัง\")", kind: "number", min: 20, max: 1000 },
-  { key: "attendance.correction_max_days", label: "ขอแก้เวลาย้อนหลังได้ไม่เกิน", unit: "วัน", hint: "", kind: "number", min: 1, max: 90 },
-  { key: "leave.exec_approval_min_days", label: "ลาตั้งแต่กี่วันต้องให้ผู้บริหารอนุมัติต่อ", unit: "วัน", hint: "ต่ำกว่านี้ หัวหน้างาน/แอดมินคลังอนุมัติจบได้เลย", kind: "number", min: 1, max: 60 },
-  { key: "leave.quota", label: "โควตาวันลาต่อปี (ค่ามาตรฐาน)", hint: "เว้นว่าง = ไม่จำกัด/ไม่แสดงคงเหลือ · ตรวจสิทธิ์ตาม พ.ร.บ.คุ้มครองแรงงานฉบับล่าสุดกับกรมสวัสดิการและคุ้มครองแรงงานก่อนตั้ง", kind: "quota" },
-  { key: "leave.attachment_types", label: "ประเภทลาที่แนบเอกสารได้", hint: "ใบรับรองแพทย์เป็นข้อมูลสุขภาพ (ข้อมูลอ่อนไหวตาม PDPA) เปิดเฉพาะที่จำเป็น", kind: "types" },
+type Kind = "number" | "quota" | "types" | "rates" | "steps" | "dilrules" | "date";
+type Opt = { value: string; label: string };
+type Meta = { key: string; label: string; unit?: string; hint: string; kind: Kind; min?: number; max?: number; source?: "leave" | "employment"; group: string };
+type Rates = Record<string, { workday?: number; holiday_normal?: number; holiday_ot?: number }>;
+type DilRules = { absent?: boolean; late?: boolean; no_punch?: boolean; leave_types?: string[] };
+
+const LAW = "ตรวจกับ พ.ร.บ.คุ้มครองแรงงานฉบับล่าสุด (กรมสวัสดิการและคุ้มครองแรงงาน) ก่อนใช้";
+const META: Meta[] = [
+  { group: "ลงเวลา", key: "attendance.go_live_date", label: "วันเริ่มใช้ลงเวลาในแอป", hint: "ก่อนวันนี้ วันที่ไม่มีเวลาเข้า-ออกจะไม่นับเป็นขาดงาน ไม่แจ้งเตือน และไม่คิดเบี้ยขยัน (ตั้งเมื่อพร้อมให้พนักงานเริ่มกดลงเวลาจริง)", kind: "date" },
+  { group: "ลงเวลา", key: "attendance.late_grace_minutes", label: "เวลาผ่อนผันก่อนนับว่าสาย", unit: "นาที", hint: "เข้างานช้ากว่าเวลาเริ่มกะไม่เกินค่านี้ ยังนับว่าปกติ", kind: "number", min: 0, max: 120 },
+  { group: "ลงเวลา", key: "attendance.early_leave_grace_minutes", label: "เวลาผ่อนผันก่อนนับว่าออกก่อน", unit: "นาที", hint: "", kind: "number", min: 0, max: 120 },
+  { group: "ลงเวลา", key: "attendance.no_out_after_hours", label: "เลยเวลาเลิกกะกี่ชั่วโมงจึงนับว่าลืมออก", unit: "ชั่วโมง", hint: "", kind: "number", min: 1, max: 12 },
+  { group: "ลงเวลา", key: "attendance.max_gps_accuracy_m", label: "ความคลาดเคลื่อน GPS สูงสุดที่ยอมรับ", unit: "เมตร", hint: "รัศมีของแต่ละคลังตั้งในหน้า \"คลัง\"", kind: "number", min: 20, max: 1000 },
+  { group: "ลงเวลา", key: "attendance.correction_max_days", label: "ขอแก้เวลาย้อนหลังได้ไม่เกิน", unit: "วัน", hint: "", kind: "number", min: 1, max: 90 },
+  { group: "ลา", key: "leave.exec_approval_min_days", label: "ลาตั้งแต่กี่วันต้องให้ผู้บริหารอนุมัติต่อ", unit: "วัน", hint: "ต่ำกว่านี้ หัวหน้างาน/แอดมินคลังอนุมัติจบได้เลย", kind: "number", min: 1, max: 60 },
+  { group: "ลา", key: "leave.quota", label: "โควตาวันลาต่อปี (ค่ามาตรฐาน)", hint: `เว้นว่าง = ไม่จำกัด · ${LAW}`, kind: "quota", source: "leave" },
+  { group: "ลา", key: "leave.attachment_types", label: "ประเภทลาที่แนบเอกสารได้", hint: "ใบรับรองแพทย์เป็นข้อมูลสุขภาพ (ข้อมูลอ่อนไหวตาม PDPA) เปิดเฉพาะที่จำเป็น", kind: "types", source: "leave" },
+  { group: "OT", key: "ot.rates", label: "อัตรา OT แยกประเภทพนักงาน (เท่าของค่าจ้างต่อชั่วโมง)", hint: `"ค่าเริ่มต้น" ใช้กับประเภทที่ไม่ได้ตั้งเฉพาะ · ${LAW}`, kind: "rates", source: "employment" },
+  { group: "OT", key: "ot.min_minutes", label: "ไม่นับ OT ถ้าเกินเวลาเลิกกะไม่ถึง", unit: "นาที", hint: "ตามที่บริษัทเลือก (เกณฑ์นี้อาจถูกโต้แย้งได้ถ้าพนักงานทำงานจริงตามคำสั่ง ปรึกษานักกฎหมายแรงงาน)", kind: "number", min: 0, max: 240 },
+  { group: "OT", key: "ot.round_minutes", label: "ปัดชั่วโมง OT ลงทีละ", unit: "นาที", hint: "", kind: "number", min: 1, max: 60 },
+  { group: "OT", key: "ot.break_minutes", label: "หักเวลาพักเมื่อทำงานวันหยุด", unit: "นาที", hint: "", kind: "number", min: 0, max: 120 },
+  { group: "OT", key: "ot.break_after_minutes", label: "ทำงานวันหยุดครบกี่นาทีจึงหักพัก", unit: "นาที", hint: "", kind: "number", min: 0, max: 720 },
+  { group: "OT", key: "ot.holiday_normal_hours", label: "ชั่วโมงปกติของการทำงานวันหยุด (กะที่ไม่มีเวลา เช่น OFF)", unit: "ชั่วโมง", hint: "ส่วนที่เกินคิดอัตรา OT วันหยุด", kind: "number", min: 1, max: 12 },
+  { group: "OT", key: "ot.max_hours_per_day", label: "เพดานชั่วโมงต่อวัน (กันคำนวณผิด)", unit: "ชั่วโมง", hint: "", kind: "number", min: 1, max: 24 },
+  { group: "เบี้ยขยัน/ค่าเดินทาง", key: "payroll.cutoff_day", label: "วันตัดรอบเงินเดือน", unit: "", hint: "0 = ทั้งเดือน (1–สิ้นเดือน) · 20 = รอบ 21 ของเดือนก่อน ถึง 20", kind: "number", min: 0, max: 28 },
+  { group: "เบี้ยขยัน/ค่าเดินทาง", key: "diligence.steps", label: "เบี้ยขยันขั้นบันได (บาท/เดือน)", hint: "เดือนที่ 1, 2, 3... ที่ไม่มีเหตุติดต่อกัน", kind: "steps" },
+  { group: "เบี้ยขยัน/ค่าเดินทาง", key: "diligence.rules", label: "เหตุที่ทำให้ไม่ได้เบี้ยขยัน", hint: "", kind: "dilrules", source: "leave" },
+  { group: "เบี้ยขยัน/ค่าเดินทาง", key: "diligence.employment_types", label: "ประเภทพนักงานที่ได้เบี้ยขยัน", hint: "ไม่เลือกเลย = ทุกประเภท", kind: "types", source: "employment" },
+  { group: "เบี้ยขยัน/ค่าเดินทาง", key: "travel.rate_per_day", label: "ค่าเดินทางต่อวันที่มาทำงาน", unit: "บาท", hint: "เฉพาะพนักงานที่ติ๊ก \"ได้ค่าเดินทาง\" ในทะเบียน", kind: "number", min: 0, max: 5000 },
+  { group: "แจ้งเตือน", key: "notify.missing_in_minutes", label: "กะเริ่มแล้วกี่นาทียังไม่ลงเวลา จึงแจ้งเตือนพนักงาน", unit: "นาที", hint: "", kind: "number", min: 5, max: 240 },
+  { group: "แจ้งเตือน", key: "notify.absent_streak_days", label: "ขาดงานติดต่อกันกี่วันทำงาน จึงแจ้งหัวหน้า/แอดมิน", unit: "วัน", hint: "เป็นการแจ้งให้ตรวจสอบเท่านั้น ไม่ได้ทำให้พ้นสภาพพนักงาน", kind: "number", min: 1, max: 14 },
+  { group: "แจ้งเตือน", key: "notify.daily_hour", label: "เวลาส่งสรุปประจำวัน (ขาดงานติดต่อกัน / OT รออนุมัติ)", unit: "นาฬิกา", hint: "", kind: "number", min: 0, max: 23 },
 ];
+const GROUPS = [...new Set(META.map((m) => m.group))];
 
 export function RulesManager() {
   const { profile: me, demo } = useApp();
-  const opts = useOptions(["leave_type"]);
-  const types = (demo ? demo.PREVIEW_LEAVE_TYPES : (opts.leave_type ?? [])).filter((o) => o.is_active);
+  const opts = useOptions(["leave_type", "employment_type"]);
+  const leaveTypes: Opt[] = (demo ? demo.PREVIEW_LEAVE_TYPES : (opts.leave_type ?? [])).filter((o) => o.is_active).map((o) => ({ value: o.value, label: o.label }));
+  const empTypes: Opt[] = (opts.employment_type ?? []).filter((o) => o.is_active).map((o) => ({ value: o.value, label: o.label }));
   const [rows, setRows] = useState<Setting[] | null>(null);
-  const [edit, setEdit] = useState<(typeof META)[number] | null>(null);
+  const [edit, setEdit] = useState<Meta | null>(null);
+  const [group, setGroup] = useState(GROUPS[0]);
   const [err, setErr] = useState("");
   const canEdit = isGlobal(me.role);
   const today = todayIso();
@@ -39,9 +65,12 @@ export function RulesManager() {
     if (demo) {
       return setRows([
         { key: "attendance.late_grace_minutes", effective_from: "2000-01-01", value: 0, note: null, created_at: "" },
-        { key: "leave.exec_approval_min_days", effective_from: "2000-01-01", value: 4, note: null, created_at: "" },
         { key: "leave.quota", effective_from: "2000-01-01", value: { sick: 30, personal: 6, vacation: 6 }, note: null, created_at: "" },
-        { key: "leave.attachment_types", effective_from: "2000-01-01", value: ["sick"], note: null, created_at: "" },
+        { key: "ot.rates", effective_from: "2000-01-01", value: { default: { workday: 1.5, holiday_normal: 1, holiday_ot: 3 }, daily_worker: { workday: 1.5, holiday_normal: 2, holiday_ot: 3 } }, note: null, created_at: "" },
+        { key: "ot.min_minutes", effective_from: "2000-01-01", value: 60, note: null, created_at: "" },
+        { key: "diligence.steps", effective_from: "2000-01-01", value: [300, 400, 500], note: null, created_at: "" },
+        { key: "diligence.rules", effective_from: "2000-01-01", value: { absent: true, late: true, no_punch: true, leave_types: ["sick", "personal"] }, note: null, created_at: "" },
+        { key: "travel.rate_per_day", effective_from: "2000-01-01", value: 30, note: null, created_at: "" },
       ]);
     }
     const { data, error } = await sb().from("app_settings").select("key, effective_from, value, note, created_at").order("key").order("effective_from", { ascending: false });
@@ -54,23 +83,50 @@ export function RulesManager() {
     load();
   }, [load]);
 
-  const typeLabel = (v: string) => types.find((t) => t.value === v)?.label ?? v;
-  const show = (m: (typeof META)[number], v: unknown) => {
-    if (v === undefined) return "-";
-    if (m.kind === "number") return `${v} ${m.unit ?? ""}`;
-    if (m.kind === "types") return (v as string[]).map(typeLabel).join(", ") || "ไม่มี";
-    return Object.entries(v as Record<string, number>).map(([k, n]) => `${typeLabel(k)} ${n}`).join(" · ");
+  const optsOf = (m: Meta) => (m.source === "employment" ? empTypes : leaveTypes);
+  const labelIn = (list: Opt[], v: string) => (v === "default" ? "ค่าเริ่มต้น" : (list.find((t) => t.value === v)?.label ?? v));
+  const show = (m: Meta, v: unknown): string => {
+    if (v === undefined || v === null) return m.kind === "date" ? "ยังไม่ตั้ง (ยังไม่เริ่มนับ)" : "-";
+    const list = optsOf(m);
+    switch (m.kind) {
+      case "number":
+        return `${v} ${m.unit ?? ""}`;
+      case "date":
+        return typeof v === "string" ? thaiDate(`${v}T12:00:00+07:00`) : "ยังไม่ตั้ง";
+      case "types":
+        return (v as string[]).map((x) => labelIn(list, x)).join(", ") || (m.source === "employment" ? "ทุกประเภท" : "ไม่มี");
+      case "quota":
+        return Object.entries(v as Record<string, number>).map(([k, n]) => `${labelIn(list, k)} ${n}`).join(" · ");
+      case "steps":
+        return (v as number[]).map((n) => n.toLocaleString("th-TH")).join(" → ") + " บาท";
+      case "rates":
+        return Object.entries(v as Rates)
+          .map(([k, r]) => `${labelIn(list, k)}: วันทำงาน ${r.workday ?? "-"} / ทำงานวันหยุด ${r.holiday_normal ?? "-"} / OT วันหยุด ${r.holiday_ot ?? "-"}`)
+          .join(" · ");
+      case "dilrules": {
+        const r = v as DilRules;
+        const parts = [r.absent && "ขาด", r.late && "สาย", r.no_punch && "ลืมลงเวลา", ...(r.leave_types ?? []).map((x) => `ลา${labelIn(leaveTypes, x)}`)].filter(Boolean);
+        return parts.join(", ") || "ไม่มี";
+      }
+    }
   };
 
   return (
     <div>
       {!canEdit && <div className="mb-3"><Alert tone="info">กฎเหล่านี้มีผลทุกคลัง แก้ได้เฉพาะผู้บริหารและผู้ดูแลระบบสูงสุด</Alert></div>}
+      <div className="mb-3 flex flex-wrap gap-1.5" role="tablist" aria-label="กลุ่มกฎ">
+        {GROUPS.map((g) => (
+          <button key={g} role="tab" aria-selected={group === g} onClick={() => setGroup(g)} className={`min-h-10 rounded-full px-3.5 text-[14px] font-semibold ${group === g ? "bg-ink text-white" : "bg-white ring-1 ring-line"}`}>
+            {g}
+          </button>
+        ))}
+      </div>
       {err && <div className="mb-3"><Alert tone="error">{err}</Alert></div>}
       {!rows ? (
         <Loading />
       ) : (
         <ul className="space-y-2">
-          {META.map((m) => {
+          {META.filter((m) => m.group === group).map((m) => {
             const hist = rows.filter((r) => r.key === m.key);
             const current = hist.find((r) => r.effective_from <= today);
             const future = hist.filter((r) => r.effective_from > today);
@@ -110,12 +166,13 @@ export function RulesManager() {
           })}
         </ul>
       )}
-      {isManager(me.role) && <QuotaOverrides types={types.map((t) => ({ value: t.value, label: t.label }))} />}
+      {group === "ลา" && isManager(me.role) && <QuotaOverrides types={leaveTypes} />}
       {edit && (
         <EditSetting
           meta={edit}
           current={rows?.find((r) => r.key === edit.key && r.effective_from <= today)?.value}
-          types={types.map((t) => ({ value: t.value, label: t.label }))}
+          options={optsOf(edit)}
+          leaveTypes={leaveTypes}
           onClose={() => setEdit(null)}
           onSaved={() => {
             setEdit(null);
@@ -127,35 +184,81 @@ export function RulesManager() {
   );
 }
 
-function EditSetting({ meta, current, types, onClose, onSaved }: { meta: (typeof META)[number]; current: unknown; types: { value: string; label: string }[]; onClose: () => void; onSaved: () => void }) {
+function EditSetting({ meta, current, options, leaveTypes, onClose, onSaved }: { meta: Meta; current: unknown; options: Opt[]; leaveTypes: Opt[]; onClose: () => void; onSaved: () => void }) {
   const { demo } = useApp();
-  const [num, setNum] = useState(String(meta.kind === "number" ? (current ?? "") : ""));
+  const [num, setNum] = useState(String(meta.kind === "number" || meta.kind === "date" ? (current ?? "") : ""));
   const [quota, setQuota] = useState<Record<string, string>>(() =>
-    Object.fromEntries(types.map((t) => [t.value, String((current as Record<string, number> | undefined)?.[t.value] ?? "")])),
+    Object.fromEntries(options.map((t) => [t.value, String((current as Record<string, number> | undefined)?.[t.value] ?? "")])),
   );
-  const [sel, setSel] = useState<string[]>(Array.isArray(current) ? (current as string[]) : []);
+  const [sel, setSel] = useState<string[]>(Array.isArray(current) && meta.kind === "types" ? (current as string[]) : []);
+  const [steps, setSteps] = useState(Array.isArray(current) && meta.kind === "steps" ? (current as number[]).join(", ") : "");
+  const [rates, setRates] = useState<Record<string, Record<string, string>>>(() => {
+    const cur = (meta.kind === "rates" ? current : {}) as Rates;
+    return Object.fromEntries(
+      ["default", ...options.map((o) => o.value)].map((k) => [
+        k,
+        { workday: String(cur?.[k]?.workday ?? ""), holiday_normal: String(cur?.[k]?.holiday_normal ?? ""), holiday_ot: String(cur?.[k]?.holiday_ot ?? "") },
+      ]),
+    );
+  });
+  const [dil, setDil] = useState<DilRules>(() => (meta.kind === "dilrules" ? { ...(current as DilRules) } : {}));
   const [from, setFrom] = useState(todayIso);
   const [note, setNote] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
 
+  function build(): unknown | string {
+    switch (meta.kind) {
+      case "number": {
+        const n = Number(num);
+        if (num === "" || !Number.isFinite(n) || n < (meta.min ?? 0) || n > (meta.max ?? 1e6)) return `ใส่ตัวเลข ${meta.min ?? 0}–${meta.max}`;
+        return n;
+      }
+      case "quota": {
+        const out: Record<string, number> = {};
+        for (const [k, v] of Object.entries(quota)) {
+          if (v.trim() === "") continue;
+          const n = Number(v);
+          if (!Number.isFinite(n) || n < 0 || n > 366) return "โควตาต้องเป็นตัวเลข 0–366";
+          out[k] = n;
+        }
+        return out;
+      }
+      case "types":
+        return sel;
+      case "date":
+        return /^d{4}-d{2}-d{2}$/.test(num) ? num : null;
+      case "steps": {
+        const list = steps.split(/[,\s]+/).filter(Boolean).map(Number);
+        if (!list.length || list.some((n) => !Number.isFinite(n) || n < 0 || n > 100000)) return "ใส่จำนวนเงินคั่นด้วยจุลภาค เช่น 300, 400, 500";
+        return list;
+      }
+      case "rates": {
+        const out: Rates = {};
+        for (const [k, r] of Object.entries(rates)) {
+          const vals = Object.entries(r).filter(([, v]) => v.trim() !== "");
+          if (!vals.length) continue;
+          if (k === "default" && vals.length < 3) return "ค่าเริ่มต้นต้องใส่ครบ 3 อัตรา";
+          const o: Record<string, number> = {};
+          for (const [f, v] of vals) {
+            const n = Number(v);
+            if (!Number.isFinite(n) || n < 0 || n > 10) return "อัตราต้องเป็นตัวเลข 0–10 เท่า";
+            o[f] = n;
+          }
+          out[k] = o;
+        }
+        if (!out.default) return "ต้องมีค่าเริ่มต้น";
+        return out;
+      }
+      case "dilrules":
+        return { absent: !!dil.absent, late: !!dil.late, no_punch: !!dil.no_punch, leave_types: dil.leave_types ?? [] };
+    }
+  }
+
   async function save() {
     setErr("");
-    let value: unknown;
-    if (meta.kind === "number") {
-      const n = Number(num);
-      if (num === "" || !Number.isFinite(n) || n < (meta.min ?? 0) || n > (meta.max ?? 1e6)) return setErr(`ใส่ตัวเลข ${meta.min ?? 0}–${meta.max}`);
-      value = n;
-    } else if (meta.kind === "quota") {
-      const out: Record<string, number> = {};
-      for (const [k, v] of Object.entries(quota)) {
-        if (v.trim() === "") continue;
-        const n = Number(v);
-        if (!Number.isFinite(n) || n < 0 || n > 366) return setErr("โควตาต้องเป็นตัวเลข 0–366");
-        out[k] = n;
-      }
-      value = out;
-    } else value = sel;
+    const value = build();
+    if (typeof value === "string") return setErr(value);
     if (!from) return setErr("เลือกวันที่เริ่มใช้");
     if (demo) return onSaved();
     setBusy(true);
@@ -165,27 +268,90 @@ function EditSetting({ meta, current, types, onClose, onSaved }: { meta: (typeof
     onSaved();
   }
 
+  const check = (on: boolean, set: () => void, label: string, k: string) => (
+    <label key={k} className="flex min-h-11 items-center gap-3">
+      <input type="checkbox" className="h-5 w-5 accent-brand" checked={on} onChange={set} />
+      {label}
+    </label>
+  );
+
   return (
     <Modal title={meta.label} onClose={onClose}>
       <div className="space-y-3">
         {meta.kind === "number" && (
-          <Field label={`ค่าใหม่ (${meta.unit})`}>
+          <Field label={`ค่าใหม่${meta.unit ? ` (${meta.unit})` : ""}`}>
             <input type="number" inputMode="numeric" min={meta.min} max={meta.max} className={inputCls} value={num} onChange={(e) => setNum(e.target.value)} />
           </Field>
         )}
+        {meta.kind === "date" && (
+          <Field label="วันที่" hint="เว้นว่างแล้วบันทึก = กลับไปเป็นยังไม่เริ่มใช้">
+            <input type="date" className={inputCls} value={num} onChange={(e) => setNum(e.target.value)} />
+          </Field>
+        )}
         {meta.kind === "quota" &&
-          types.map((t) => (
+          options.map((t) => (
             <Field key={t.value} label={`ลา${t.label} (วัน/ปี)`}>
               <input type="number" inputMode="decimal" min={0} max={366} className={inputCls} value={quota[t.value] ?? ""} placeholder="ไม่จำกัด" onChange={(e) => setQuota({ ...quota, [t.value]: e.target.value })} />
             </Field>
           ))}
-        {meta.kind === "types" &&
-          types.map((t) => (
-            <label key={t.value} className="flex min-h-11 items-center gap-3">
-              <input type="checkbox" className="h-5 w-5 accent-brand" checked={sel.includes(t.value)} onChange={() => setSel(sel.includes(t.value) ? sel.filter((x) => x !== t.value) : [...sel, t.value])} />
-              ลา{t.label}
-            </label>
-          ))}
+        {meta.kind === "types" && options.map((t) => check(sel.includes(t.value), () => setSel(sel.includes(t.value) ? sel.filter((x) => x !== t.value) : [...sel, t.value]), t.label, t.value))}
+        {meta.kind === "steps" && (
+          <Field label="จำนวนเงินแต่ละขั้น (บาท) คั่นด้วยจุลภาค">
+            <input className={inputCls} value={steps} onChange={(e) => setSteps(e.target.value)} placeholder="300, 400, 500" />
+          </Field>
+        )}
+        {meta.kind === "rates" && (
+          <div className="space-y-3">
+            {Object.keys(rates).map((k) => (
+              <div key={k} className="rounded-xl p-3 ring-1 ring-line">
+                <p className="mb-2 font-semibold">{k === "default" ? "ค่าเริ่มต้น (ทุกประเภทที่ไม่ได้ตั้งเฉพาะ)" : (options.find((o) => o.value === k)?.label ?? k)}</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {(
+                    [
+                      ["workday", "OT วันทำงาน"],
+                      ["holiday_normal", "ทำงานวันหยุด"],
+                      ["holiday_ot", "OT วันหยุด"],
+                    ] as const
+                  ).map(([f, l]) => (
+                    <label key={f} className="text-[13px]">
+                      {l}
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        step="0.5"
+                        min={0}
+                        max={10}
+                        className={`${inputCls} !min-h-10`}
+                        value={rates[k][f]}
+                        placeholder={k === "default" ? "" : "ใช้ค่าเริ่มต้น"}
+                        onChange={(e) => setRates({ ...rates, [k]: { ...rates[k], [f]: e.target.value } })}
+                      />
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {meta.kind === "dilrules" && (
+          <div>
+            {check(!!dil.absent, () => setDil({ ...dil, absent: !dil.absent }), "ขาดงาน", "absent")}
+            {check(!!dil.late, () => setDil({ ...dil, late: !dil.late }), "มาสาย (เกินเวลาผ่อนผัน)", "late")}
+            {check(!!dil.no_punch, () => setDil({ ...dil, no_punch: !dil.no_punch }), "ลืมลงเวลาเข้า/ออก (ที่ยังไม่ได้แก้)", "no_punch")}
+            <p className="mt-2 mb-1 text-[14px] font-semibold">ลาประเภทใดบ้างที่ทำให้ไม่ได้</p>
+            {leaveTypes.map((t) =>
+              check(
+                (dil.leave_types ?? []).includes(t.value),
+                () => {
+                  const cur = dil.leave_types ?? [];
+                  setDil({ ...dil, leave_types: cur.includes(t.value) ? cur.filter((x) => x !== t.value) : [...cur, t.value] });
+                },
+                `ลา${t.label}`,
+                `l-${t.value}`,
+              ),
+            )}
+          </div>
+        )}
         <Field label="เริ่มใช้ตั้งแต่วันที่" hint="วันก่อนหน้านี้ยังใช้ค่าเดิม (ไม่ย้อนแก้ข้อมูลเก่า)">
           <input type="date" className={inputCls} value={from} onChange={(e) => setFrom(e.target.value)} />
         </Field>
