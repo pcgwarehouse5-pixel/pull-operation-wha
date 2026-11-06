@@ -9,8 +9,8 @@
 ชื่อผู้ใช้ GitHub	[pcgwarehouse5-pixel ]
 ชื่อ repo	pcgwarehouse5-pixel/pull-operation-wha (private) — remote: https://pcgwarehouse5-pixel@github.com/pcgwarehouse5-pixel/pull-operation-wha.git
 ข้อมูลจากแอปเดิม (Lovable)	lovable-data/ และ lovable-source/ (ข้อมูลจริง PDPA ห้าม commit) — ย้ายเฉพาะคลัง WH5 และ WH32
-Supabase project ref / ภูมิภาค	vcyaocjelqpznjshygkj (https://vcyaocjelqpznjshygkj.supabase.co) — ตรวจการเชื่อมต่อ: npm run db:check / ตรวจสิทธิ์: npm run db:security
-ลิงก์ Vercel	[ จะได้หลัง deploy ครั้งแรก ]
+Supabase project ref / ภูมิภาค	vcyaocjelqpznjshygkj (https://vcyaocjelqpznjshygkj.supabase.co) ภูมิภาค ap-northeast-1 (โตเกียว) — ตรวจการเชื่อมต่อ: npm run db:check / ตรวจสิทธิ์: npm run db:security
+ลิงก์ Vercel	https://pull-operation-wha.vercel.app (บัญชี Vercel ทีม WH05 Hobby ผ่าน GitHub pcgwarehouse5-pixel, deploy อัตโนมัติเมื่อ push main)
 แอปอ้างอิง (อ่านอย่างเดียว)	C:\Projects\App PPL
 ผู้ใช้หลักของแอป / อุปกรณ์	[ ผู้จัดการคลัง / หัวหน้าคลัง / พนักงานในคลังสินค้าทุกตำแหน่ง ]
 บทบาทของคุณ

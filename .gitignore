@@ -46,3 +46,7 @@ next-env.d.ts
 # real data from the old Lovable app (PDPA) - never commit
 lovable-data/
 lovable-source/
+
+# 2FA recovery codes / backup codes - never commit
+*recovery-codes*
+*backup-codes*
