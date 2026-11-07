@@ -36,6 +36,8 @@ export const PREVIEW_AUDIT: AuditLog[] = [
 ];
 
 export const PREVIEW_EXTRA_OPTIONS: DropdownOption[] = [
+  { id: "u1", category: "pull_unit", value: "pallet", label: "พาเลท", sort_order: 1, extra: {}, is_active: true },
+  { id: "u2", category: "pull_unit", value: "piece", label: "ชิ้น", sort_order: 2, extra: {}, is_active: true },
   { id: "o5", category: "employment_type", value: "monthly_employee", label: "พนักงานรายเดือน", sort_order: 1, extra: {}, is_active: true },
   { id: "o6", category: "employment_type", value: "mou", label: "MOU", sort_order: 2, extra: {}, is_active: true },
   { id: "o7", category: "employment_type", value: "daily_worker", label: "คนงานรายวัน", sort_order: 3, extra: {}, is_active: true },
@@ -246,3 +248,47 @@ export const PREVIEW_DASHBOARD = [
   { warehouse_id: W5, code: "WH5", name: "คลัง 5 (ตัวอย่าง)", headcount: 117, scheduled: 98, present: 90, late: 4, waiting: 3, absent: 1, on_leave: 4, mtd_absent: 6, mtd_leave_days: 12.5, mtd_ot_hours: 186, mtd_ot_pending: 9 },
   { warehouse_id: W32, code: "WH32", name: "คลัง 32 (ตัวอย่าง)", headcount: 74, scheduled: 60, present: 57, late: 2, waiting: 1, absent: 0, on_leave: 2, mtd_absent: 2, mtd_leave_days: 5, mtd_ot_hours: 94.5, mtd_ot_pending: 0 },
 ];
+
+// ---------- Pull Operation: ตั้งค่าสมมติ (ตัวเลขตัวอย่าง) ----------
+export function previewPullConfig(): import("./pull").PullConfig {
+  const at = "2026-11-01T00:00:00Z";
+  const skillPositions: Record<string, string[]> = {
+    "RT รับ(Domestics)": ["RT"], "RT เติม(Domestics)": ["RT"], "RT จ่าย(Domestics)": ["RT"], "RT รับ(Export)": ["RT"],
+    "OP ลากรับ": ["OP", "CT"], "OP ลากจ่าย": ["OP", "CT"], "CT4F": ["CT", "CT4F"], "Picker จ่าย": ["OP"],
+    "เช็ครับ(Domestics)": ["Checker Receive"], "เช็คจ่าย(Domestics)": ["Checker Dispatch"], "เช็ครับ(Export)": ["Checker Receive"], "โหลดงาน": ["Team Load"],
+  };
+  const pull = (wh: string, names: string[]) => names.map((skill_name, i) => ({ warehouse_id: wh, skill_name, sort_order: i + 1 }));
+  const types = [
+    { id: "pt1", warehouse_id: W5, name: "งานรับ", unit: "pallet", sort_order: 1, is_active: true },
+    { id: "pt2", warehouse_id: W5, name: "งานจ่าย พาเลทเต็ม", unit: "pallet", sort_order: 2, is_active: true },
+    { id: "pt3", warehouse_id: W5, name: "งานจ่าย Picker", unit: "piece", sort_order: 3, is_active: true },
+    { id: "pt4", warehouse_id: W32, name: "งานรับ Export", unit: "pallet", sort_order: 1, is_active: true },
+  ];
+  const t = (id: string, wh: string, type: string, skill: string) => ({ id, warehouse_id: wh, workload_type_id: type, skill_name: skill, is_active: true });
+  const tasks = [
+    t("pk1", W5, "pt1", "RT รับ(Domestics)"), t("pk2", W5, "pt1", "OP ลากรับ"), t("pk3", W5, "pt1", "เช็ครับ(Domestics)"),
+    t("pk4", W5, "pt2", "RT จ่าย(Domestics)"), t("pk5", W5, "pt2", "OP ลากจ่าย"), t("pk6", W5, "pt3", "Picker จ่าย"),
+    t("pk7", W32, "pt4", "RT รับ(Export)"), t("pk8", W32, "pt4", "เช็ครับ(Export)"),
+  ];
+  const r = (task_id: string, wh: string, per_hour: number, effective_from = "2000-01-01") => ({ task_id, warehouse_id: wh, effective_from, per_hour, note: "ค่าตัวอย่าง", created_at: at });
+  return {
+    skillNames: Object.keys(skillPositions).sort((a, b) => a.localeCompare(b, "th")),
+    skillPositions,
+    pullSkills: [
+      ...pull(W5, ["RT รับ(Domestics)", "OP ลากรับ", "เช็ครับ(Domestics)", "RT จ่าย(Domestics)", "OP ลากจ่าย", "Picker จ่าย", "RT เติม(Domestics)"]),
+      ...pull(W32, ["RT รับ(Export)", "เช็ครับ(Export)", "OP ลากรับ"]),
+    ],
+    types,
+    tasks,
+    rates: [r("pk1", W5, 30), r("pk2", W5, 32), r("pk3", W5, 60), r("pk4", W5, 35), r("pk5", W5, 38), r("pk1", W5, 28, "2026-12-01"), r("pk7", W32, 30), r("pk8", W32, 60)],
+    hours: (["morning", "night"] as const).flatMap((shift) => [
+      { warehouse_id: W5, shift, effective_from: "2000-01-01", hours: 10, note: "ค่าตัวอย่าง", created_at: at },
+      { warehouse_id: W32, shift, effective_from: "2000-01-01", hours: 9, note: "ค่าตัวอย่าง", created_at: at },
+    ]),
+    counts: [
+      { warehouse_id: W5, skill_name: "RT รับ(Domestics)", people: 8 }, { warehouse_id: W5, skill_name: "OP ลากรับ", people: 12 },
+      { warehouse_id: W5, skill_name: "Picker จ่าย", people: 18 }, { warehouse_id: W32, skill_name: "RT รับ(Export)", people: 6 },
+      { warehouse_id: W32, skill_name: "OP ลากรับ", people: 5 },
+    ],
+  };
+}

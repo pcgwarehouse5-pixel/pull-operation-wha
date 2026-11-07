@@ -13,7 +13,7 @@ export type NavItem = {
   short?: string; // ชื่อสั้นบนแถบล่างของมือถือ
 };
 
-export const NAV_GROUPS: { id: "mine" | "staff" | "manage"; title: string; items: NavItem[] }[] = [
+export const NAV_GROUPS: { id: "mine" | "staff" | "pull" | "manage"; title: string; items: NavItem[] }[] = [
   {
     id: "mine",
     title: "ของฉัน",
@@ -37,6 +37,13 @@ export const NAV_GROUPS: { id: "mine" | "staff" | "manage"; title: string; items
       { key: "ot", href: "/ot", label: "OT", desc: "OT จากเวลาจริง อนุมัติ/ไม่อนุมัติ", icon: "ot", minRole: "supervisor" },
       { key: "reports", href: "/reports", label: "รายงาน", desc: "ภาพรวม OT เบี้ยขยัน ค่าเดินทาง การลา พิมพ์ A4", icon: "chart", minRole: "supervisor" },
       { key: "organization", href: "/organization", label: "ผังองค์กร", desc: "อัตรากำลังเทียบคนจริง", icon: "grid", minRole: "supervisor" },
+    ],
+  },
+  {
+    id: "pull",
+    title: "Pull Operation",
+    items: [
+      { key: "pull-settings", href: "/pull/settings", label: "ตั้งค่า Pull", desc: "ทักษะที่ดึงได้ Productivity ประเภทงาน ชั่วโมงต่อกะ", icon: "link", minRole: "admin" },
     ],
   },
   {

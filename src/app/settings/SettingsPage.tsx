@@ -22,6 +22,7 @@ const CATEGORIES: { key: string; label: string; hint: string }[] = [
   { key: "__rules", label: "กฎและอัตรา", hint: "ลงเวลา ลา OT เบี้ยขยัน ค่าเดินทาง แจ้งเตือน (ทุกค่ามีวันที่เริ่มใช้)" },
   { key: "leave_type", label: "ประเภทการลา", hint: "ใช้ในใบลา" },
   { key: "ot_reason", label: "เหตุผล OT", hint: "ตัวเลือกเหตุผลตอนขอ OT" },
+  { key: "pull_unit", label: "หน่วยนับปริมาณงาน", hint: "หน่วยของยอดงานและ Productivity ใน Pull Operation (ค่าในระบบ เช่น pallet ห้ามแก้หลังใช้งาน)" },
   { key: "kpi_category", label: "หัวข้อ KPI", hint: "หัวข้อประเมินรายเดือน" },
   { key: "subcontractor_company", label: "บริษัทรับเหมา", hint: "บริษัทต้นสังกัดของแรงงานรับเหมา" },
 ];

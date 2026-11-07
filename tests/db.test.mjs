@@ -129,7 +129,7 @@ test("ตัวเลือกตั้งค่า: ทุกคนอ่าน
   const ins = `insert into public.dropdown_options (category, value, label) values ('position', 'RT', 'RT')`;
   await assert.rejects(as(db, U.sup5, () => db.query(ins)), /row-level security/);
   await as(db, U.admin5, () => db.query(ins));
-  assert.equal((await as(db, U.emp5, () => rows(db, `select value from public.dropdown_options`))).length, 1);
+  assert.equal((await as(db, U.emp5, () => rows(db, `select value from public.dropdown_options where category = 'position'`))).length, 1);
 });
 
 test("ประวัติการใช้งาน: บันทึกอัตโนมัติ และแก้/ลบไม่ได้", async () => {

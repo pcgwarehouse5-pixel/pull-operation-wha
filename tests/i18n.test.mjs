@@ -15,7 +15,7 @@ test("คำแปลพม่าครบทุกคีย์ ไม่ว่�
 });
 
 test("ข้อความพม่าใช้อักษรพม่าจริง (ยกเว้นคำเฉพาะ)", () => {
-  const allowLatin = new Set(["app.name", "lang.th", "nav.ot", "pf.line", "common.dash", "common.timeAt"]);
+  const allowLatin = new Set(["app.name", "lang.th", "nav.ot", "pf.line", "common.dash", "common.timeAt", "nav.group.pull"]);
   for (const [k, v] of Object.entries(my)) {
     if (allowLatin.has(k)) continue;
     assert.match(v, /[က-႟]/, `ไม่มีอักษรพม่า: ${k}`);
