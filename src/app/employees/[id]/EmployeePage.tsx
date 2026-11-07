@@ -8,8 +8,18 @@ import { useApp } from "@/components/AuthProvider";
 import { Alert, Badge, Button, Card, Field, Loading, Modal, inputCls } from "@/components/ui";
 import { EmployeeForm, toRow, validateEmployee, type EmployeeValues } from "@/components/EmployeeForm";
 import { api, errText, sb } from "@/lib/supabase";
-import { useOptions } from "@/lib/useOptions";
+import { labelOf, useOptions } from "@/lib/useOptions";
 import { thaiDate } from "@/lib/format";
+import { MISSING_LABEL, missingFields } from "@/lib/employee-check";
+
+function SummaryItem({ label, value, missing }: { label: string; value: string | null | undefined; missing?: boolean }) {
+  return (
+    <div className={`min-w-0 rounded-xl px-3 py-2 ${missing ? "bg-[#fff6d6] ring-1 ring-warn/60" : "bg-paper"}`}>
+      <dt className="text-[13px] text-muted">{label}</dt>
+      <dd className="font-semibold break-words text-ink">{missing || !value ? <span className="text-[#8a6500]">ยังไม่กรอก</span> : value}</dd>
+    </div>
+  );
+}
 import { EMPLOYEE_FLAGS, ROLE_LABEL, ROLE_RANK, fullName, isGlobal, isManager, type Employee, type Skill } from "@/lib/types";
 
 function toValues(e: Employee): EmployeeValues {
@@ -53,8 +63,9 @@ export default function EmployeePage({ id }: { id: string }) {
       setEmp(e);
       if (e) setValues(toValues(e));
       setSkills(demo.PREVIEW_SKILLS);
-      setMine(new Set(["s1"]));
-      setSavedSkills(new Set(["s1"]));
+      const own = new Set(demo.PREVIEW_EMPLOYEE_SKILLS.filter((s) => s.user_id === id).map((s) => s.skill_id));
+      setMine(own);
+      setSavedSkills(new Set(own));
       return;
     }
     try {
@@ -97,6 +108,9 @@ export default function EmployeePage({ id }: { id: string }) {
   const posSkills = skills.filter((s) => s.position === values.position && (s.is_active || mine.has(s.id)));
   const otherSkills = skills.filter((s) => s.position !== values.position && mine.has(s.id));
   const skillsChanged = mine.size !== savedSkills.size || [...mine].some((x) => !savedSkills.has(x));
+  // การ์ดสรุปใช้ข้อมูลที่บันทึกแล้ว (ไม่ใช่ค่าที่กำลังแก้ในฟอร์ม)
+  const savedSkillList = skills.filter((s) => savedSkills.has(s.id));
+  const missing = missingFields(emp, savedSkills.size);
 
   async function save() {
     const problem = validateEmployee(values!, false);
@@ -129,15 +143,44 @@ export default function EmployeePage({ id }: { id: string }) {
             <p className="text-xl font-bold text-brand">
               {fullName(emp)} {emp.nickname && <span className="text-base font-semibold text-muted">({emp.nickname})</span>}
             </p>
-            <p className="text-muted">
-              {emp.employee_code} · {wh ? `${wh.code} ${wh.name}` : "ส่วนกลาง"} · {ROLE_LABEL[emp.role]}
-            </p>
+            <p className="text-muted">{ROLE_LABEL[emp.role]}</p>
           </div>
           <div className="flex flex-wrap gap-1.5">
             {emp.status === "active" ? <Badge tone="green">ทำงานอยู่</Badge> : <Badge tone="red">ลาออก {emp.resigned_date ? thaiDate(emp.resigned_date) : ""}</Badge>}
             {emp.must_change_password && emp.status === "active" && <Badge tone="amber">ยังไม่ตั้งรหัสใหม่</Badge>}
           </div>
         </div>
+
+        <dl className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <SummaryItem label="รหัสพนักงาน" value={emp.employee_code} />
+          <SummaryItem label="รหัสเงินเดือน" value={emp.salary_code} missing={missing.includes("salary_code")} />
+          <SummaryItem label="คลัง" value={wh ? `${wh.code} ${wh.name}` : "ส่วนกลาง"} missing={missing.includes("warehouse")} />
+          <SummaryItem label="ตำแหน่ง" value={emp.position} missing={missing.includes("position")} />
+          <SummaryItem label="ประเภทพนักงาน" value={emp.employment_type ? labelOf(opts.employment_type, emp.employment_type) : null} missing={missing.includes("employment_type")} />
+          <SummaryItem label="นามสกุล" value={emp.last_name_th || (missing.includes("last_name") ? null : "อยู่ในช่องชื่อ")} missing={missing.includes("last_name")} />
+        </dl>
+
+        <div className="mt-3">
+          <p className="mb-1.5 text-[14px] font-semibold text-muted">ทักษะ ({savedSkillList.length})</p>
+          {savedSkillList.length === 0 ? (
+            <Badge tone="amber">ยังไม่กรอก</Badge>
+          ) : (
+            <div className="flex flex-wrap gap-1.5">
+              {savedSkillList.map((s) => (
+                <span key={s.id} className="rounded-full bg-sky px-3 py-1 text-[14px] font-semibold text-brand">{s.name}</span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {missing.length > 0 && (
+          <div className="mt-3">
+            <Alert tone="warning">
+              ข้อมูลยังไม่ครบ: {missing.map((k) => MISSING_LABEL[k]).join(", ")} ·{" "}
+              {canEdit ? "กรอกเพิ่มในแบบฟอร์มด้านล่าง แล้วกดบันทึก" : "แจ้งแอดมินคลังให้กรอกเพิ่ม"}
+            </Alert>
+          </div>
+        )}
         {isManager(me.role) && (
           <p className="mt-2 text-[14px] text-muted">
             เปลี่ยนคลังหรือบทบาทได้ที่หน้า <Link href="/users" className="font-semibold text-brand underline">ผู้ใช้และสิทธิ์</Link>

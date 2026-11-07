@@ -11,12 +11,21 @@ import { errText, fetchAll, sb } from "@/lib/supabase";
 import { downloadCsv } from "@/lib/csv";
 import { labelOf, useOptions } from "@/lib/useOptions";
 import { fullName, isGlobal, isManager, type Employee } from "@/lib/types";
+import { MISSING_KEYS, MISSING_LABEL, missingFields, type MissingKey } from "@/lib/employee-check";
 
 const PAGE = 100;
+
+function countSkills(list: { user_id: string }[]) {
+  const out: Record<string, number> = {};
+  for (const s of list) out[s.user_id] = (out[s.user_id] ?? 0) + 1;
+  return out;
+}
 
 export default function EmployeesPage() {
   const { profile: me, warehouses, myWarehouseIds, demo } = useApp();
   const [rows, setRows] = useState<Employee[] | null>(null);
+  const [skillCount, setSkillCount] = useState<Record<string, number>>({});
+  const [gap, setGap] = useState<MissingKey | "any" | "">("");
   const [err, setErr] = useState("");
   const [q, setQ] = useState("");
   const [wh, setWh] = useState("");
@@ -31,10 +40,16 @@ export default function EmployeesPage() {
   const load = useCallback(async () => {
     if (demo) {
       setRows(demo.previewEmployees());
+      setSkillCount(countSkills(demo.PREVIEW_EMPLOYEE_SKILLS));
       return;
     }
     try {
-      setRows(await fetchAll<Employee>((from, to) => sb().from("profiles").select("*").order("employee_code").range(from, to)));
+      const [p, s] = await Promise.all([
+        fetchAll<Employee>((from, to) => sb().from("profiles").select("*").order("employee_code").range(from, to)),
+        fetchAll<{ user_id: string; skill_id: string }>((from, to) => sb().from("employee_skills").select("user_id,skill_id").order("user_id").order("skill_id").range(from, to)),
+      ]);
+      setRows(p);
+      setSkillCount(countSkills(s));
     } catch (e) {
       setErr(errText(e));
     }
@@ -48,6 +63,8 @@ export default function EmployeesPage() {
   const whCode = (id: string | null) => warehouses.find((w) => w.id === id)?.code ?? "-";
   const positions = useMemo(() => [...new Set((rows ?? []).map((r) => r.position).filter(Boolean) as string[])].sort((a, b) => a.localeCompare(b, "th")), [rows]);
 
+  const gaps = useMemo(() => new Map((rows ?? []).map((r) => [r.id, missingFields(r, skillCount[r.id] ?? 0)])), [rows, skillCount]);
+
   const shown = (rows ?? []).filter((r) => {
     const s = q.trim().toLowerCase();
     if (s && !`${r.employee_code} ${r.first_name_th} ${r.last_name_th ?? ""} ${r.nickname ?? ""}`.toLowerCase().includes(s)) return false;
@@ -55,16 +72,20 @@ export default function EmployeesPage() {
     if (pos && r.position !== pos) return false;
     if (type && r.employment_type !== type) return false;
     if (status && r.status !== status) return false;
+    const g = gaps.get(r.id) ?? [];
+    if (gap === "any" && g.length === 0) return false;
+    if (gap && gap !== "any" && !g.includes(gap)) return false;
     return true;
   });
 
   const activeShown = shown.filter((r) => r.status === "active");
+  const incompleteActive = (rows ?? []).filter((r) => r.status === "active" && (gaps.get(r.id)?.length ?? 0) > 0 && (!wh || r.warehouse_id === wh)).length;
   const byType = Object.entries(
     activeShown.reduce<Record<string, number>>((a, r) => ((a[r.employment_type ?? ""] = (a[r.employment_type ?? ""] ?? 0) + 1), a), {}),
   ).sort((a, b) => b[1] - a[1]);
 
   function exportCsv() {
-    const header = ["รหัสพนักงาน", "คำนำหน้า", "ชื่อ", "นามสกุล", "ชื่อเล่น", "ตำแหน่ง", "ประเภทพนักงาน", "แผนก", "บริษัทรับเหมา", "รหัสเงินเดือน", "คลัง", "สถานะ", "วันที่ลาออก"];
+    const header = ["รหัสพนักงาน", "คำนำหน้า", "ชื่อ", "นามสกุล", "ชื่อเล่น", "ตำแหน่ง", "ประเภทพนักงาน", "แผนก", "บริษัทรับเหมา", "รหัสเงินเดือน", "คลัง", "สถานะ", "วันที่ลาออก", "จำนวนทักษะ", "ข้อมูลที่ยังขาด"];
     const body = shown.map((r) => [
       r.employee_code,
       r.title,
@@ -79,6 +100,8 @@ export default function EmployeesPage() {
       whCode(r.warehouse_id),
       r.status === "active" ? "ทำงานอยู่" : "ลาออก",
       r.resigned_date,
+      String(skillCount[r.id] ?? 0),
+      (gaps.get(r.id) ?? []).map((k) => MISSING_LABEL[k]).join(", "),
     ]);
     downloadCsv(`พนักงาน-${new Date().toISOString().slice(0, 10)}.csv`, [header, ...body]);
   }
@@ -111,7 +134,7 @@ export default function EmployeesPage() {
           <Icon name="search" size={20} className="pointer-events-none absolute top-3.5 left-3 text-muted" />
           <input className={`${inputCls} pl-10`} placeholder="ค้นหารหัส ชื่อ หรือชื่อเล่น" value={q} onChange={(e) => { setQ(e.target.value); setLimit(PAGE); }} />
         </label>
-        <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-5">
           <select className={inputCls} value={wh} onChange={(e) => setWh(e.target.value)} aria-label="คลัง">
             <option value="">ทุกคลัง</option>
             {visibleWh.map((w) => (
@@ -135,6 +158,13 @@ export default function EmployeesPage() {
               <option key={o.value} value={o.value}>{o.label}</option>
             ))}
           </select>
+          <select className={`${inputCls} col-span-2 lg:col-span-1`} value={gap} onChange={(e) => { setGap(e.target.value as typeof gap); setLimit(PAGE); }} aria-label="ความครบของข้อมูล">
+            <option value="">ข้อมูลทั้งหมด</option>
+            <option value="any">ข้อมูลไม่ครบ (ทุกช่อง)</option>
+            {MISSING_KEYS.map((k) => (
+              <option key={k} value={k}>ไม่มี{MISSING_LABEL[k]}</option>
+            ))}
+          </select>
         </div>
       </Card>
 
@@ -149,6 +179,16 @@ export default function EmployeesPage() {
                 {t ? labelOf(opts.employment_type, t) : "ไม่ระบุประเภท"} {n}
               </span>
             ))}
+            {incompleteActive > 0 && gap !== "any" && (
+              <button type="button" onClick={() => { setGap("any"); setStatus("active"); setLimit(PAGE); }} className="min-h-9 rounded-xl bg-[#fff6d6] px-3 text-[14px] font-semibold text-[#8a6500] ring-1 ring-warn/60 hover:bg-[#ffefb3]">
+                ⚠ ข้อมูลไม่ครบ {incompleteActive.toLocaleString("th-TH")} คน · ดูรายชื่อ
+              </button>
+            )}
+            {gap && (
+              <button type="button" onClick={() => setGap("")} className="min-h-9 rounded-xl bg-white px-3 text-[14px] font-semibold text-brand ring-1 ring-line">
+                ล้างตัวกรองข้อมูลไม่ครบ ✕
+              </button>
+            )}
             {canEdit && shown.length > 0 && (
               <Button size="sm" variant="ghost" className="ml-auto" onClick={exportCsv}>ส่งออก CSV ({shown.length})</Button>
             )}
@@ -171,6 +211,11 @@ export default function EmployeesPage() {
                       <span className="block truncate text-[14px] text-muted">
                         {r.employee_code} · {r.position ?? "ไม่ระบุตำแหน่ง"} · {labelOf(opts.employment_type, r.employment_type)}
                       </span>
+                      {(gaps.get(r.id)?.length ?? 0) > 0 && (
+                        <span className="mt-0.5 block truncate text-[13px] font-semibold text-[#8a6500]">
+                          ยังไม่กรอก: {gaps.get(r.id)!.map((k) => MISSING_LABEL[k]).join(", ")}
+                        </span>
+                      )}
                     </span>
                     <span className="flex flex-col items-end gap-1">
                       <Badge tone="blue">{whCode(r.warehouse_id)}</Badge>

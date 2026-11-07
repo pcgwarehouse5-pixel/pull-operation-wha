@@ -60,7 +60,7 @@ export const PREVIEW_BUDGETS: HeadcountBudget[] = [
 export function previewEmployees(): Employee[] {
   return PREVIEW_USERS.map((p, i) => ({
     ...p,
-    salary_code: null,
+    salary_code: i === 1 ? null : `S${String(i + 1).padStart(4, "0")}`,
     birth_date: null,
     subcontractor_company: null,
     resigned_date: i === 3 ? "2026-10-31" : null,
@@ -73,6 +73,14 @@ export function previewEmployees(): Employee[] {
     auto_check_in: false,
   }));
 }
+
+// ทักษะของพนักงานสมมติ (p2 ยังไม่มีทักษะ ไว้ดูป้าย "ข้อมูลไม่ครบ")
+export const PREVIEW_EMPLOYEE_SKILLS = [
+  { user_id: "p1", skill_id: "s1" },
+  { user_id: "p1", skill_id: "s2" },
+  { user_id: "p3", skill_id: "s3" },
+  { user_id: "p4", skill_id: "s3" },
+];
 
 export const PREVIEW_HOLIDAYS = [
   { id: "h1", holiday_date: "2026-12-05", name: "วันหยุดตัวอย่าง 1" },
