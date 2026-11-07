@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { useApp } from "@/components/AuthProvider";
-import { Alert, Badge, Button, Card, Empty, Field, Modal, PageIntro, inputCls } from "@/components/ui";
+import { Alert, Badge, Button, Card, Empty, Field, Modal, inputCls } from "@/components/ui";
+import { PageHelper } from "@/components/Puinun";
 import { Icon } from "@/components/Icon";
 import { errText, sb } from "@/lib/supabase";
 import type { Warehouse } from "@/lib/types";
@@ -33,7 +34,7 @@ export default function WarehousesPage() {
 
   return (
     <AppShell title="คลัง" minRole="admin">
-      <PageIntro
+      <PageHelper pose="point"
         title="คลัง"
         action={
           canEdit && (
@@ -44,7 +45,7 @@ export default function WarehousesPage() {
         }
       >
         {canEdit ? "เพิ่ม แก้ไข หรือปิดใช้งานคลัง" : "เฉพาะผู้ดูแลระบบสูงสุดที่เพิ่มหรือแก้ไขคลังได้"}
-      </PageIntro>
+      </PageHelper>
 
       {warehouses.length === 0 ? (
         <Empty>ยังไม่มีคลัง</Empty>

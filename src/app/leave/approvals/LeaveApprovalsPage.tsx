@@ -3,6 +3,7 @@
 // อนุมัติใบลา (หัวหน้างานขึ้นไป): รออนุมัติ / ประวัติ / ยื่นใบลาแทนพนักงาน
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
+import { PageHelper } from "@/components/Puinun";
 import { useApp } from "@/components/AuthProvider";
 import { Alert, Badge, Button, Empty, Field, Loading, Modal, inputCls } from "@/components/ui";
 import { Icon } from "@/components/Icon";
@@ -90,6 +91,9 @@ export default function LeaveApprovalsPage() {
 
   return (
     <AppShell title="อนุมัติใบลา" minRole="supervisor" wide>
+      <PageHelper pose="docs" title="อนุมัติใบลา">
+        อนุมัติหรือตีกลับใบลา ใบที่ลายาวตามจำนวนวันที่ตั้งไว้ต้องให้ผู้บริหารอนุมัติต่อ
+      </PageHelper>
       <div className="mb-3 flex flex-wrap items-center gap-2">
         {(visible.length > 1 || global) && (
           <select className={`${inputCls} !w-auto`} value={wh} onChange={(e) => setWh(e.target.value)} aria-label="คลัง">

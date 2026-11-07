@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
 import { useApp } from "@/components/AuthProvider";
-import { Alert, Badge, Button, Card, Empty, Loading, PageIntro, inputCls } from "@/components/ui";
+import { Alert, Badge, Button, Card, Empty, Loading, inputCls } from "@/components/ui";
+import { PageHelper } from "@/components/Puinun";
 import { Icon } from "@/components/Icon";
 import { errText, fetchAll, sb } from "@/lib/supabase";
 import { downloadCsv } from "@/lib/csv";
@@ -84,7 +85,7 @@ export default function EmployeesPage() {
 
   return (
     <AppShell title="ทะเบียนพนักงาน" wide minRole="supervisor">
-      <PageIntro
+      <PageHelper pose="team"
         title="ทะเบียนพนักงาน"
         action={
           canEdit && (
@@ -100,7 +101,7 @@ export default function EmployeesPage() {
         }
       >
         {canEdit ? "เพิ่ม แก้ไข ทักษะ และลาออก/คืนสภาพ" : "ดูรายชื่อพนักงานในคลังที่คุณดูแล"}
-      </PageIntro>
+      </PageHelper>
 
       {err && <div className="mb-3"><Alert tone="error">{err}</Alert></div>}
 

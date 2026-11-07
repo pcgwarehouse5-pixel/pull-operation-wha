@@ -13,8 +13,9 @@ export type NavItem = {
   short?: string; // ชื่อสั้นบนแถบล่างของมือถือ
 };
 
-export const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
+export const NAV_GROUPS: { id: "mine" | "staff" | "manage"; title: string; items: NavItem[] }[] = [
   {
+    id: "mine",
     title: "ของฉัน",
     items: [
       { key: "home", href: "/", label: "หน้าหลัก", desc: "ภาพรวมของฉัน", icon: "home" },
@@ -26,6 +27,7 @@ export const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
     ],
   },
   {
+    id: "staff",
     title: "พนักงาน",
     items: [
       { key: "employees", href: "/employees", label: "ทะเบียนพนักงาน", desc: "ข้อมูล ทักษะ ลาออก นำเข้า Excel", icon: "users", minRole: "supervisor" },
@@ -38,6 +40,7 @@ export const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
     ],
   },
   {
+    id: "manage",
     title: "จัดการ",
     items: [
       { key: "users", href: "/users", label: "ผู้ใช้และสิทธิ์", desc: "บทบาท คลัง และรีเซ็ตรหัสผ่าน", icon: "key", minRole: "admin" },

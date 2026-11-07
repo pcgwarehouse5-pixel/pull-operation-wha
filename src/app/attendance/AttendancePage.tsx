@@ -6,39 +6,46 @@ import { AppShell } from "@/components/AppShell";
 import { useApp } from "@/components/AuthProvider";
 import { Alert, Badge, Button, Card, Empty, Loading } from "@/components/ui";
 import { Icon } from "@/components/Icon";
+import { PageHelper, type Pose } from "@/components/Puinun";
 import { CorrectionModal } from "@/components/attendance/CorrectionModal";
 import { MyOt } from "@/components/attendance/MyOt";
-import { errText, sb } from "@/lib/supabase";
-import { shortDay, thaiTime } from "@/lib/format";
-import { addMonths, currentMonth, monthDates, thaiMonthLabel, todayIso } from "@/lib/shifts";
+import { sb } from "@/lib/supabase";
+import { addMonths, currentMonth, monthDates, todayIso } from "@/lib/shifts";
 import { CORRECTION_STATUS, STATUS, distanceM, hhmm, type AttendanceRow, type Correction } from "@/lib/attendance";
+import { localizeError, useI18n, type T } from "@/i18n";
+import type { MsgKey } from "@/i18n/th";
 
 type Punch = { kind: "in" | "out"; punched_at: string; work_date: string };
 type Geo = { lat: number; lng: number; acc: number };
 type Msg = { tone: "success" | "error" | "warning" | "info"; text: string };
 
-function locate(): Promise<Geo> {
+function locate(t: T): Promise<Geo> {
   return new Promise((resolve, reject) => {
-    if (!navigator.geolocation) return reject(new Error("อุปกรณ์นี้ไม่รองรับการหาตำแหน่ง"));
+    if (!navigator.geolocation) return reject(new Error(t("att.geoNone")));
     navigator.geolocation.getCurrentPosition(
       (p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy }),
-      (e) =>
-        reject(
-          new Error(
-            e.code === e.PERMISSION_DENIED
-              ? "ยังไม่ได้อนุญาตให้แอปใช้ตำแหน่ง: เปิดการตั้งค่าเบราว์เซอร์ → อนุญาตตำแหน่งที่ตั้งสำหรับเว็บนี้ แล้วลองใหม่"
-              : e.code === e.TIMEOUT
-                ? "หาตำแหน่งไม่ทัน ลองใหม่อีกครั้ง (ออกไปที่โล่งจะเร็วขึ้น)"
-                : "หาตำแหน่งไม่ได้ ตรวจว่าเปิด GPS/ตำแหน่งที่ตั้งแล้ว",
-          ),
-        ),
+      (e) => reject(new Error(e.code === e.PERMISSION_DENIED ? t("att.geoDenied") : e.code === e.TIMEOUT ? t("att.geoTimeout") : t("att.geoFail"))),
       { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 },
     );
   });
 }
 
+/** นาฬิกาเวลาไทย (อัปเดตทุก 15 วินาที) */
+function useClock() {
+  const [now, setNow] = useState<string>("");
+  useEffect(() => {
+    const tick = () => setNow(new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Bangkok", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date()));
+    tick();
+    const id = setInterval(tick, 15000);
+    return () => clearInterval(id);
+  }, []);
+  return now;
+}
+
 export default function AttendancePage() {
   const { profile: me, warehouses, myWarehouseIds, demo } = useApp();
+  const { t, fmt } = useI18n();
+  const clock = useClock();
   const [ym, setYm] = useState(currentMonth);
   const [rows, setRows] = useState<AttendanceRow[] | null>(null);
   const [punches, setPunches] = useState<Punch[]>([]);
@@ -54,14 +61,15 @@ export default function AttendancePage() {
     () => warehouses.filter((w) => w.is_active && (w.id === me.warehouse_id || myWarehouseIds.includes(w.id))),
     [warehouses, me.warehouse_id, myWarehouseIds],
   );
-  const near = useMemo(() => {
-    if (!geo) return null;
-    const list = myWh
-      .filter((w) => w.latitude !== null && w.longitude !== null)
-      .map((w) => ({ w, d: distanceM(geo.lat, geo.lng, w.latitude!, w.longitude!) }))
-      .sort((a, b) => a.d - b.d);
-    return list[0] ?? null;
-  }, [geo, myWh]);
+  const nearest = useCallback(
+    (g: Geo) =>
+      myWh
+        .filter((w) => w.latitude !== null && w.longitude !== null)
+        .map((w) => ({ w, d: distanceM(g.lat, g.lng, w.latitude!, w.longitude!) }))
+        .sort((a, b) => a.d - b.d)[0] ?? null,
+    [myWh],
+  );
+  const near = useMemo(() => (geo ? nearest(geo) : null), [geo, nearest]);
 
   const load = useCallback(async () => {
     const dates = monthDates(ym);
@@ -86,9 +94,9 @@ export default function AttendancePage() {
       setCorrs((c.data ?? []) as Correction[]);
     } catch (e) {
       setRows([]);
-      setMsg({ tone: "error", text: errText(e) });
+      setMsg({ tone: "error", text: localizeError((e as Error).message ?? String(e), t) });
     }
-  }, [ym, today, demo, me.id]);
+  }, [ym, today, demo, me.id, t]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- โหลดข้อมูลจาก Supabase ตอนเปิดหน้า/เปลี่ยนเดือน
@@ -99,16 +107,17 @@ export default function AttendancePage() {
   const last = punches[0];
   const openIn = last && last.kind === "in" && loadedAt - new Date(last.punched_at).getTime() < 20 * 3600 * 1000 ? last : null;
   const todayRow = rows?.find((r) => r.work_date === (openIn?.work_date ?? today));
+  const kindLabel = (k: "in" | "out") => t(k === "in" ? "att.in" : "att.out");
 
   async function check() {
     setMsg(null);
     setPhase("locating");
     try {
-      const g = demo && myWh[0]?.latitude ? { lat: myWh[0].latitude!, lng: myWh[0].longitude!, acc: 12 } : await locate();
+      const g = demo && myWh[0]?.latitude ? { lat: myWh[0].latitude!, lng: myWh[0].longitude!, acc: 12 } : await locate(t);
       setGeo(g);
       return g;
     } catch (e) {
-      setMsg({ tone: "error", text: errText(e) });
+      setMsg({ tone: "error", text: (e as Error).message });
       return null;
     } finally {
       setPhase("idle");
@@ -118,103 +127,114 @@ export default function AttendancePage() {
   async function punch(kind: "in" | "out") {
     const g = await check();
     if (!g) return;
-    const n = myWh
-      .filter((w) => w.latitude !== null && w.longitude !== null)
-      .map((w) => ({ w, d: distanceM(g.lat, g.lng, w.latitude!, w.longitude!) }))
-      .sort((a, b) => a.d - b.d)[0];
-    if (!n) return setMsg({ tone: "error", text: "คลังของคุณยังไม่ได้ตั้งพิกัด แจ้งแอดมินคลังให้ตั้งพิกัดในหน้า \"คลัง\"" });
-    if (n.d > n.w.checkin_radius_m)
-      return setMsg({ tone: "error", text: `อยู่นอกพื้นที่${n.w.name} (ห่าง ${Math.round(n.d).toLocaleString("th-TH")} เมตร ต้องอยู่ในรัศมี ${n.w.checkin_radius_m} เมตร) ลงเวลาไม่ได้` });
-    if (demo) return setMsg({ tone: "success", text: `โหมดดูดีไซน์: ${kind === "in" ? "เข้างาน" : "ออกงาน"} (ไม่ได้บันทึกจริง)` });
+    const n = nearest(g);
+    if (!n) return setMsg({ tone: "error", text: t("err.noCoords") });
+    if (n.d > n.w.checkin_radius_m) return setMsg({ tone: "error", text: t("att.outside", { wh: n.w.name, m: Math.round(n.d).toLocaleString(), r: n.w.checkin_radius_m }) });
+    if (demo) return setMsg({ tone: "success", text: `${t("common.demoNotSaved")} · ${kindLabel(kind)}` });
     setPhase("saving");
     const { data, error } = await sb().rpc("punch", { p_kind: kind, p_lat: g.lat, p_lng: g.lng, p_accuracy: g.acc });
     setPhase("idle");
-    if (error) return setMsg({ tone: "error", text: errText(error) });
+    if (error) return setMsg({ tone: "error", text: localizeError(error.message, t) });
     const r = data as { punched_at: string; work_date: string };
-    setMsg({ tone: "success", text: `บันทึก${kind === "in" ? "เข้างาน" : "ออกงาน"}แล้ว เวลา ${thaiTime(r.punched_at)} น. (วันทำงาน ${shortDay(r.work_date)})` });
+    setMsg({ tone: "success", text: t("att.saved", { kind: kindLabel(kind), t: fmt.time(r.punched_at) }) });
     load();
   }
 
   async function cancelCorrection(id: string) {
-    if (!confirm("ยกเลิกคำขอแก้เวลานี้?")) return;
+    if (!confirm(t("att.cancelFixConfirm"))) return;
     if (demo) return;
     const { error } = await sb().rpc("cancel_correction", { p_id: id });
-    if (error) return setMsg({ tone: "error", text: errText(error) });
+    if (error) return setMsg({ tone: "error", text: localizeError(error.message, t) });
     load();
   }
 
   const busy = phase !== "idle";
+  const pose: Pose = msg?.tone === "success" ? "happy" : msg?.tone === "error" ? "oops" : "run";
+  const st = (s: AttendanceRow["status"]) => t(`status.${s}` as MsgKey);
 
   return (
-    <AppShell title="ลงเวลา">
-      {/* กดเข้า/ออก */}
-      <Card className="mb-3">
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <p className="text-[15px] text-muted">{shortDay(today)}</p>
-            <p className="text-lg font-bold text-brand">
-              {todayRow?.shift_code ? `กะ ${todayRow.shift_code}` : "ยังไม่มีกะที่ประกาศ"}
-              {todayRow?.shift_start && <span className="font-semibold text-ink"> {thaiTime(todayRow.shift_start)}–{thaiTime(todayRow.shift_end)}</span>}
-            </p>
-          </div>
-          {todayRow && <Badge tone={STATUS[todayRow.status].tone}>{STATUS[todayRow.status].label}</Badge>}
-        </div>
-        {openIn ? (
-          <p className="mt-1 text-[15px]">เข้างานแล้วเวลา <b>{thaiTime(openIn.punched_at)} น.</b></p>
-        ) : last ? (
-          <p className="mt-1 text-[15px] text-muted">ล่าสุด: {last.kind === "in" ? "เข้า" : "ออก"} {thaiTime(last.punched_at)} น. ({shortDay(last.work_date)})</p>
-        ) : null}
+    <AppShell title={t("att.title")}>
+      <PageHelper pose={pose} title={t("att.title")}>
+        {t("att.helper")}
+      </PageHelper>
 
-        <div className="mt-4 grid grid-cols-2 gap-3">
-          <Button size="lg" variant={openIn ? "secondary" : "primary"} disabled={busy} onClick={() => punch("in")} className="!min-h-20 flex-col !gap-0">
-            <span className="text-xl">เข้างาน</span>
+      {/* นาฬิกา + กะวันนี้ + ปุ่มกด */}
+      <Card className="mb-3 !p-0 overflow-hidden">
+        <div className="flex items-start justify-between gap-3 px-4 pt-4 sm:px-5">
+          <div className="min-w-0">
+            <p className="text-[14px] text-muted">{fmt.day(today)}</p>
+            <p className="num text-[44px] leading-none font-bold tracking-tight text-brand" aria-live="off">{clock || "--:--"}</p>
+          </div>
+          <div className="text-right">
+            {todayRow && <Badge tone={STATUS[todayRow.status].tone}>{st(todayRow.status)}</Badge>}
+            <p className="mt-1.5 text-[15px] font-semibold text-ink">
+              {todayRow?.shift_code ? t("att.shift", { code: todayRow.shift_code }) : t("att.noShift")}
+            </p>
+            {todayRow?.shift_start && <p className="num text-[15px] text-muted">{fmt.time(todayRow.shift_start)}–{fmt.time(todayRow.shift_end)}</p>}
+          </div>
+        </div>
+        <p className="px-4 pt-2 text-[15px] sm:px-5">
+          {openIn ? (
+            <span className="font-semibold text-ok">{t("att.inAt", { t: fmt.time(openIn.punched_at) })}</span>
+          ) : last ? (
+            <span className="text-muted">{t("att.last", { kind: kindLabel(last.kind), t: fmt.time(last.punched_at), day: fmt.day(last.work_date) })}</span>
+          ) : null}
+        </p>
+
+        <div className="mt-3 grid grid-cols-2 gap-3 px-4 sm:px-5">
+          <Button size="lg" variant={openIn ? "secondary" : "primary"} disabled={busy} onClick={() => punch("in")} className="!min-h-[88px] flex-col !gap-1 !rounded-[18px]">
+            <Icon name="pin" size={24} />
+            <span className="text-[20px]">{t("att.in")}</span>
           </Button>
-          <Button size="lg" variant={openIn ? "primary" : "secondary"} disabled={busy} onClick={() => punch("out")} className="!min-h-20 flex-col !gap-0">
-            <span className="text-xl">ออกงาน</span>
+          <Button size="lg" variant={openIn ? "primary" : "secondary"} disabled={busy} onClick={() => punch("out")} className="!min-h-[88px] flex-col !gap-1 !rounded-[18px]">
+            <Icon name="logout" size={24} />
+            <span className="text-[20px]">{t("att.out")}</span>
           </Button>
         </div>
-        <div className="mt-3 flex items-center gap-2 text-[14px]">
-          <Icon name="pin" size={18} className="shrink-0 text-muted" />
-          {phase === "locating" ? (
-            <span className="text-muted">กำลังหาตำแหน่ง...</span>
-          ) : phase === "saving" ? (
-            <span className="text-muted">กำลังบันทึก...</span>
-          ) : near ? (
-            near.d <= near.w.checkin_radius_m ? (
-              <span className="font-semibold text-ok">อยู่ในพื้นที่{near.w.name} (ห่าง {Math.round(near.d)} ม.)</span>
+
+        {/* สถานะตำแหน่ง */}
+        <div className="mt-4 flex items-center gap-2 border-t border-line bg-paper/60 px-4 py-3 text-[14px] sm:px-5">
+          <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${near ? (near.d <= near.w.checkin_radius_m ? "bg-ok" : "bg-bad") : "bg-[#a9b2c8]"}`} aria-hidden="true" />
+          <span className="min-w-0 flex-1">
+            {phase === "locating" ? (
+              <span className="text-muted">{t("att.locating")}</span>
+            ) : phase === "saving" ? (
+              <span className="text-muted">{t("att.saving")}</span>
+            ) : near ? (
+              near.d <= near.w.checkin_radius_m ? (
+                <span className="font-semibold text-ok">{t("att.inArea", { wh: near.w.name, m: Math.round(near.d) })}</span>
+              ) : (
+                <span className="font-semibold text-bad">{t("att.outArea", { wh: near.w.name, m: Math.round(near.d).toLocaleString(), r: near.w.checkin_radius_m })}</span>
+              )
+            ) : geo ? (
+              <span className="text-bad">{t("att.noCoords")}</span>
             ) : (
-              <span className="font-semibold text-bad">
-                นอกพื้นที่ (ห่าง{near.w.name} {Math.round(near.d).toLocaleString("th-TH")} ม. ต้องไม่เกิน {near.w.checkin_radius_m} ม.)
-              </span>
-            )
-          ) : geo ? (
-            <span className="text-bad">คลังของคุณยังไม่ได้ตั้งพิกัด</span>
-          ) : (
-            <span className="text-muted">ระบบจะขอตำแหน่งตอนกดปุ่ม (ต้องอยู่ในรัศมีคลัง)</span>
-          )}
-          <button type="button" className="ml-auto shrink-0 rounded-lg px-2 py-1 font-semibold text-brand" onClick={check} disabled={busy}>
-            ตรวจตำแหน่ง
+              <span className="text-muted">{t("att.askLocation")}</span>
+            )}
+            {geo && <span className="block text-[12px] text-muted">{t("att.accuracy", { m: Math.round(geo.acc) })}</span>}
+          </span>
+          <button type="button" className="shrink-0 rounded-lg px-2 py-1 font-semibold text-brand hover:bg-brand/5" onClick={check} disabled={busy}>
+            {t("att.checkLocation")}
           </button>
         </div>
-        {geo && <p className="mt-1 text-[12px] text-muted">ความแม่นยำ GPS ประมาณ {Math.round(geo.acc)} ม. · ระบบเก็บพิกัดเฉพาะตอนกดลงเวลา</p>}
       </Card>
 
       {msg && <div className="mb-3"><Alert tone={msg.tone === "info" ? "info" : msg.tone}>{msg.text}</Alert></div>}
 
-      {/* คำขอแก้เวลา */}
+      {/* คำขอแก้เวลาที่รออนุมัติ */}
       {corrs.some((c) => c.status === "pending") && (
         <Card className="mb-3 !p-3.5">
-          <p className="mb-2 font-semibold">คำขอแก้เวลาที่รออนุมัติ</p>
+          <p className="mb-1 font-semibold">{t("att.pendingFixes")}</p>
           <ul className="divide-y divide-line">
             {corrs
               .filter((c) => c.status === "pending")
               .map((c) => (
                 <li key={c.id} className="flex items-center gap-2 py-2">
                   <div className="min-w-0 flex-1">
-                    <p className="font-semibold">{shortDay(c.work_date)} · เข้า {hhmm(c.check_in)} ออก {hhmm(c.check_out)}</p>
+                    <p className="font-semibold">{t("att.fixLine", { day: fmt.day(c.work_date), in: hhmm(c.check_in), out: hhmm(c.check_out) })}</p>
                     <p className="truncate text-[13px] text-muted">{c.reason}</p>
                   </div>
-                  <Button size="sm" variant="ghost" onClick={() => cancelCorrection(c.id)}>ยกเลิก</Button>
+                  <Button size="sm" variant="ghost" onClick={() => cancelCorrection(c.id)}>{t("att.cancelFix")}</Button>
                 </li>
               ))}
           </ul>
@@ -222,14 +242,14 @@ export default function AttendancePage() {
       )}
 
       {/* ประวัติรายเดือน */}
-      <div className="mb-2 flex items-center gap-2">
-        <h2 className="font-bold text-brand">ประวัติเวลา</h2>
+      <div className="mt-5 mb-2 flex items-center gap-2">
+        <h2 className="text-lg font-bold text-brand">{t("att.history")}</h2>
         <div className="ml-auto flex items-center gap-1">
-          <Button variant="secondary" size="sm" aria-label="เดือนก่อน" onClick={() => setYm(addMonths(ym, -1))}>
+          <Button variant="secondary" size="sm" aria-label={t("common.prevMonth")} onClick={() => setYm(addMonths(ym, -1))}>
             <Icon name="back" size={18} />
           </Button>
-          <span className="min-w-28 text-center font-semibold">{thaiMonthLabel(ym)}</span>
-          <Button variant="secondary" size="sm" aria-label="เดือนถัดไป" disabled={ym >= currentMonth()} onClick={() => setYm(addMonths(ym, 1))}>
+          <span className="min-w-28 text-center font-semibold">{fmt.month(ym)}</span>
+          <Button variant="secondary" size="sm" aria-label={t("common.nextMonth")} disabled={ym >= currentMonth()} onClick={() => setYm(addMonths(ym, 1))}>
             <Icon name="next" size={18} />
           </Button>
         </div>
@@ -237,56 +257,55 @@ export default function AttendancePage() {
       {!rows ? (
         <Loading />
       ) : !rows.length ? (
-        <Empty>ยังไม่มีข้อมูลของเดือนนี้</Empty>
+        <Empty>{t("att.noData")}</Empty>
       ) : (
-        <ul className="space-y-2">
-          {rows.map((r) => (
-            <li key={r.work_date}>
-              <Card className="!p-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-24 shrink-0">
-                    <p className="font-semibold">{shortDay(r.work_date)}</p>
+        <ul className="overflow-hidden rounded-[20px] bg-white ring-1 ring-line">
+          {rows.map((r) => {
+            const fixable = ["no_out", "no_in", "absent", "late", "early", "late_early"].includes(r.status) && !r.pending_correction;
+            return (
+              <li key={r.work_date} className="border-b border-line px-3.5 py-3 last:border-b-0">
+                <div className="flex items-center gap-3">
+                  <div className="w-[88px] shrink-0">
+                    <p className="leading-tight font-semibold">{fmt.day(r.work_date)}</p>
                     <p className="text-[13px] text-muted">{r.shift_code ?? "-"}</p>
                   </div>
-                  <div className="min-w-0 flex-1 text-[15px]">
-                    <p>
-                      เข้า <b>{thaiTime(r.first_in)}</b> · ออก <b>{thaiTime(r.last_out)}</b>
-                    </p>
+                  <div className="num min-w-0 flex-1 text-[15px]">
+                    {t("att.inOut", { in: fmt.time(r.first_in), out: fmt.time(r.last_out) })}
                     <p className="text-[13px] text-muted">
-                      {r.late_min > 0 && `สาย ${r.late_min} นาที `}
-                      {r.early_min > 0 && `ออกก่อน ${r.early_min} นาที`}
-                      {r.pending_correction && "มีคำขอแก้เวลารออนุมัติ"}
+                      {r.late_min > 0 && `${t("att.late", { n: r.late_min })} `}
+                      {r.early_min > 0 && t("att.early", { n: r.early_min })}
+                      {r.pending_correction && t("att.hasPendingFix")}
                     </p>
                   </div>
-                  <Badge tone={STATUS[r.status].tone}>{STATUS[r.status].label}</Badge>
+                  <Badge tone={STATUS[r.status].tone}>{st(r.status)}</Badge>
                 </div>
-                {["no_out", "no_in", "absent", "late", "early", "late_early"].includes(r.status) && !r.pending_correction && (
+                {fixable && (
                   <div className="mt-2 text-right">
-                    <Button size="sm" variant="secondary" onClick={() => setFix(r.work_date)}>ขอแก้เวลา</Button>
+                    <Button size="sm" variant="secondary" onClick={() => setFix(r.work_date)}>{t("att.requestFix")}</Button>
                   </div>
                 )}
-              </Card>
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ul>
       )}
       <div className="mt-3 text-center">
-        <Button variant="ghost" size="sm" onClick={() => setFix(today)}>ขอแก้เวลาวันอื่น</Button>
+        <Button variant="ghost" size="sm" onClick={() => setFix(today)}>{t("att.requestFixOther")}</Button>
       </div>
       <MyOt ym={ym} />
       {corrs.some((c) => c.status !== "pending") && (
-        <details className="mt-3 rounded-2xl bg-white p-3 ring-1 ring-line">
-          <summary className="cursor-pointer font-semibold">ประวัติคำขอแก้เวลา</summary>
+        <details className="mt-3 rounded-[20px] bg-white p-3.5 ring-1 ring-line">
+          <summary className="cursor-pointer font-semibold">{t("att.fixHistory")}</summary>
           <ul className="mt-2 divide-y divide-line">
             {corrs
               .filter((c) => c.status !== "pending")
               .map((c) => (
                 <li key={c.id} className="flex items-center gap-2 py-2 text-[14px]">
                   <span className="min-w-0 flex-1">
-                    {shortDay(c.work_date)} · เข้า {hhmm(c.check_in)} ออก {hhmm(c.check_out)}
-                    {c.decision_note && <span className="block text-muted">หมายเหตุ: {c.decision_note}</span>}
+                    {t("att.fixLine", { day: fmt.day(c.work_date), in: hhmm(c.check_in), out: hhmm(c.check_out) })}
+                    {c.decision_note && <span className="block text-muted">{t("att.note", { note: c.decision_note })}</span>}
                   </span>
-                  <Badge tone={CORRECTION_STATUS[c.status].tone}>{CORRECTION_STATUS[c.status].label}</Badge>
+                  <Badge tone={CORRECTION_STATUS[c.status].tone}>{t(`corr.${c.status}` as MsgKey)}</Badge>
                 </li>
               ))}
           </ul>

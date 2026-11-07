@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppShell } from "@/components/AppShell";
+import { PageHelper } from "@/components/Puinun";
 import { useApp } from "@/components/AuthProvider";
 import { Alert, Badge, Button, Card, Empty, Loading, Modal, inputCls } from "@/components/ui";
 import { Icon } from "@/components/Icon";
@@ -201,6 +202,9 @@ export default function ShiftsPage() {
 
   return (
     <AppShell title="ตารางกะ" minRole="supervisor" wide>
+      <PageHelper pose="point" title="ตารางกะ">
+        วางกะรายเดือนด้วยการแตะช่องหรือใช้เครื่องมือ ตรวจแล้วกด &quot;ประกาศ&quot; พนักงานจึงจะเห็น
+      </PageHelper>
       {!visible.length ? (
         <Empty>คุณยังไม่ได้ดูแลคลังใด</Empty>
       ) : (

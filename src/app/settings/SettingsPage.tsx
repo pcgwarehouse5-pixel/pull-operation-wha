@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { useApp } from "@/components/AuthProvider";
-import { Alert, Badge, Button, Card, Empty, Field, Loading, Modal, PageIntro, inputCls } from "@/components/ui";
+import { Alert, Badge, Button, Card, Empty, Field, Loading, Modal, inputCls } from "@/components/ui";
+import { PageHelper } from "@/components/Puinun";
 import { Icon } from "@/components/Icon";
 import { SkillsManager } from "@/components/SkillsManager";
 import { HolidaysManager } from "@/components/HolidaysManager";
@@ -75,7 +76,7 @@ export default function SettingsPage() {
 
   return (
     <AppShell title="ตั้งค่าตัวเลือก" minRole="admin">
-      <PageIntro
+      <PageHelper pose="think"
         title="ตั้งค่าตัวเลือก"
         action={
           !isSkills && !isHolidays && !isRules && (
@@ -86,7 +87,7 @@ export default function SettingsPage() {
         }
       >
         รายการตัวเลือกที่ใช้ทั้งแอป (มีผลกับทุกคลัง)
-      </PageIntro>
+      </PageHelper>
 
       <div className="-mx-3 mb-3 overflow-x-auto px-3">
         <div className="flex w-max gap-2" role="tablist" aria-label="หมวด">

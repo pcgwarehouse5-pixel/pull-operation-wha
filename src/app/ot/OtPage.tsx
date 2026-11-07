@@ -3,6 +3,7 @@
 // OT (หัวหน้างานขึ้นไป): OT ที่คำนวณจากเวลาจริง เลือกหลายรายการแล้วอนุมัติ/ไม่อนุมัติ
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
+import { PageHelper } from "@/components/Puinun";
 import { useApp } from "@/components/AuthProvider";
 import { Alert, Badge, Button, Card, Empty, Loading, inputCls } from "@/components/ui";
 import { RejectModal } from "@/components/attendance/RejectModal";
@@ -79,6 +80,9 @@ export default function OtPage() {
 
   return (
     <AppShell title="OT" minRole="supervisor" wide>
+      <PageHelper pose="fight" title="OT">
+        OT คำนวณจากเวลาเข้า-ออกจริง ตรวจแล้วเลือกหลายรายการเพื่ออนุมัติทีเดียว
+      </PageHelper>
       <div className="mb-3 flex flex-wrap items-end gap-2">
         {visible.length > 1 && (
           <select className={`${inputCls} !w-auto`} value={wh} onChange={(e) => setWh(e.target.value)} aria-label="คลัง">

@@ -3,6 +3,7 @@
 // ติดตามการเข้างาน (หัวหน้างานขึ้นไป): รายวัน / สรุปรายเดือน / อนุมัติคำขอแก้เวลา
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
+import { PageHelper } from "@/components/Puinun";
 import { useApp } from "@/components/AuthProvider";
 import { Alert, Badge, Button, Card, Empty, Loading, inputCls } from "@/components/ui";
 import { Icon } from "@/components/Icon";
@@ -30,6 +31,9 @@ export default function TeamAttendancePage() {
 
   return (
     <AppShell title="ติดตามการเข้างาน" minRole="supervisor" wide>
+      <PageHelper pose="team" title="ติดตามการเข้างาน">
+        ดูว่าใครมา สาย หรือขาดในแต่ละวัน สรุปรายเดือน และอนุมัติคำขอแก้เวลา
+      </PageHelper>
       {!visible.length ? (
         <Empty>คุณยังไม่ได้ดูแลคลังใด</Empty>
       ) : (

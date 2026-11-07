@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { useApp } from "@/components/AuthProvider";
-import { Alert, Badge, Button, Card, Empty, Field, Loading, Modal, PageIntro, inputCls } from "@/components/ui";
+import { Alert, Badge, Button, Card, Empty, Field, Loading, Modal, inputCls } from "@/components/ui";
+import { PageHelper } from "@/components/Puinun";
 import { Icon } from "@/components/Icon";
 import { api, errText, fetchAll, sb } from "@/lib/supabase";
 import { ROLES, ROLE_LABEL, ROLE_RANK, assignableRoles, fullName, isGlobal, type AppRole, type Profile, type Warehouse } from "@/lib/types";
@@ -78,7 +79,7 @@ export default function UsersPage() {
 
   return (
     <AppShell title="ผู้ใช้และสิทธิ์" wide minRole="admin">
-      <PageIntro
+      <PageHelper pose="hello"
         title="ผู้ใช้และสิทธิ์"
         action={
           <Button onClick={() => setCreating(true)}>
@@ -87,7 +88,7 @@ export default function UsersPage() {
         }
       >
         กำหนดบทบาท คลังที่ดูแล และรีเซ็ตรหัสผ่าน
-      </PageIntro>
+      </PageHelper>
 
       {notice && <div className="mb-3"><Alert tone="success">{notice}</Alert></div>}
       {err && <div className="mb-3"><Alert tone="error">{err}</Alert></div>}

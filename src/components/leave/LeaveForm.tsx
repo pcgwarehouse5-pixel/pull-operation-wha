@@ -5,15 +5,17 @@ import { useEffect, useState } from "react";
 import { useApp } from "../AuthProvider";
 import { Alert, Button, Field, Modal, inputCls } from "../ui";
 import { errText, sb } from "@/lib/supabase";
+import { localizeError, useI18n } from "@/i18n";
+import type { MsgKey } from "@/i18n/th";
 import { useOptions } from "@/lib/useOptions";
 import { todayIso } from "@/lib/shifts";
-import { PERIOD_LABEL } from "@/lib/attendance";
 
 const MAX_FILE = 5 * 1024 * 1024;
 const FILE_TYPES = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
 
 export function LeaveForm({ userId, who, onClose, onDone }: { userId?: string; who?: string; onClose: () => void; onDone: (text: string) => void }) {
   const { profile: me, demo } = useApp();
+  const { t } = useI18n();
   const opts = useOptions(["leave_type"]);
   const types = (demo ? demo.PREVIEW_LEAVE_TYPES : (opts.leave_type ?? [])).filter((o) => o.is_active);
   const [type, setType] = useState("");
@@ -66,17 +68,17 @@ export function LeaveForm({ userId, who, onClose, onDone }: { userId?: string; w
   function pickFile(f?: File) {
     setErr("");
     if (!f) return setFile(null);
-    if (!FILE_TYPES.includes(f.type)) return setErr("แนบได้เฉพาะรูปภาพ (JPG, PNG, WEBP) หรือ PDF");
-    if (f.size > MAX_FILE) return setErr("ไฟล์ใหญ่เกิน 5 MB");
+    if (!FILE_TYPES.includes(f.type)) return setErr(t("lf.fileType"));
+    if (f.size > MAX_FILE) return setErr(t("lf.fileSize"));
     setFile(f);
   }
 
   async function submit() {
     setErr("");
-    if (!leaveType) return setErr("เลือกประเภทการลา");
-    if (end < start) return setErr("วันที่สิ้นสุดต้องไม่ก่อนวันที่เริ่ม");
-    if (days !== null && days <= 0) return setErr("ช่วงวันที่เลือกไม่มีวันทำงานตามตารางกะ");
-    if (demo) return onDone("โหมดดูดีไซน์: ไม่ได้ส่งจริง");
+    if (!leaveType) return setErr(t("lf.chooseType"));
+    if (end < start) return setErr(t("lf.dateOrder"));
+    if (days !== null && days <= 0) return setErr(t("lf.noWorkDays"));
+    if (demo) return onDone(t("common.demoNotSaved"));
     setBusy(true);
     let path: string | null = null;
     if (file && canAttach) {
@@ -85,7 +87,7 @@ export function LeaveForm({ userId, who, onClose, onDone }: { userId?: string; w
       const up = await sb().storage.from("leave-attachments").upload(path, file, { contentType: file.type, upsert: false });
       if (up.error) {
         setBusy(false);
-        return setErr(`อัปโหลดไฟล์ไม่สำเร็จ: ${errText(up.error)}`);
+        return setErr(t("lf.uploadFail", { e: errText(up.error) }));
       }
     }
     const { error } = await sb().rpc("submit_leave", {
@@ -100,15 +102,15 @@ export function LeaveForm({ userId, who, onClose, onDone }: { userId?: string; w
     setBusy(false);
     if (error) {
       if (path) await sb().storage.from("leave-attachments").remove([path]);
-      return setErr(errText(error));
+      return setErr(localizeError(error.message, t));
     }
-    onDone("ส่งใบลาแล้ว รออนุมัติ");
+    onDone(t("lf.sent"));
   }
 
   return (
-    <Modal title={who ? `ยื่นใบลาแทน ${who}` : "ยื่นใบลา"} onClose={onClose}>
+    <Modal title={who ? t("lf.titleFor", { name: who }) : t("lf.title")} onClose={onClose}>
       <div className="space-y-3">
-        <Field label="ประเภทการลา">
+        <Field label={t("lf.type")}>
           <select className={inputCls} value={leaveType} onChange={(e) => setType(e.target.value)}>
             {types.map((t) => (
               <option key={t.value} value={t.value}>{t.label}</option>
@@ -116,15 +118,15 @@ export function LeaveForm({ userId, who, onClose, onDone }: { userId?: string; w
           </select>
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="ตั้งแต่วันที่">
+          <Field label={t("lf.from")}>
             <input type="date" className={inputCls} value={start} onChange={(e) => (setStart(e.target.value), e.target.value > end && setEnd(e.target.value))} />
           </Field>
-          <Field label="ถึงวันที่">
+          <Field label={t("lf.to")}>
             <input type="date" className={inputCls} value={end} min={start} onChange={(e) => setEnd(e.target.value)} />
           </Field>
         </div>
         {oneDay && (
-          <div className="flex gap-1.5" role="radiogroup" aria-label="ช่วงเวลา">
+          <div className="flex gap-1.5" role="radiogroup" aria-label={t("lf.type")}>
             {(["full", "morning", "afternoon"] as const).map((p) => (
               <button
                 key={p}
@@ -134,28 +136,28 @@ export function LeaveForm({ userId, who, onClose, onDone }: { userId?: string; w
                 onClick={() => setPeriod(p)}
                 className={`min-h-11 flex-1 rounded-xl text-[15px] font-semibold ${period === p ? "bg-brand text-white" : "bg-white ring-1 ring-line"}`}
               >
-                {PERIOD_LABEL[p]}
+                {t(`period.${p}` as MsgKey)}
               </button>
             ))}
           </div>
         )}
         <p className="rounded-xl bg-paper px-3 py-2 text-[15px]">
-          จำนวนวันลา: <b>{days === null ? "-" : `${days} วัน`}</b>
-          <span className="block text-[13px] text-muted">นับเฉพาะวันทำงานตามตารางกะ (ไม่นับวันหยุด OFF/HOL)</span>
+          <b>{t("lf.days", { n: days === null ? "-" : t("common.days", { n: days }) })}</b>
+          <span className="block text-[13px] text-muted">{t("lf.daysNote")}</span>
         </p>
-        <Field label="เหตุผล">
+        <Field label={t("lf.reason")}>
           <textarea className={`${inputCls} min-h-20 py-2`} maxLength={500} value={reason} onChange={(e) => setReason(e.target.value)} />
         </Field>
         {canAttach && (
-          <Field label="แนบใบรับรองแพทย์ (ถ้ามี)" hint="รูปภาพหรือ PDF ไม่เกิน 5 MB · เห็นเฉพาะคุณ หัวหน้า และผู้อนุมัติ">
+          <Field label={t("lf.attach")} hint={t("lf.attachHint")}>
             <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" className={`${inputCls} py-2.5`} onChange={(e) => pickFile(e.target.files?.[0])} />
           </Field>
         )}
         {err && <Alert tone="error">{err}</Alert>}
       </div>
       <div className="mt-5 flex gap-2">
-        <Button variant="secondary" className="flex-1" onClick={onClose}>ยกเลิก</Button>
-        <Button className="flex-1" onClick={submit} disabled={busy}>{busy ? "กำลังส่ง..." : "ส่งใบลา"}</Button>
+        <Button variant="secondary" className="flex-1" onClick={onClose}>{t("common.cancel")}</Button>
+        <Button className="flex-1" onClick={submit} disabled={busy}>{busy ? t("lf.sending") : t("lf.send")}</Button>
       </div>
     </Modal>
   );

@@ -6,10 +6,12 @@ import { useEffect, useState } from "react";
 import { useApp } from "./AuthProvider";
 import { Icon } from "./Icon";
 import { sb } from "@/lib/supabase";
+import { useI18n } from "@/i18n";
 
 export function NotificationBell() {
   const { profile, demo } = useApp();
   const [n, setN] = useState(0);
+  const { t } = useI18n();
 
   useEffect(() => {
     if (demo) {
@@ -42,11 +44,11 @@ export function NotificationBell() {
     <Link
       href="/notifications"
       className="relative flex min-h-11 min-w-11 items-center justify-center rounded-xl text-white/90 hover:bg-white/10 lg:text-brand lg:hover:bg-brand/5"
-      aria-label={n ? `แจ้งเตือน ยังไม่อ่าน ${n} รายการ` : "แจ้งเตือน"}
+      aria-label={n ? t("common.unread", { n }) : t("common.notifications")}
     >
       <Icon name="bell" />
       {n > 0 && (
-        <span className="absolute top-1 right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-bad px-1 text-[11px] font-bold text-white ring-2 ring-brand lg:ring-paper">
+        <span className="absolute top-1 right-1 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px] font-bold text-white ring-2 ring-brand lg:ring-paper bg-piping">
           {n > 99 ? "99+" : n}
         </span>
       )}

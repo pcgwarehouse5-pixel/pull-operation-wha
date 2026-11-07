@@ -5,12 +5,14 @@ import { useEffect, useState } from "react";
 import { useApp } from "../AuthProvider";
 import { Badge, Card } from "../ui";
 import { sb } from "@/lib/supabase";
-import { shortDay } from "@/lib/format";
 import { monthDates, todayIso } from "@/lib/shifts";
 import { APPROVAL, fmtHours, otBuckets, rateLabel, type OtRow } from "@/lib/ot";
+import { useI18n } from "@/i18n";
+import type { MsgKey } from "@/i18n/th";
 
 export function MyOt({ ym }: { ym: string }) {
   const { profile: me, demo } = useApp();
+  const { t, fmt } = useI18n();
   const [rows, setRows] = useState<OtRow[] | null>(null);
 
   useEffect(() => {
@@ -35,19 +37,19 @@ export function MyOt({ ym }: { ym: string }) {
   const approved = otBuckets(rows.filter((r) => r.approval === "approved"));
   return (
     <Card className="mt-4 !p-3.5">
-      <p className="mb-1 font-bold text-brand">OT ของฉันเดือนนี้</p>
+      <p className="mb-1 font-bold text-brand">{t("myot.title")}</p>
       <p className="mb-2 text-[14px] text-muted">
-        อนุมัติแล้ว: {approved.size ? [...approved].map(([r, h]) => `${rateLabel(r)} ${fmtHours(h)} ชม.`).join(" · ") : "ยังไม่มี"}
+        {t("myot.approved", { list: approved.size ? [...approved].map(([r, h]) => `${rateLabel(r)} ${t("common.hours", { n: fmtHours(h) })}`).join(" · ") : t("myot.none") })}
       </p>
       <ul className="divide-y divide-line">
         {rows.map((r) => (
           <li key={r.work_date} className="flex items-center gap-2 py-2 text-[14px]">
-            <span className="w-24 shrink-0 font-semibold">{shortDay(r.work_date)}</span>
+            <span className="w-24 shrink-0 font-semibold">{fmt.day(r.work_date)}</span>
             <span className="min-w-0 flex-1">
-              {Number(r.normal_hours) > 0 && `${rateLabel(Number(r.normal_rate))} ${fmtHours(Number(r.normal_hours))} ชม. `}
-              {Number(r.ot_hours) > 0 && `${rateLabel(Number(r.ot_rate))} ${fmtHours(Number(r.ot_hours))} ชม.`}
+              {Number(r.normal_hours) > 0 && `${rateLabel(Number(r.normal_rate))} ${t("common.hours", { n: fmtHours(Number(r.normal_hours)) })} `}
+              {Number(r.ot_hours) > 0 && `${rateLabel(Number(r.ot_rate))} ${t("common.hours", { n: fmtHours(Number(r.ot_hours)) })}`}
             </span>
-            <Badge tone={APPROVAL[r.approval].tone}>{r.approval === "changed" ? "รออนุมัติ" : APPROVAL[r.approval].label}</Badge>
+            <Badge tone={APPROVAL[r.approval].tone}>{t(`otap.${r.approval}` as MsgKey)}</Badge>
           </li>
         ))}
       </ul>

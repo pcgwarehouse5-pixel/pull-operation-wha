@@ -1,18 +1,21 @@
 @import "tailwindcss";
 
-/* สีของแอป (โทนน้ำเงินองค์กร อ่านง่ายกลางแจ้ง) */
+/* สีของแอป: มาจากเสื้อโปโลของปุยนุ่น (กรมท่า + แถบแดง) และเส้นสีบนพื้นคลัง */
 @theme inline {
-  --font-sans: "Noto Sans Thai", "Leelawadee UI", "Sarabun", Tahoma, sans-serif;
+  --font-sans: var(--font-thai), "Leelawadee UI", Tahoma, sans-serif;
 
-  --color-brand: #1e3a8a; /* สีหลัก */
-  --color-brand-2: #27479f; /* สีหลักตอนชี้ */
-  --color-ok: #1f8a4c; /* สำเร็จ / ใช้งานอยู่ */
-  --color-warn: #e9b23c; /* รอดำเนินการ / เตือน */
-  --color-bad: #c62828; /* ผิดพลาด / ปิดใช้งาน */
-  --color-paper: #f2f4f9; /* พื้นหลัง */
-  --color-line: #dce1ec; /* เส้นแบ่ง */
-  --color-muted: #5b6480; /* ตัวหนังสือรอง */
-  --color-ink: #141a3c; /* ตัวหนังสือหลัก */
+  --color-brand: #1b2a5c; /* กรมท่าเสื้อโปโล: สีหลัก */
+  --color-brand-2: #24387a; /* กรมท่าตอนชี้ */
+  --color-brand-deep: #111c41; /* ขอบล่างปุ่ม / แถบเมนู */
+  --color-piping: #d72638; /* แดงแถบเสื้อ: ใช้น้อยที่สุด */
+  --color-ok: #1e8e5a; /* สำเร็จ / มาแล้ว */
+  --color-warn: #f5b700; /* เหลืองเส้นพื้นคลัง: รอดำเนินการ / ต้องตาม */
+  --color-bad: #c8202f; /* ผิดพลาด / อันตราย */
+  --color-sky: #e8effb; /* พื้นที่ของปุยนุ่น / การ์ดสำคัญ */
+  --color-paper: #f5f7fb; /* พื้นหลัง */
+  --color-line: #dde3ee; /* เส้นแบ่ง */
+  --color-muted: #5a6482; /* ตัวหนังสือรอง */
+  --color-ink: #16204a; /* ตัวหนังสือหลัก */
 }
 
 html {
@@ -24,9 +27,33 @@ body {
   color: var(--color-ink);
   font-family: var(--font-sans);
   font-size: 16px;
-  line-height: 1.55;
+  line-height: 1.6;
   -webkit-tap-highlight-color: transparent;
   font-feature-settings: "tnum" 1;
+}
+
+/* ภาษาพม่า: ฟอนต์พม่าก่อน และเว้นบรรทัดมากขึ้น (อักษรพม่าสูงกว่าไทย) */
+html[lang="my"] body {
+  font-family: var(--font-my), var(--font-thai), sans-serif;
+  line-height: 1.85;
+}
+
+/* อักษรพม่ามีวรรณยุกต์ซ้อนบน-ล่าง: ห้ามบีบบรรทัดแน่นเกินไป */
+html[lang="my"] :is(.leading-none, .leading-tight, .leading-snug) {
+  line-height: 1.6 !important;
+}
+
+/* ตัวเลขเวลา/จำนวน: หนาและกว้างเท่ากัน อ่านง่ายจากระยะไกล */
+.num {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* ภาพปุยนุ่นพื้นขาว: กลืนกับพื้นสีอ่อน */
+.mascot {
+  mix-blend-mode: multiply;
+  user-select: none;
+  pointer-events: none;
 }
 
 /* โฟกัสเห็นชัด เวลาใช้คีย์บอร์ด */
@@ -34,6 +61,30 @@ body {
   outline: 3px solid var(--color-warn);
   outline-offset: 2px;
   border-radius: 10px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ปุยนุ่นทักทายตอนเปิดหน้า (ครั้งเดียว) */
+@keyframes puinun-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) rotate(-3deg);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.puinun-in {
+  animation: puinun-in 420ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
 /* พิมพ์รายงาน A4: ซ่อนส่วนของแอป แสดงเฉพาะเนื้อหารายงาน */

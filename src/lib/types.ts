@@ -112,12 +112,24 @@ export function fullName(p: Pick<Profile, "title" | "first_name_th" | "last_name
   return [p.title, p.first_name_th, p.last_name_th].filter(Boolean).join(" ").replace(/^(นาย|นาง|นางสาว) /, "$1");
 }
 
-// กติการหัสผ่านใหม่ (ใช้ทั้งหน้าจอและฝั่งเซิร์ฟเวอร์)
-export function passwordProblem(pw: string, employeeCode: string): string | null {
-  if (pw.length < 8) return "รหัสผ่านต้องยาวอย่างน้อย 8 ตัว";
-  if (pw.length > 72) return "รหัสผ่านยาวเกินไป";
-  if (/^(.)\1+$/.test(pw)) return "ห้ามใช้ตัวเดียวกันซ้ำทั้งหมด";
-  if ("01234567890".includes(pw) || "09876543210".includes(pw)) return "ห้ามใช้ตัวเลขเรียงกัน";
-  if (pw.toLowerCase().includes(employeeCode.toLowerCase())) return "ห้ามมีรหัสพนักงานอยู่ในรหัสผ่าน";
+// กติการหัสผ่านใหม่ (ใช้ทั้งหน้าจอและฝั่งเซิร์ฟเวอร์) — คืนคีย์ข้อความ เพื่อแปลภาษาได้
+export type PasswordProblem = "pw.tooShort" | "pw.tooLong" | "pw.sameChar" | "pw.sequence" | "pw.hasCode";
+export function passwordProblemKey(pw: string, employeeCode: string): PasswordProblem | null {
+  if (pw.length < 8) return "pw.tooShort";
+  if (pw.length > 72) return "pw.tooLong";
+  if (/^(.)\1+$/.test(pw)) return "pw.sameChar";
+  if ("01234567890".includes(pw) || "09876543210".includes(pw)) return "pw.sequence";
+  if (pw.toLowerCase().includes(employeeCode.toLowerCase())) return "pw.hasCode";
   return null;
+}
+const PW_TH: Record<PasswordProblem, string> = {
+  "pw.tooShort": "รหัสผ่านต้องยาวอย่างน้อย 8 ตัว",
+  "pw.tooLong": "รหัสผ่านยาวเกินไป",
+  "pw.sameChar": "ห้ามใช้ตัวเดียวกันซ้ำทั้งหมด",
+  "pw.sequence": "ห้ามใช้ตัวเลขเรียงกัน",
+  "pw.hasCode": "ห้ามมีรหัสพนักงานอยู่ในรหัสผ่าน",
+};
+export function passwordProblem(pw: string, employeeCode: string): string | null {
+  const k = passwordProblemKey(pw, employeeCode);
+  return k ? PW_TH[k] : null;
 }

@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { useApp } from "@/components/AuthProvider";
-import { Alert, Button, Card, Loading, PageIntro, inputCls } from "@/components/ui";
+import { Alert, Button, Card, Loading, inputCls } from "@/components/ui";
+import { PageHelper } from "@/components/Puinun";
 import { errText, fetchAll, sb } from "@/lib/supabase";
 import { useOptions } from "@/lib/useOptions";
 import { isGlobal, isManager, type HeadcountBudget } from "@/lib/types";
@@ -106,7 +107,7 @@ export default function OrganizationPage() {
 
   return (
     <AppShell title="ผังองค์กรและอัตรากำลัง" wide minRole="supervisor">
-      <PageIntro title="ผังองค์กรและอัตรากำลัง">จำนวนพนักงานที่ทำงานอยู่จริง เทียบกับอัตรากำลังที่ตั้งไว้ของแต่ละคลัง</PageIntro>
+      <PageHelper pose="team" title="ผังองค์กรและอัตรากำลัง">จำนวนพนักงานที่ทำงานอยู่จริง เทียบกับอัตรากำลังที่ตั้งไว้ของแต่ละคลัง</PageHelper>
 
       <Card className="mb-3">
         <label className="block max-w-sm">

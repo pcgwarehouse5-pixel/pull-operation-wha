@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { useApp } from "@/components/AuthProvider";
-import { Alert, Badge, Button, Card, Empty, Loading, PageIntro, inputCls } from "@/components/ui";
+import { Alert, Badge, Button, Card, Empty, Loading, inputCls } from "@/components/ui";
+import { PageHelper } from "@/components/Puinun";
 import { errText, sb } from "@/lib/supabase";
 import { thaiDateTime } from "@/lib/format";
 import type { AuditLog } from "@/lib/types";
@@ -110,7 +111,7 @@ export default function AuditPage() {
 
   return (
     <AppShell title="ประวัติการใช้งาน" minRole="admin">
-      <PageIntro title="ประวัติการใช้งาน">ระบบบันทึกเองทุกครั้ง แก้ไขหรือลบไม่ได้</PageIntro>
+      <PageHelper pose="paper" title="ประวัติการใช้งาน">ระบบบันทึกเองทุกครั้ง แก้ไขหรือลบไม่ได้</PageHelper>
       <div className="mb-3 max-w-xs">
         <select className={inputCls} value={action} onChange={(e) => setAction(e.target.value)} aria-label="ประเภท">
           <option value="">ทุกประเภท</option>

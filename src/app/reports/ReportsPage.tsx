@@ -3,6 +3,7 @@
 // รายงาน (หัวหน้างานขึ้นไป): ภาพรวม / OT / เบี้ยขยัน / ค่าเดินทาง / การลา — ส่งออก CSV และพิมพ์ A4
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { AppShell } from "@/components/AppShell";
+import { PageHelper } from "@/components/Puinun";
 import { useApp } from "@/components/AuthProvider";
 import { Alert, Badge, Button, Card, Empty, Loading, inputCls } from "@/components/ui";
 import { Icon } from "@/components/Icon";
@@ -55,6 +56,9 @@ export default function ReportsPage() {
 
   return (
     <AppShell title="รายงาน" minRole="supervisor" wide>
+      <PageHelper pose="paper" title="รายงาน">
+        สรุปภาพรวม OT เบี้ยขยัน ค่าเดินทาง และการลา ส่งออก CSV หรือพิมพ์ A4
+      </PageHelper>
       <div className="mb-3 -mx-3 overflow-x-auto px-3 print:hidden">
         <div className="flex w-max gap-1.5" role="tablist">
           {(
