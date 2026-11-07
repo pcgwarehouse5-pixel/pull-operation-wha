@@ -8,12 +8,13 @@ import { Alert, Badge, Button, Card, Empty, Loading, Modal, inputCls } from "@/c
 import { Icon } from "@/components/Icon";
 import { EMP_COLS, empName, ShiftChip, type Emp, type Holiday } from "@/components/shifts/common";
 import { ShiftTools, type ToolKey } from "@/components/shifts/ShiftTools";
+import { ExcelGrid, GridHelp, type Group } from "@/components/shifts/ExcelGrid";
 import { errText, fetchAll, sb } from "@/lib/supabase";
 import { useOptions } from "@/lib/useOptions";
 import { thaiDateTime } from "@/lib/format";
 import { isGlobal } from "@/lib/types";
 import {
-  THAI_DAYS_SHORT, addMonths, cellOf, currentMonth, keyOf, mergeGrid, monthDates, shiftDef, shiftTimeText, stage, thaiMonthLabel,
+  THAI_DAYS_SHORT, addMonths, cellOf, currentMonth, mergeGrid, monthDates, shiftDef, shiftTimeText, stage, thaiMonthLabel,
   toRows, todayIso, weekday, type Cell, type Change, type Grid, type ShiftDef,
 } from "@/lib/shifts";
 
@@ -55,7 +56,10 @@ export default function ShiftsPage() {
   const [tool, setTool] = useState<ToolKey | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ tone: "success" | "error" | "warning"; text: string } | null>(null);
-  const painting = useRef(false);
+  const undoStack = useRef<Record<string, Cell | null>[]>([]);
+  const redoStack = useRef<Record<string, Cell | null>[]>([]);
+  const [groupOrder, setGroupOrder] = useState<string[]>([]);
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [source, setSource] = useState("manual"); // ที่มาของการแก้ล่าสุด (บันทึกในประวัติ)
 
   const defs = useMemo(() => new Map((opts.shift_type ?? []).map((o) => [o.value, shiftDef(o)])), [opts.shift_type]);
@@ -67,6 +71,8 @@ export default function ShiftsPage() {
     if (!wh) return;
     setEmps(null);
     setPending({});
+    undoStack.current = [];
+    redoStack.current = [];
     setSource("manual");
     setMsg(null);
     const from = dates[0];
@@ -81,7 +87,7 @@ export default function ShiftsPage() {
         rows = demo.previewShifts(dates).filter((r) => people.some((p) => p.id === r.user_id));
         hol = demo.PREVIEW_HOLIDAYS.filter((h) => h.holiday_date >= from && h.holiday_date < to);
       } else {
-        const [p, r, s, h] = await Promise.all([
+        const [p, r, s, h, go] = await Promise.all([
           fetchAll<Emp>((f, t) => sb().from("profiles").select(EMP_COLS).eq("warehouse_id", wh).order("employee_code").range(f, t)),
           fetchAll<Row & { profiles: unknown }>((f, t) =>
             sb()
@@ -96,7 +102,9 @@ export default function ShiftsPage() {
           ),
           sb().from("schedule_months").select("status, published_at").eq("warehouse_id", wh).eq("month", from).maybeSingle(),
           sb().from("holidays").select("holiday_date, name").gte("holiday_date", from).lt("holiday_date", to).order("holiday_date"),
+          sb().from("schedule_group_order").select("positions").eq("warehouse_id", wh).maybeSingle(),
         ]);
+        setGroupOrder(((go.data as { positions?: string[] } | null)?.positions ?? []) as string[]);
         people = p;
         rows = r;
         st = (s.data as Status | null) ?? null;
@@ -157,14 +165,61 @@ export default function ShiftsPage() {
     next();
   }
 
+  // ทุกการแก้เก็บสถานะก่อนหน้าไว้ (Ctrl+Z / Ctrl+Y)
+  const pendingRef = useRef(pending);
+  useEffect(() => {
+    pendingRef.current = pending;
+  }, [pending]);
   const applyChanges = useCallback(
-    (changes: Change[], onlyEmpty = false) => setPending((p) => stage(p, base, changes, onlyEmpty)),
+    (changes: Change[], onlyEmpty = false) => {
+      const cur = pendingRef.current;
+      const next = stage(cur, base, changes, onlyEmpty);
+      undoStack.current.push(cur);
+      if (undoStack.current.length > 100) undoStack.current.shift();
+      redoStack.current = [];
+      pendingRef.current = next;
+      setPending(next);
+    },
     [base],
   );
+  const undo = useCallback(() => {
+    const prev = undoStack.current.pop();
+    if (!prev) return;
+    redoStack.current.push(pendingRef.current);
+    pendingRef.current = prev;
+    setPending(prev);
+  }, []);
+  const redo = useCallback(() => {
+    const next = redoStack.current.pop();
+    if (!next) return;
+    undoStack.current.push(pendingRef.current);
+    pendingRef.current = next;
+    setPending(next);
+  }, []);
 
-  function paint(emp: Emp, date: string) {
-    if (!brush) return setCellEdit({ emp, date });
-    applyChanges([{ user_id: emp.id, work_date: date, cell: brush.code ? cellOf(brush.code, brush.holiday_work) : null }]);
+  // กลุ่มตามตำแหน่ง เรียงตามลำดับที่บันทึกไว้ของคลังนี้ (ที่ไม่มีในลำดับต่อท้ายตามลำดับตั้งค่า)
+  const groups = useMemo<Group[]>(() => {
+    const m = new Map<string, Emp[]>();
+    for (const e of shown) {
+      const k = e.position ?? "";
+      if (!m.has(k)) m.set(k, []);
+      m.get(k)!.push(e);
+    }
+    const keys = [...m.keys()].sort((a, b) => {
+      const ia = groupOrder.indexOf(a);
+      const ib = groupOrder.indexOf(b);
+      if (ia !== -1 || ib !== -1) return (ia === -1 ? 9999 : ia) - (ib === -1 ? 9999 : ib);
+      return (posOrder.get(a) ?? 999) - (posOrder.get(b) ?? 999) || a.localeCompare(b, "th");
+    });
+    return keys.map((k) => ({ position: k, emps: m.get(k)! }));
+  }, [shown, groupOrder, posOrder]);
+
+  async function reorderGroups(list: string[]) {
+    const full = [...list, ...groupOrder.filter((x) => !list.includes(x))];
+    setGroupOrder(full);
+    if (demo) return;
+    const { error } = await sb().rpc("set_group_order", { p_wh: wh, p_positions: full });
+    if (error) setMsg({ tone: "error", text: errText(error) });
   }
 
   async function save() {
@@ -203,7 +258,7 @@ export default function ShiftsPage() {
   return (
     <AppShell title="ตารางกะ" minRole="supervisor" wide>
       <PageHelper pose="point" title="ตารางกะ">
-        วางกะรายเดือนด้วยการแตะช่องหรือใช้เครื่องมือ ตรวจแล้วกด &quot;ประกาศ&quot; พนักงานจึงจะเห็น
+        ใช้เหมือน Excel: ลากเลือกหลายช่อง พิมพ์เวลา เช่น 8-17 · Ctrl+C / Ctrl+V · ลากจุดมุมเพื่อเติม ตรวจแล้วกด &quot;ประกาศ&quot; พนักงานจึงจะเห็น
       </PageHelper>
       {!visible.length ? (
         <Empty>คุณยังไม่ได้ดูแลคลังใด</Empty>
@@ -347,18 +402,32 @@ export default function ShiftsPage() {
           ) : !shown.length ? (
             <Empty>{roster.length ? "ไม่พบพนักงานตามตัวกรอง" : `ยังไม่มีพนักงานใน${whName}`}</Empty>
           ) : view === "month" ? (
-            <MonthGrid
-              emps={shown}
-              dates={dates}
-              grid={grid}
-              pending={pending}
-              defs={defs}
-              holidayMap={holidayMap}
-              editing={editing}
-              onCell={(emp, date) => (editing ? paint(emp, date) : setCellEdit({ emp, date }))}
-              onPaint={(emp, date) => painting.current && brush && paint(emp, date)}
-              setPainting={(v) => (painting.current = v && !!brush)}
-            />
+            <>
+              <ExcelGrid
+                groups={groups}
+                collapsed={collapsed}
+                onToggle={(g) => setCollapsed((c) => {
+                  const n = new Set(c);
+                  if (n.has(g)) n.delete(g);
+                  else n.add(g);
+                  return n;
+                })}
+                onReorder={reorderGroups}
+                dates={dates}
+                grid={grid}
+                pending={pending}
+                defs={defs}
+                activeDefs={activeDefs}
+                holidayMap={holidayMap}
+                brush={editing ? brush : null}
+                onChanges={(c) => applyChanges(c)}
+                onUndo={undo}
+                onRedo={redo}
+                onOpenCell={(emp, date) => setCellEdit({ emp, date })}
+                onMessage={(tone, text) => setMsg({ tone, text })}
+              />
+              <GridHelp />
+            </>
           ) : (
             <DayView emps={shown} dates={dates} day={dayInMonth} setDay={setDay} grid={grid} defs={defs} holidayMap={holidayMap} />
           )}
@@ -370,7 +439,7 @@ export default function ShiftsPage() {
             <div className="fixed inset-x-0 bottom-[calc(4.25rem+env(safe-area-inset-bottom))] z-40 px-3 lg:bottom-4 lg:left-64">
               <div className="mx-auto flex max-w-3xl items-center gap-2 rounded-2xl bg-ink px-4 py-3 text-white shadow-2xl">
                 <span className="flex-1 text-[15px]">แก้ไขแล้ว {nChanges} ช่อง ยังไม่บันทึก</span>
-                <Button size="sm" variant="ghost" className="!text-white" onClick={() => (setPending({}), setSource("manual"))} disabled={busy}>
+                <Button size="sm" variant="ghost" className="!text-white" onClick={() => (setPending({}), setSource("manual"), (undoStack.current = []), (redoStack.current = []))} disabled={busy}>
                   ยกเลิก
                 </Button>
                 <Button size="sm" onClick={save} disabled={busy}>
@@ -427,111 +496,6 @@ export default function ShiftsPage() {
         </>
       )}
     </AppShell>
-  );
-}
-
-// ---------- ตารางรายเดือน ----------
-function MonthGrid({
-  emps, dates, grid, pending, defs, holidayMap, editing, onCell, onPaint, setPainting,
-}: {
-  emps: Emp[];
-  dates: string[];
-  grid: Grid;
-  pending: Record<string, Cell | null>;
-  defs: Map<string, ShiftDef>;
-  holidayMap: Map<string, string>;
-  editing: boolean;
-  onCell: (e: Emp, d: string) => void;
-  onPaint: (e: Emp, d: string) => void;
-  setPainting: (v: boolean) => void;
-}) {
-  useEffect(() => {
-    const stop = () => setPainting(false);
-    window.addEventListener("pointerup", stop);
-    return () => window.removeEventListener("pointerup", stop);
-  }, [setPainting]);
-
-  const working = (d: string) => emps.filter((e) => defs.get(grid[e.id]?.[d]?.shift_code ?? "")?.working).length;
-
-  return (
-    <div className={`max-h-[70vh] overflow-auto rounded-2xl bg-white ring-1 ring-line ${editing ? "select-none" : ""}`}>
-      <table className="border-separate border-spacing-0 text-[13px]">
-        <thead>
-          <tr>
-            <th className="sticky top-0 left-0 z-30 min-w-32 border-b border-r border-line bg-white px-2 py-1.5 text-left font-semibold sm:min-w-44">
-              พนักงาน ({emps.length})
-            </th>
-            {dates.map((d) => {
-              const wd = weekday(d);
-              const hol = holidayMap.get(d);
-              return (
-                <th
-                  key={d}
-                  title={hol}
-                  className={`sticky top-0 z-20 min-w-10 border-b border-line px-0.5 py-1 text-center font-semibold ${hol ? "bg-[#fce6e7] text-bad" : wd === 0 || wd === 6 ? "bg-[#eef2fa]" : "bg-white"}`}
-                >
-                  <span className="block text-[14px] leading-tight">{Number(d.slice(8))}</span>
-                  <span className="block text-[11px] font-normal">{hol ? "หยุด" : THAI_DAYS_SHORT[wd]}</span>
-                </th>
-              );
-            })}
-            <th className="sticky top-0 z-20 min-w-14 border-b border-l border-line bg-white px-1 text-center text-[12px] font-semibold">วันทำงาน</th>
-          </tr>
-        </thead>
-        <tbody>
-          {emps.map((e) => {
-            const row = grid[e.id] ?? {};
-            const workDays = dates.filter((d) => defs.get(row[d]?.shift_code ?? "")?.working).length;
-            return (
-              <tr key={e.id}>
-                <th scope="row" className="sticky left-0 z-10 max-w-32 border-b border-r border-line bg-white px-2 py-1 text-left font-normal sm:max-w-44">
-                  <span className="block truncate font-semibold">{empName(e)}</span>
-                  <span className="block truncate text-[11px] text-muted">
-                    {e.employee_code} · {e.position ?? "-"}
-                    {e.status === "resigned" ? " · ลาออก" : ""}
-                  </span>
-                </th>
-                {dates.map((d) => {
-                  const c = row[d];
-                  const def = c ? defs.get(c.shift_code) : undefined;
-                  const changed = keyOf(e.id, d) in pending;
-                  return (
-                    <td key={d} className="border-b border-line p-0.5">
-                      <button
-                        type="button"
-                        onPointerDown={() => setPainting(true)}
-                        onPointerEnter={() => onPaint(e, d)}
-                        onClick={() => onCell(e, d)}
-                        aria-label={`${empName(e)} วันที่ ${Number(d.slice(8))}: ${c?.shift_code ?? "ว่าง"}`}
-                        className={`relative flex h-10 w-10 items-center justify-center rounded-md text-[11px] leading-none font-bold ${c ? "" : "bg-paper text-muted/60"} ${changed ? "outline-2 outline-offset-1 outline-ink outline-dashed" : ""}`}
-                        style={c ? { background: def?.bg ?? "#94a3b8", color: def?.text ?? "#fff" } : undefined}
-                      >
-                        {c ? c.shift_code.slice(0, 5) : "·"}
-                        {c?.holiday_work && (
-                          <span className="absolute -top-1 -right-1 rounded-full bg-warn px-1 text-[9px] text-ink" title={HW_LABEL[c.holiday_work]}>
-                            {c.holiday_work === "HOL" ? "น" : "ห"}
-                          </span>
-                        )}
-                      </button>
-                    </td>
-                  );
-                })}
-                <td className="border-b border-l border-line text-center font-semibold">{workDays}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-        <tfoot>
-          <tr>
-            <th className="sticky bottom-0 left-0 z-30 border-t border-r border-line bg-[#f6f8fc] px-2 py-1.5 text-left text-[12px] font-semibold">คนทำงาน/วัน</th>
-            {dates.map((d) => (
-              <td key={d} className="sticky bottom-0 z-20 border-t border-line bg-[#f6f8fc] text-center font-bold text-brand">{working(d)}</td>
-            ))}
-            <td className="sticky bottom-0 z-20 border-t border-l border-line bg-[#f6f8fc]" />
-          </tr>
-        </tfoot>
-      </table>
-    </div>
   );
 }
 

@@ -166,3 +166,16 @@ test("ประวัติตารางกะ: หัวหน้างาน
   assert.equal(h[1].actor_name, "ชื่อ S5");
   assert.equal((await as(db, U.admin32, () => rows(db, `select * from public.schedule_history($1, '2026-12-01')`, [WH5]))).length, 0);
 });
+
+test("ลำดับกลุ่มตำแหน่ง: หัวหน้าของคลังจัดได้ ใช้ร่วมกันในคลัง คลังอื่น/พนักงานแก้ไม่ได้", async () => {
+  const db = await setup();
+  await as(db, U.sup5, () => db.query(`select public.set_group_order($1, $2)`, [WH5, ["Checker", "RT"]]));
+  const read = (uid) => as(db, uid, () => rows(db, `select positions from public.schedule_group_order where warehouse_id = $1`, [WH5]));
+  assert.deepEqual((await read(U.admin5))[0].positions, ["Checker", "RT"], "คนอื่นในคลังเห็นลำดับเดียวกัน");
+  await as(db, U.admin5, () => db.query(`select public.set_group_order($1, $2)`, [WH5, ["RT", "Checker"]]));
+  assert.deepEqual((await read(U.sup5))[0].positions, ["RT", "Checker"]);
+  await assert.rejects(as(db, U.emp5, () => db.query(`select public.set_group_order($1, '{}')`, [WH5])), /ไม่มีสิทธิ์/);
+  await assert.rejects(as(db, U.admin32, () => db.query(`select public.set_group_order($1, '{}')`, [WH5])), /ไม่มีสิทธิ์/);
+  assert.equal((await read(U.admin32)).length, 0);
+  await assert.rejects(as(db, U.sup5, () => db.query(`update public.schedule_group_order set positions = '{}'`)), /permission denied/);
+});
