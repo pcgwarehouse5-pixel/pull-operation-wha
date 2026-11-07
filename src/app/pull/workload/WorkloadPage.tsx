@@ -1,7 +1,7 @@
 "use client";
 
 // บันทึกปริมาณงานประจำวัน (สไลด์ "ตรรกะก่อนดึงคน" ขั้นที่ 5): กรอกยอดงานคาดการณ์ต่อวัน/กะ แล้วเห็นคนที่ต้องการทันที
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
 import { useApp } from "@/components/AuthProvider";
@@ -16,7 +16,7 @@ import { shortDay, thaiDate } from "@/lib/format";
 import { isGlobal, ROLE_RANK } from "@/lib/types";
 import { addDays, loadPullConfig, loadWorkloads, volumesFor, type WorkloadRow } from "@/lib/pull-data";
 import {
-  SHIFT_LABEL, activeTasks, hoursOf, num, parseVolume, readiness, requirementRows, skillRequirements, skillStyle, totalRequired,
+  SHIFT_LABEL, activeTasks, caretAfterDigits, formatTyping, hoursOf, num, parseVolume, readiness, requirementRows, skillRequirements, skillStyle, totalRequired,
   type PullConfig, type PullShift, type WorkloadType,
 } from "@/lib/pull";
 
@@ -172,9 +172,18 @@ function WorkloadForm({
 }) {
   const types = cfg.types.filter((t) => t.warehouse_id === wh && t.is_active).sort((a, b) => a.sort_order - b.sort_order);
   const tasks = activeTasks(cfg, wh);
-  const initial = Object.fromEntries(types.map((t) => [t.id, saved[t.id] !== undefined ? String(saved[t.id]) : ""]));
+  const initial = Object.fromEntries(types.map((t) => [t.id, saved[t.id] !== undefined ? formatTyping(String(saved[t.id])) : ""]));
   const [vals, setVals] = useState<Record<string, string>>(initial);
   const [busy, setBusy] = useState(false);
+  // ตำแหน่งเคอร์เซอร์ที่ต้องวางคืนหลังใส่คอมมา (วางหลังหน้าจออัปเดต)
+  const caret = useRef<{ id: string; pos: number } | null>(null);
+  useLayoutEffect(() => {
+    const c = caret.current;
+    if (!c) return;
+    caret.current = null;
+    const el = document.getElementById(`v-${c.id}`) as HTMLInputElement | null;
+    if (el && document.activeElement === el) el.setSelectionRange(c.pos, c.pos);
+  });
 
   const parsed = Object.fromEntries(types.map((t) => [t.id, parseVolume(vals[t.id] ?? "")]));
   const bad = types.filter((t) => !parsed[t.id].ok);
@@ -219,7 +228,14 @@ function WorkloadForm({
                       value={vals[t.id] ?? ""}
                       disabled={!canEdit}
                       placeholder="ยังไม่กรอก"
-                      onChange={(e) => setVals((v) => ({ ...v, [t.id]: e.target.value }))}
+                      onChange={(e) => {
+                        // ใส่คอมมาคั่นหลักพันขณะพิมพ์ แล้ววางเคอร์เซอร์หลังตัวเลขตัวเดิม
+                        const el = e.target;
+                        const digits = el.value.slice(0, el.selectionStart ?? el.value.length).replace(/[^d.]/g, "").length;
+                        const next = formatTyping(el.value);
+                        caret.current = { id: t.id, pos: caretAfterDigits(next, digits) };
+                        setVals((v) => ({ ...v, [t.id]: next }));
+                      }}
                     />
                     <span className="w-14 shrink-0 text-[17px] font-semibold text-ink">{unitLabel(t.unit)}</span>
                   </div>

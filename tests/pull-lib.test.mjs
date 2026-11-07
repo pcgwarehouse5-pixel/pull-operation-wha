@@ -75,3 +75,23 @@ test("ไอคอนและสีของทักษะเดาจาก�
   assert.equal(skillStyle("โหลดงาน").icon, "truck");
   assert.equal(skillStyle("CT4F").icon, "box");
 });
+
+test("ช่องยอดงานมีคอมมาคั่นหลักพันขณะพิมพ์ และอ่านกลับเป็นตัวเลขได้", async () => {
+  const { formatTyping, caretAfterDigits, parseVolume } = await import("../src/lib/pull.ts");
+  assert.equal(formatTyping("1300"), "1,300");
+  assert.equal(formatTyping("18000"), "18,000");
+  assert.equal(formatTyping("1234567.891"), "1,234,567.89", "ทศนิยมไม่เกิน 2 ตำแหน่ง");
+  assert.equal(formatTyping("1,2,3,4"), "1,234");
+  assert.equal(formatTyping("0"), "0");
+  assert.equal(formatTyping("007"), "7");
+  assert.equal(formatTyping(".5"), "0.5");
+  assert.equal(formatTyping("12."), "12.", "พิมพ์จุดค้างไว้ได้");
+  assert.equal(formatTyping("abc"), "");
+  assert.equal(formatTyping("1 2 0 0 พาเลท"), "1,200");
+  assert.equal(parseVolume(formatTyping("1234567.8")).value, 1234567.8);
+  // เคอร์เซอร์อยู่หลังตัวเลขตัวเดิม (พิมพ์ 5 แทรกหลัง 1 ใน 1,300 → 15,300 เคอร์เซอร์หลัง 5)
+  assert.equal(caretAfterDigits("15,300", 2), 2);
+  assert.equal(caretAfterDigits("1,530", 2), 3);
+  assert.equal(caretAfterDigits("1,300", 4), 5);
+  assert.equal(caretAfterDigits("1,300", 0), 0);
+});

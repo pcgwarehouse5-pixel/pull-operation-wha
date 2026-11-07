@@ -218,3 +218,24 @@ export function parseVolume(text: string, max = 10000000): { ok: boolean; value:
   const v = Math.round(Number(s) * 100) / 100;
   return v <= max ? { ok: true, value: v } : { ok: false, value: null };
 }
+
+/** จัดรูปตัวเลขขณะพิมพ์ให้มีคอมมาคั่นหลักพัน (1300 → 1,300 / 1234.5 → 1,234.5) ตัดตัวอักษรอื่นทิ้ง */
+export function formatTyping(text: string): string {
+  const clean = text.replace(/[^\d.]/g, "");
+  const dot = clean.indexOf(".");
+  const int = (dot < 0 ? clean : clean.slice(0, dot)).replace(/^0+(?=\d)/, "");
+  const dec = dot < 0 ? null : clean.slice(dot + 1).replace(/\./g, "").slice(0, 2);
+  const withCommas = int.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return dec === null ? withCommas : `${withCommas || "0"}.${dec}`;
+}
+
+/** ตำแหน่งเคอร์เซอร์หลังจัดรูป: วางหลังตัวเลขตัวที่ n เท่าเดิม */
+export function caretAfterDigits(formatted: string, digitsBefore: number): number {
+  if (digitsBefore <= 0) return 0;
+  let seen = 0;
+  for (let i = 0; i < formatted.length; i++) {
+    if (/[\d.]/.test(formatted[i])) seen++;
+    if (seen === digitsBefore) return i + 1;
+  }
+  return formatted.length;
+}
