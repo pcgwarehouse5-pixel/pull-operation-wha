@@ -10,40 +10,16 @@ import { SkillCatalog } from "@/components/pull/settings/SkillCatalog";
 import { ProductivitySettings } from "@/components/pull/settings/ProductivitySettings";
 import { WorkloadMapping, type TypeForm } from "@/components/pull/settings/WorkloadMapping";
 import { ShiftHoursSettings } from "@/components/pull/settings/ShiftHoursSettings";
-import { errText, fetchAll, sb } from "@/lib/supabase";
+import { errText, sb } from "@/lib/supabase";
+import { loadPullConfig } from "@/lib/pull-data";
 import { useOptions } from "@/lib/useOptions";
 import { todayIso } from "@/lib/shifts";
 import { thaiDate } from "@/lib/format";
 import { isGlobal } from "@/lib/types";
-import { readiness, type PullConfig, type PullSkillRow, type PullTask, type ShiftHours, type SkillCount, type TaskRate, type WorkloadType } from "@/lib/pull";
+import { readiness, type PullConfig, type WorkloadType } from "@/lib/pull";
 
 type Step = "skills" | "productivity" | "mapping" | "hours";
 type Msg = { tone: "success" | "error"; text: string } | null;
-
-async function loadConfig(): Promise<PullConfig> {
-  const [skills, pullSkills, types, tasks, rates, hours, counts] = await Promise.all([
-    fetchAll<{ name: string; position: string }>((f, t) => sb().from("skills").select("name, position").eq("is_active", true).order("name").order("position").range(f, t)),
-    fetchAll<PullSkillRow>((f, t) => sb().from("pull_skills").select("warehouse_id, skill_name, sort_order").order("warehouse_id").order("sort_order").range(f, t)),
-    fetchAll<WorkloadType>((f, t) => sb().from("pull_workload_types").select("*").order("sort_order").order("name").range(f, t)),
-    fetchAll<PullTask>((f, t) => sb().from("pull_tasks").select("id, warehouse_id, workload_type_id, skill_name, is_active").order("id").range(f, t)),
-    fetchAll<TaskRate>((f, t) => sb().from("pull_task_rates").select("task_id, warehouse_id, effective_from, per_hour, note, created_at").order("task_id").order("effective_from").range(f, t)),
-    fetchAll<ShiftHours>((f, t) => sb().from("pull_shift_hours").select("warehouse_id, shift, effective_from, hours, note, created_at").order("warehouse_id").order("effective_from").range(f, t)),
-    sb().rpc("pull_skill_counts"),
-  ]);
-  if (counts.error) throw counts.error;
-  const skillPositions: Record<string, string[]> = {};
-  for (const s of skills) (skillPositions[s.name] ??= []).push(s.position);
-  return {
-    skillNames: Object.keys(skillPositions).sort((a, b) => a.localeCompare(b, "th")),
-    skillPositions,
-    pullSkills,
-    types,
-    tasks,
-    rates: rates.map((r) => ({ ...r, per_hour: Number(r.per_hour) })),
-    hours: hours.map((h) => ({ ...h, hours: Number(h.hours) })),
-    counts: ((counts.data ?? []) as SkillCount[]).map((c) => ({ ...c, people: Number(c.people) })),
-  };
-}
 
 export default function PullSettingsPage() {
   const { profile, warehouses, myWarehouseIds, demo } = useApp();
@@ -67,7 +43,7 @@ export default function PullSettingsPage() {
     let live = true;
     (async () => {
       try {
-        const c = demo ? demo.previewPullConfig() : await loadConfig();
+        const c = demo ? demo.previewPullConfig() : await loadPullConfig();
         if (live) setCfg(c);
       } catch (e) {
         if (live) setMsg({ tone: "error", text: errText(e) });
@@ -79,7 +55,7 @@ export default function PullSettingsPage() {
   }, [demo]);
 
   async function reload() {
-    setCfg(await loadConfig());
+    setCfg(await loadPullConfig());
     setVersion((v) => v + 1);
   }
 

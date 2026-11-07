@@ -144,3 +144,77 @@ export function skillStyle(name: string): SkillStyle {
                 : "red";
   return { icon, color: C[key][0], tint: C[key][1] };
 }
+
+// ---------- คำนวณคนที่ต้องการ (สูตรเดียวกับฟังก์ชัน pull_requirements ในฐานข้อมูล) ----------
+export type ReqRow = {
+  skill_name: string;
+  skill_order: number;
+  workload_type_id: string;
+  type_name: string;
+  type_order: number;
+  unit: string;
+  volume: number | null;
+  hours: number | null;
+  per_hour: number | null;
+  fte: number | null; // ยอดงาน ÷ (ชั่วโมง × Productivity)
+};
+export type SkillReq = { skill_name: string; skill_order: number; fte: number | null; required: number | null; complete: boolean; missing: string | null };
+
+/** ปัดขึ้นเสมอ (กันเศษทศนิยมเล็กมากจากการหาร เช่น 0.7 + 0.3 = 0.9999999999999999) */
+export function ceilPeople(fte: number): number {
+  return Math.max(0, Math.ceil(fte - 1e-9));
+}
+
+/** รายละเอียดทีละงาน ณ คลัง/วัน/กะ · volumes = ยอดงานต่อประเภทงาน (ไม่มี = ยังไม่กรอก) */
+export function requirementRows(cfg: PullConfig, wh: string, date: string, shift: PullShift, volumes: Record<string, number | null | undefined>): ReqRow[] {
+  const hours = hoursOf(cfg, wh, shift, date)?.hours ?? null;
+  const order = new Map(cfg.pullSkills.filter((s) => s.warehouse_id === wh).map((s) => [s.skill_name, s.sort_order]));
+  const types = new Map(cfg.types.map((t) => [t.id, t]));
+  return activeTasks(cfg, wh)
+    .map((k) => {
+      const t = types.get(k.workload_type_id)!;
+      const v = volumes[t.id];
+      const volume = v === undefined || v === null || !Number.isFinite(v) ? null : v;
+      const per_hour = rateOf(cfg, k.id, date)?.per_hour ?? null;
+      const fte = volume !== null && hours && hours > 0 && per_hour && per_hour > 0 ? volume / (hours * per_hour) : null;
+      return { skill_name: k.skill_name, skill_order: order.get(k.skill_name) ?? 0, workload_type_id: t.id, type_name: t.name, type_order: t.sort_order, unit: t.unit, volume, hours, per_hour, fte };
+    })
+    .sort((a, b) => a.skill_order - b.skill_order || a.type_order - b.type_order);
+}
+
+/** คนที่ต้องการต่อทักษะ: รวมทุกงานของทักษะ แล้วปัดขึ้นครั้งเดียว · ข้อมูลไม่ครบ = null (ไม่ตีเป็น 0) */
+export function skillRequirements(cfg: PullConfig, wh: string, rows: ReqRow[]): SkillReq[] {
+  return cfg.pullSkills
+    .filter((s) => s.warehouse_id === wh)
+    .sort((a, b) => a.sort_order - b.sort_order)
+    .map((s) => {
+      const mine = rows.filter((r) => r.skill_name === s.skill_name);
+      const complete = mine.length > 0 && mine.every((r) => r.fte !== null);
+      const sum = mine.reduce((n, r) => n + (r.fte ?? 0), 0);
+      const missing = !mine.length
+        ? "ยังไม่ผูกประเภทงาน"
+        : mine.some((r) => r.hours === null)
+          ? "ยังไม่ตั้งชั่วโมงต่อกะ"
+          : mine.some((r) => r.per_hour === null)
+            ? "ยังไม่ตั้ง Productivity"
+            : mine.some((r) => r.volume === null)
+              ? "ยังไม่กรอกยอดงาน"
+              : null;
+      return { skill_name: s.skill_name, skill_order: s.sort_order, fte: complete ? Math.round(sum * 10000) / 10000 : null, required: complete ? ceilPeople(sum) : null, complete, missing };
+    });
+}
+
+/** รวมคนที่ต้องการ: ต้องครบทุกทักษะ ไม่อย่างนั้นแสดง — (ไม่ตีเป็นตัวเลขที่ต่ำกว่าความจริง) */
+export function totalRequired(reqs: SkillReq[]): number | null {
+  if (!reqs.length || reqs.some((r) => !r.complete)) return null;
+  return reqs.reduce((n, r) => n + (r.required ?? 0), 0);
+}
+
+/** ตรวจยอดงานที่พิมพ์: ว่าง = ยังไม่กรอก (null) / ตัวเลข 0 ขึ้นไป / อื่นๆ = ใช้ไม่ได้ */
+export function parseVolume(text: string, max = 10000000): { ok: boolean; value: number | null } {
+  const s = text.replace(/,/g, "").trim();
+  if (!s) return { ok: true, value: null };
+  if (!/^\d+(\.\d+)?$/.test(s)) return { ok: false, value: null };
+  const v = Math.round(Number(s) * 100) / 100;
+  return v <= max ? { ok: true, value: v } : { ok: false, value: null };
+}

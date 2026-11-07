@@ -43,6 +43,8 @@ export const NAV_GROUPS: { id: "mine" | "staff" | "pull" | "manage"; title: stri
     id: "pull",
     title: "Pull Operation",
     items: [
+      { key: "pull-workload", href: "/pull/workload", label: "กรอกปริมาณงาน", desc: "ยอดงานคาดการณ์ต่อวัน/กะ เห็นคนที่ต้องการทันที", icon: "leave", minRole: "supervisor" },
+      { key: "pull-requirements", href: "/pull/requirements", label: "ผลคำนวณกำลังคน", desc: "สูตรและตัวเลขรายทักษะ ตรวจสอบย้อนกลับได้", icon: "chart", minRole: "supervisor" },
       { key: "pull-settings", href: "/pull/settings", label: "ตั้งค่า Pull", desc: "ทักษะที่ดึงได้ Productivity ประเภทงาน ชั่วโมงต่อกะ", icon: "link", minRole: "admin" },
     ],
   },

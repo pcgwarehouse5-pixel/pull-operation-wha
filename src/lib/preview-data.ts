@@ -263,12 +263,13 @@ export function previewPullConfig(): import("./pull").PullConfig {
     { id: "pt2", warehouse_id: W5, name: "งานจ่าย พาเลทเต็ม", unit: "pallet", sort_order: 2, is_active: true },
     { id: "pt3", warehouse_id: W5, name: "งานจ่าย Picker", unit: "piece", sort_order: 3, is_active: true },
     { id: "pt4", warehouse_id: W32, name: "งานรับ Export", unit: "pallet", sort_order: 1, is_active: true },
+    { id: "pt5", warehouse_id: W5, name: "งานเติม Pickface", unit: "pallet", sort_order: 4, is_active: true },
   ];
   const t = (id: string, wh: string, type: string, skill: string) => ({ id, warehouse_id: wh, workload_type_id: type, skill_name: skill, is_active: true });
   const tasks = [
     t("pk1", W5, "pt1", "RT รับ(Domestics)"), t("pk2", W5, "pt1", "OP ลากรับ"), t("pk3", W5, "pt1", "เช็ครับ(Domestics)"),
     t("pk4", W5, "pt2", "RT จ่าย(Domestics)"), t("pk5", W5, "pt2", "OP ลากจ่าย"), t("pk6", W5, "pt3", "Picker จ่าย"),
-    t("pk7", W32, "pt4", "RT รับ(Export)"), t("pk8", W32, "pt4", "เช็ครับ(Export)"),
+    t("pk9", W5, "pt5", "RT เติม(Domestics)"), t("pk7", W32, "pt4", "RT รับ(Export)"), t("pk8", W32, "pt4", "เช็ครับ(Export)"),
   ];
   const r = (task_id: string, wh: string, per_hour: number, effective_from = "2000-01-01") => ({ task_id, warehouse_id: wh, effective_from, per_hour, note: "ค่าตัวอย่าง", created_at: at });
   return {
@@ -280,7 +281,7 @@ export function previewPullConfig(): import("./pull").PullConfig {
     ],
     types,
     tasks,
-    rates: [r("pk1", W5, 30), r("pk2", W5, 32), r("pk3", W5, 60), r("pk4", W5, 35), r("pk5", W5, 38), r("pk1", W5, 28, "2026-12-01"), r("pk7", W32, 30), r("pk8", W32, 60)],
+    rates: [r("pk1", W5, 30), r("pk2", W5, 32), r("pk3", W5, 60), r("pk4", W5, 35), r("pk5", W5, 38), r("pk1", W5, 28, "2026-12-01"), r("pk6", W5, 180), r("pk9", W5, 18), r("pk7", W32, 30), r("pk8", W32, 60)],
     hours: (["morning", "night"] as const).flatMap((shift) => [
       { warehouse_id: W5, shift, effective_from: "2000-01-01", hours: 10, note: "ค่าตัวอย่าง", created_at: at },
       { warehouse_id: W32, shift, effective_from: "2000-01-01", hours: 9, note: "ค่าตัวอย่าง", created_at: at },
@@ -291,4 +292,17 @@ export function previewPullConfig(): import("./pull").PullConfig {
       { warehouse_id: W32, skill_name: "OP ลากรับ", people: 5 },
     ],
   };
+}
+
+// ยอดงานสมมติของคลัง 5 (วันนี้ครบทั้งกะเช้า, กะดึกกรอกบางส่วน, พรุ่งนี้กะเช้าครบ)
+export function previewPullWorkloads(today: string): import("./pull-data").WorkloadRow[] {
+  const next = new Date(today + "T00:00:00Z");
+  next.setUTCDate(next.getUTCDate() + 1);
+  const tomorrow = next.toISOString().slice(0, 10);
+  const w = (work_date: string, shift: "morning" | "night", workload_type_id: string, volume: number) => ({ warehouse_id: W5, work_date, shift, workload_type_id, volume });
+  return [
+    w(today, "morning", "pt1", 1300), w(today, "morning", "pt2", 1000), w(today, "morning", "pt3", 18000), w(today, "morning", "pt5", 300),
+    w(today, "night", "pt1", 850),
+    w(tomorrow, "morning", "pt1", 900), w(tomorrow, "morning", "pt2", 700), w(tomorrow, "morning", "pt3", 15000), w(tomorrow, "morning", "pt5", 250),
+  ];
 }

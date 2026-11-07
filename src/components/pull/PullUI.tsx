@@ -86,3 +86,14 @@ export function StepTabs<T extends string>({ steps, active, onChange }: { steps:
 export function fromLabel(ymd: string): string {
   return ymd <= "2000-01-01" ? "ค่าเริ่มต้น" : thaiDate(ymd);
 }
+
+/** ตัวเลือกวันที่บนแถบหัว (พื้นขาว) */
+export function BarDate({ value, onChange, min, max }: { value: string; onChange: (v: string) => void; min?: string; max?: string }) {
+  return (
+    <label className="flex min-h-11 flex-1 items-center gap-2 rounded-xl bg-white px-3 text-ink sm:flex-none">
+      <Icon name="calendar" size={20} className="text-brand" />
+      <span className="sr-only">วันที่</span>
+      <input type="date" value={value} min={min} max={max} onChange={(e) => e.target.value && onChange(e.target.value)} className="min-h-11 flex-1 bg-transparent font-semibold outline-none" />
+    </label>
+  );
+}

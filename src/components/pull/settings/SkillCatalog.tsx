@@ -52,7 +52,7 @@ export function SkillCatalog({
   }
 
   return (
-    <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+    <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
       <Card>
         <div className="flex flex-wrap items-center gap-2">
           <label className="relative min-w-0 flex-1">
