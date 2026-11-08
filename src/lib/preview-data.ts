@@ -38,6 +38,11 @@ export const PREVIEW_AUDIT: AuditLog[] = [
 export const PREVIEW_EXTRA_OPTIONS: DropdownOption[] = [
   { id: "u1", category: "pull_unit", value: "pallet", label: "พาเลท", sort_order: 1, extra: {}, is_active: true },
   { id: "u2", category: "pull_unit", value: "piece", label: "ชิ้น", sort_order: 2, extra: {}, is_active: true },
+  { id: "cr0", category: "pull_cancel_reason", value: "r0", label: "งานลดลง", sort_order: 1, extra: {}, is_active: true },
+  { id: "cr1", category: "pull_cancel_reason", value: "r1", label: "เปลี่ยนแผนกำลังคน", sort_order: 2, extra: {}, is_active: true },
+  { id: "cr2", category: "pull_cancel_reason", value: "r2", label: "พนักงานไม่พร้อม", sort_order: 3, extra: {}, is_active: true },
+  { id: "cr3", category: "pull_cancel_reason", value: "r3", label: "จองผิด", sort_order: 4, extra: {}, is_active: true },
+  { id: "cr4", category: "pull_cancel_reason", value: "r4", label: "อื่น ๆ", sort_order: 5, extra: {}, is_active: true },
   { id: "o5", category: "employment_type", value: "monthly_employee", label: "พนักงานรายเดือน", sort_order: 1, extra: {}, is_active: true },
   { id: "o6", category: "employment_type", value: "mou", label: "MOU", sort_order: 2, extra: {}, is_active: true },
   { id: "o7", category: "employment_type", value: "daily_worker", label: "คนงานรายวัน", sort_order: 3, extra: {}, is_active: true },
@@ -305,4 +310,35 @@ export function previewPullWorkloads(today: string): import("./pull-data").Workl
     w(today, "night", "pt1", 850),
     w(tomorrow, "morning", "pt1", 900), w(tomorrow, "morning", "pt2", 700), w(tomorrow, "morning", "pt3", 15000), w(tomorrow, "morning", "pt5", 250),
   ];
+}
+
+// คลังกลางสมมติ (ชื่อสมมติทั้งหมด) มุมมองของคลัง 5 · สถานะหลากหลายไว้ดูดีไซน์
+export function previewPullPool(wh: string, shift: "morning" | "night"): import("./pull").PoolPerson[] {
+  const names = ["สมมติ หนึ่ง", "ทดลอง สอง", "ตัวอย่าง สาม", "สมมุติ สี่", "จำลอง ห้า", "ทดสอบ หก", "ตัวอย่าง เจ็ด", "สมมติ แปด", "ทดลอง เก้า", "จำลอง สิบ", "ตัวอย่าง สิบเอ็ด", "สมมติ สิบสอง", "ทดสอบ สิบสาม", "จำลอง สิบสี่"];
+  const skills = [["RT รับ(Domestics)"], ["RT รับ(Domestics)", "RT เติม(Domestics)"], ["OP ลากรับ", "Picker จ่าย"], ["เช็ครับ(Domestics)"], ["RT จ่าย(Domestics)"], ["OP ลากจ่าย", "OP ลากรับ"], ["Picker จ่าย"], ["RT รับ(Domestics)"], ["RT รับ(Export)", "RT รับ(Domestics)"], ["เช็ครับ(Domestics)", "เช็ครับ(Export)"], ["Picker จ่าย"], ["RT เติม(Domestics)"], ["OP ลากรับ"], ["RT จ่าย(Domestics)", "RT รับ(Domestics)"]];
+  const status: import("./pull").PoolStatus[] = ["booked_here", "ready", "ready", "booked_here", "ready", "ready", "busy", "unavailable", "ready", "ready", "ready", "ready", "unavailable", "ready"];
+  return names.map((name, i) => {
+    const st = status[i];
+    const fromW32 = i % 3 === 2;
+    const booked = st === "booked_here" ? { booking_id: `pb${i}`, booked_to: wh, booked_to_code: "WH5", booked_skill: skills[i][0] } : st === "busy" ? { booking_id: `pb${i}`, booked_to: W32, booked_to_code: "WH32", booked_skill: skills[i][0] } : { booking_id: null, booked_to: null, booked_to_code: null, booked_skill: null };
+    return {
+      user_id: `pp${i}`, employee_code: `D${String(100 + i)}`, name, nickname: null, emp_position: skills[i][0].split(" ")[0],
+      warehouse_id: fromW32 ? W32 : W5, warehouse_code: fromW32 ? "WH32" : "WH5",
+      shift_code: shift === "morning" ? "STD1" : "GN_5", start_min: shift === "morning" ? 480 + (i % 2) * 60 : 1200,
+      status: st, reason: st === "busy" ? "ถูกจองโดย WH32" : st === "unavailable" ? (i === 7 ? "ลา" : "วันหยุด (OFF)") : st === "booked_here" ? "จองเข้าคลังนี้แล้ว" : null,
+      skills: skills[i], ...booked,
+    };
+  });
+}
+
+export function previewPullBookings(wh: string, date: string, shift: "morning" | "night"): import("./pull").Booking[] {
+  return previewPullPool(wh, shift)
+    .filter((p) => p.status === "booked_here")
+    .map((p) => ({ id: p.booking_id!, work_date: date, shift, user_id: p.user_id, from_warehouse_id: p.warehouse_id, to_warehouse_id: wh, skill_name: p.booked_skill!, status: "booked" as const, break_time: null, booked_at: "2026-11-07T01:00:00Z" }));
+}
+
+export function previewMyPullBookings(today: string) {
+  const d = new Date(today + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + 1);
+  return [{ id: "mb1", work_date: d.toISOString().slice(0, 10), shift: "morning" as const, skill_name: "RT รับ(Domestics)", to_code: "WH32" }];
 }

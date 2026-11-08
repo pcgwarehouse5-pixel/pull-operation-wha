@@ -97,3 +97,46 @@ export function BarDate({ value, onChange, min, max }: { value: string; onChange
     </label>
   );
 }
+
+/** แถบหัวของหน้ากระดานดึงคน: คลังปลายทาง วันที่ กะ และปุ่มรีเฟรช */
+export function BoardBar({
+  title, sub, whs, wh, setWh, date, setDate, shift, setShift, max, onRefresh, at,
+}: {
+  title: string; sub?: string; whs: { id: string; code: string }[]; wh: string; setWh: (v: string) => void; date: string; setDate: (v: string) => void;
+  shift: "morning" | "night"; setShift: (v: "morning" | "night") => void; max?: string; onRefresh?: () => void; at?: Date | null;
+}) {
+  return (
+    <PullBar title={title} sub={sub}>
+      <BarSelect label="คลัง" value={wh} onChange={setWh}>
+        {whs.map((w) => (
+          <option key={w.id} value={w.id}>{w.code}</option>
+        ))}
+      </BarSelect>
+      <BarDate value={date} onChange={setDate} max={max} />
+      <BarSelect label="กะ" value={shift} onChange={(v) => setShift(v as "morning" | "night")}>
+        <option value="morning">☀ กะเช้า</option>
+        <option value="night">☾ กะดึก</option>
+      </BarSelect>
+      {onRefresh && (
+        <button type="button" onClick={onRefresh} className="flex min-h-11 items-center gap-1.5 rounded-xl bg-white/15 px-3 font-semibold text-white hover:bg-white/25" aria-label="รีเฟรชข้อมูล">
+          <Icon name="history" size={20} />
+          <span className="text-[13px]">{at ? at.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }) : "รีเฟรช"}</span>
+        </button>
+      )}
+    </PullBar>
+  );
+}
+
+/** แถบความคืบหน้าการจอง (แดง = ยังขาด, เขียว = ครบ) */
+export function ProgressBar({ booked, need }: { booked: number; need: number | null }) {
+  const pct = need === null ? 0 : need === 0 ? 100 : Math.min(100, (booked / need) * 100);
+  const full = need !== null && booked >= need;
+  return (
+    <div className="flex items-center gap-3">
+      <div className="h-3 flex-1 overflow-hidden rounded-full bg-[#e3e7ef]" role="progressbar" aria-valuenow={booked} aria-valuemax={need ?? undefined} aria-label="จองแล้วเทียบที่ต้องการ">
+        <div className={`h-full rounded-full ${full ? "bg-ok" : "bg-[#e5484d]"}`} style={{ width: `${pct}%` }} />
+      </div>
+      <span className="shrink-0 text-[15px] font-bold text-brand tabular-nums">{booked} / {need ?? "—"}</span>
+    </div>
+  );
+}

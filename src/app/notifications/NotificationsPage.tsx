@@ -17,6 +17,7 @@ type Note = { id: number; kind: string; title: string; body: string | null; link
 const ICON: Record<string, IconName> = {
   leave_pending: "leave", leave_result: "leave", correction_pending: "clock", correction_result: "clock",
   schedule: "calendar", missing_in: "pin", missing_out: "pin", auto_check_in: "pin", absent_streak: "users", ot_pending: "ot",
+  pull_booked: "users", pull_cancelled: "users", pull_source: "warehouse",
 };
 const KINDS = new Set(Object.keys(ICON));
 

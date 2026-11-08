@@ -7,6 +7,7 @@ import { useApp } from "@/components/AuthProvider";
 import { Alert, Badge, Button, Card, Empty, Loading } from "@/components/ui";
 import { Icon } from "@/components/Icon";
 import { PageHelper } from "@/components/Puinun";
+import { MyPullBookings } from "@/components/pull/MyPullBookings";
 import { ShiftChip, empName, type Holiday } from "@/components/shifts/common";
 import { fetchAll, sb } from "@/lib/supabase";
 import { useOptions } from "@/lib/useOptions";
@@ -73,6 +74,7 @@ export default function MyShiftsPage() {
       <PageHelper pose="point" title={t("ms.title")}>
         {t("ms.helper")}
       </PageHelper>
+      <MyPullBookings />
       <div className="mb-3 flex items-center justify-center gap-2">
         <Button variant="secondary" size="sm" aria-label={t("common.prevMonth")} onClick={() => setYm(addMonths(ym, -1))}>
           <Icon name="back" size={18} />

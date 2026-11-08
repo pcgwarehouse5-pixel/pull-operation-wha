@@ -99,6 +99,8 @@ export const th = {
   "nav.pull-requirements.desc": "สูตรและตัวเลขรายทักษะ ตรวจสอบย้อนกลับได้",
   "nav.pull-settings": "ตั้งค่า Pull",
   "nav.pull-settings.desc": "ทักษะที่ดึงได้ Productivity ประเภทงาน ชั่วโมงต่อกะ",
+  "nav.pull-board": "สรุปกำลังพล & ดึงคน",
+  "nav.pull-board.desc": "ต้องการ / จองแล้ว / ขาด ต่อตำแหน่ง แล้วดึงคนจากคลังกลาง",
   "nav.users": "ผู้ใช้และสิทธิ์",
   "nav.users.desc": "บทบาท คลัง และรีเซ็ตรหัสผ่าน",
   "nav.warehouses": "คลัง",
@@ -322,6 +324,13 @@ export const th = {
   "ntk.auto_check_in": "ระบบลงเวลาเข้างานให้อัตโนมัติ",
   "ntk.absent_streak": "พนักงานขาดงานติดต่อกัน",
   "ntk.ot_pending": "มี OT รออนุมัติ",
+  "ntk.pull_booked": "คุณถูกจองไปช่วยงาน",
+  "ntk.pull_cancelled": "ยกเลิกการไปช่วยงาน",
+  "ntk.pull_source": "พนักงานถูกดึงไปช่วยคลังอื่น",
+  "pull.my.title": "ไปช่วยงานคลังอื่น",
+  "pull.my.hint": "หัวหน้าจองให้คุณไปทำงานตามวันและกะนี้ ไปรายงานตัวที่คลังปลายทาง",
+  "pull.my.morning": "กะเช้า",
+  "pull.my.night": "กะดึก",
 
   // ---------- ข้อมูลของฉัน ----------
   "pf.title": "ข้อมูลของฉัน",

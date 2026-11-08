@@ -1,6 +1,6 @@
 // โหลดข้อมูล Pull Operation จาก Supabase (ใช้ร่วมกันทุกหน้าของ Pull)
 import { fetchAll, sb } from "./supabase";
-import type { PullConfig, PullShift, PullSkillRow, PullTask, ShiftHours, SkillCount, TaskRate, WorkloadType } from "./pull";
+import type { Booking, PoolPerson, PullConfig, PullShift, PullSkillRow, PullTask, ShiftHours, SkillCount, SkillReq, TaskRate, WorkloadType } from "./pull";
 
 export type WorkloadRow = { warehouse_id: string; work_date: string; shift: PullShift; workload_type_id: string; volume: number };
 
@@ -55,4 +55,32 @@ export function addDays(ymd: string, n: number): string {
   const d = new Date(ymd + "T00:00:00Z");
   d.setUTCDate(d.getUTCDate() + n);
   return d.toISOString().slice(0, 10);
+}
+
+/** คลังกลางพร้อมสถานะของวัน/กะ (มุมมองของคลังปลายทาง) */
+export async function loadPool(wh: string, date: string, shift: PullShift): Promise<PoolPerson[]> {
+  const { data, error } = await sb().rpc("pull_pool", { p_to_wh: wh, p_date: date, p_shift: shift });
+  if (error) throw error;
+  return ((data ?? []) as PoolPerson[]).map((p) => ({ ...p, skills: p.skills ?? [], start_min: p.start_min === null ? null : Number(p.start_min) }));
+}
+
+/** การจองเข้าคลังนี้ของวัน/กะ (เฉพาะที่ยังไม่ยกเลิก) */
+export async function loadBookings(wh: string, date: string, shift: PullShift): Promise<Booking[]> {
+  const { data, error } = await sb()
+    .from("pull_bookings")
+    .select("id, work_date, shift, user_id, from_warehouse_id, to_warehouse_id, skill_name, status, break_time, booked_at")
+    .eq("to_warehouse_id", wh)
+    .eq("work_date", date)
+    .eq("shift", shift)
+    .eq("status", "booked")
+    .order("booked_at");
+  if (error) throw error;
+  return (data ?? []) as Booking[];
+}
+
+/** ความต้องการต่อทักษะจากฐานข้อมูล */
+export async function loadRequirements(wh: string, date: string, shift: PullShift): Promise<SkillReq[]> {
+  const { data, error } = await sb().rpc("pull_requirements", { p_wh: wh, p_date: date, p_shift: shift });
+  if (error) throw error;
+  return ((data ?? []) as SkillReq[]).map((x) => ({ ...x, fte: x.fte === null ? null : Number(x.fte), required: x.required === null ? null : Number(x.required) }));
 }

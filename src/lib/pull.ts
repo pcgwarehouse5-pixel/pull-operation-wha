@@ -239,3 +239,77 @@ export function caretAfterDigits(formatted: string, digitsBefore: number): numbe
   }
   return formatted.length;
 }
+
+// ---------- คลังกลางและการจอง (หน้าสรุปกำลังพล / ดึงคน) ----------
+export type PoolStatus = "ready" | "booked_here" | "busy" | "unavailable";
+export type PoolPerson = {
+  user_id: string;
+  employee_code: string;
+  name: string;
+  nickname: string | null;
+  emp_position: string | null;
+  warehouse_id: string;
+  warehouse_code: string;
+  shift_code: string | null;
+  start_min: number | null;
+  status: PoolStatus;
+  reason: string | null;
+  skills: string[];
+  booking_id: string | null;
+  booked_to: string | null;
+  booked_to_code: string | null;
+  booked_skill: string | null;
+};
+export type Booking = { id: string; work_date: string; shift: PullShift; user_id: string; from_warehouse_id: string | null; to_warehouse_id: string; skill_name: string; status: "booked" | "cancelled"; break_time: string | null; booked_at: string };
+
+export const STATUS_LABEL: Record<PoolStatus, string> = { ready: "พร้อม", booked_here: "จองแล้ว", busy: "ติดภารกิจ", unavailable: "ไม่พร้อม" };
+
+export type SkillSummary = {
+  skill: string;
+  total: number; // คนในคลังกลางที่มีทักษะนี้และเข้ากะนี้ (รวมที่ถูกจองแล้ว)
+  need: number | null; // ต้องการ (null = ยังคำนวณไม่ได้)
+  booked: number; // จองเข้าคลังนี้แล้ว (วัน/กะนี้)
+  waiting: number | null; // ยังต้องจองอีก
+  left: number; // คนที่ยังว่าง พร้อมดึง
+  rate: number | null; // % จองแล้วเทียบที่ต้องการ
+};
+
+const working = (p: PoolPerson) => p.status === "ready" || p.status === "booked_here" || p.status === "busy";
+
+/** สรุปต่อทักษะ + ภาพรวม (คนที่มีหลายทักษะนับครั้งเดียวในภาพรวม) */
+export function summarize(reqs: SkillReq[], pool: PoolPerson[], bookings: Booking[]) {
+  const mine = bookings.filter((b) => b.status === "booked");
+  const rows: SkillSummary[] = reqs.map((q) => {
+    const booked = mine.filter((b) => b.skill_name === q.skill_name).length;
+    const need = q.complete ? q.required : null;
+    return {
+      skill: q.skill_name,
+      total: pool.filter((p) => working(p) && p.skills.includes(q.skill_name)).length,
+      need,
+      booked,
+      waiting: need === null ? null : Math.max(0, need - booked),
+      left: pool.filter((p) => p.status === "ready" && p.skills.includes(q.skill_name)).length,
+      rate: need === null ? null : need === 0 ? 100 : Math.min(100, Math.round((booked / need) * 100)),
+    };
+  });
+  const skills = new Set(reqs.map((q) => q.skill_name));
+  const has = (p: PoolPerson) => p.skills.some((s) => skills.has(s));
+  const need = totalRequired(reqs);
+  const booked = mine.length;
+  return {
+    rows,
+    total: pool.filter((p) => working(p) && has(p)).length,
+    need,
+    booked,
+    waiting: need === null ? null : rows.reduce((n, r) => n + (r.waiting ?? 0), 0),
+    left: pool.filter((p) => p.status === "ready" && has(p)).length,
+    rate: need === null ? null : need === 0 ? 100 : Math.min(100, Math.round((booked / need) * 100)),
+  };
+}
+
+/** เวลาเข้างานจากนาที (480 → 08:00) */
+export function hhmm(min: number | null | undefined): string {
+  if (min === null || min === undefined) return "—";
+  const m = ((min % 1440) + 1440) % 1440;
+  return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+}

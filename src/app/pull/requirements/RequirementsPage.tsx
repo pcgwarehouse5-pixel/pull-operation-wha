@@ -184,9 +184,9 @@ export default function RequirementsPage() {
                 <b className="text-[#b45309]">หมายเหตุ:</b> ผลลัพธ์ปัดขึ้นเสมอ เพื่อให้มีจำนวนคนเพียงพอต่อการทำงานจริง (คนแบ่งครึ่งไม่ได้ และงานต้องจบภายในกะ)
               </p>
             </div>
-            <span className="inline-flex min-h-14 items-center gap-2 rounded-[14px] bg-[#c9d1e1] px-5 text-[17px] font-semibold text-white" title="เปิดใช้ในช่วงที่ 3">
-              <Icon name="arrow" size={22} /> ไปหน้าดึงกำลังคน (Pull Board) · เร็วๆ นี้
-            </span>
+            <Link href="/pull" className="inline-flex min-h-14 items-center gap-2 rounded-[14px] border-b-[3px] border-[#146b43] bg-ok px-5 text-[17px] font-semibold text-white hover:bg-[#1a7d50]">
+              <Icon name="arrow" size={22} /> ไปหน้าดึงกำลังคน (Pull Board)
+            </Link>
           </div>
         </Card>
       )}

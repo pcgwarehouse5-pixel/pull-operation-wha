@@ -43,6 +43,8 @@ const META: Meta[] = [
   { group: "เบี้ยขยัน/ค่าเดินทาง", key: "diligence.rules", label: "เหตุที่ทำให้ไม่ได้เบี้ยขยัน", hint: "", kind: "dilrules", source: "leave" },
   { group: "เบี้ยขยัน/ค่าเดินทาง", key: "diligence.employment_types", label: "ประเภทพนักงานที่ได้เบี้ยขยัน", hint: "ไม่เลือกเลย = ทุกประเภท", kind: "types", source: "employment" },
   { group: "เบี้ยขยัน/ค่าเดินทาง", key: "travel.rate_per_day", label: "ค่าเดินทางต่อวันที่มาทำงาน", unit: "บาท", hint: "เฉพาะพนักงานที่ติ๊ก \"ได้ค่าเดินทาง\" ในทะเบียน", kind: "number", min: 0, max: 5000 },
+  { group: "Pull Operation", key: "pull.morning_from_hour", label: "กะเช้า: เวลาเข้างานตั้งแต่", unit: "นาฬิกา", hint: "รหัสกะที่เริ่มงานตั้งแต่เวลานี้ ถึงเวลาด้านล่าง นับเป็นกะเช้า (ใช้แยกคนในคลังกลางตามกะ)", kind: "number", min: 0, max: 23 },
+  { group: "Pull Operation", key: "pull.morning_to_hour", label: "กะเช้า: เวลาเข้างานถึง (รวมทั้งชั่วโมงนั้น)", unit: "นาฬิกา", hint: "เช่น 13 = เข้างานถึง 13:59 ยังเป็นกะเช้า หลังจากนั้นเป็นกะดึก", kind: "number", min: 0, max: 23 },
   { group: "แจ้งเตือน", key: "notify.missing_in_minutes", label: "กะเริ่มแล้วกี่นาทียังไม่ลงเวลา จึงแจ้งเตือนพนักงาน", unit: "นาที", hint: "", kind: "number", min: 5, max: 240 },
   { group: "แจ้งเตือน", key: "notify.absent_streak_days", label: "ขาดงานติดต่อกันกี่วันทำงาน จึงแจ้งหัวหน้า/แอดมิน", unit: "วัน", hint: "เป็นการแจ้งให้ตรวจสอบเท่านั้น ไม่ได้ทำให้พ้นสภาพพนักงาน", kind: "number", min: 1, max: 14 },
   { group: "แจ้งเตือน", key: "notify.daily_hour", label: "เวลาส่งสรุปประจำวัน (ขาดงานติดต่อกัน / OT รออนุมัติ)", unit: "นาฬิกา", hint: "", kind: "number", min: 0, max: 23 },
