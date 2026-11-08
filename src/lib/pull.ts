@@ -313,3 +313,62 @@ export function hhmm(min: number | null | undefined): string {
   const m = ((min % 1440) + 1440) % 1440;
   return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 }
+
+// ---------- Dashboard ผู้บริหาร (ตัวเลขรวมจากฟังก์ชัน pull_network) ----------
+export type NetRow = {
+  work_day: string;
+  wh_id: string;
+  wh_code: string;
+  wh_name: string;
+  pool_count: number;
+  on_leave: number;
+  need: number | null;
+  complete: boolean;
+  short: number | null;
+  booked: number;
+  pulled_in: number;
+  lent_out: number;
+};
+
+export function pct(part: number | null, whole: number | null): number | null {
+  if (part === null || whole === null || whole <= 0) return null;
+  return Math.round((part / whole) * 100);
+}
+
+/** รวมทุกคลังของวันหนึ่ง: ถ้ามีคลังที่ยังคำนวณไม่ได้ ความต้องการ/ยังขาด = null (แสดง —) */
+export function networkTotals(rows: NetRow[]) {
+  const known = rows.length > 0 && rows.every((r) => r.need !== null);
+  const pool = rows.reduce((n, r) => n + r.pool_count, 0);
+  const booked = rows.reduce((n, r) => n + r.booked, 0);
+  return {
+    pool,
+    booked,
+    need: known ? rows.reduce((n, r) => n + (r.need ?? 0), 0) : null,
+    short: known ? rows.reduce((n, r) => n + (r.short ?? 0), 0) : null,
+    remaining: Math.max(0, pool - booked),
+    leave: rows.reduce((n, r) => n + r.on_leave, 0),
+    pulled: rows.reduce((n, r) => n + r.pulled_in, 0),
+    incomplete: rows.filter((r) => r.need === null).length,
+  };
+}
+
+/** แนวโน้มรายวัน (รวมทุกคลังที่เลือก) */
+export function trend(rows: NetRow[]) {
+  const days = [...new Set(rows.map((r) => r.work_day))].sort();
+  return days.map((day) => {
+    const t = networkTotals(rows.filter((r) => r.work_day === day));
+    return { day, pool: t.pool, need: t.need, booked: t.booked, usage: pct(t.booked, t.pool) };
+  });
+}
+
+/** ตำแหน่งหลักของทักษะ (ใช้จัดกลุ่มในหน้าผังตำแหน่ง) */
+export function skillGroup(name: string): string {
+  const n = name.toLowerCase();
+  if (/^rt/.test(n)) return "RT";
+  if (/เช็ค|checker/.test(n)) return "Checker";
+  if (/picker/.test(n)) return "Picker";
+  if (/^op/.test(n)) return "OP";
+  if (/^ct/.test(n)) return "CT";
+  if (/โหลด|load/.test(n)) return "โหลดสินค้า";
+  return "อื่นๆ";
+}

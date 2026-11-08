@@ -38,6 +38,9 @@ export const PREVIEW_AUDIT: AuditLog[] = [
 export const PREVIEW_EXTRA_OPTIONS: DropdownOption[] = [
   { id: "u1", category: "pull_unit", value: "pallet", label: "พาเลท", sort_order: 1, extra: {}, is_active: true },
   { id: "u2", category: "pull_unit", value: "piece", label: "ชิ้น", sort_order: 2, extra: {}, is_active: true },
+  { id: "bt0", category: "pull_break_time", value: "11:00", label: "พัก 11:00", sort_order: 1, extra: {}, is_active: true },
+  { id: "bt1", category: "pull_break_time", value: "12:00", label: "พัก 12:00", sort_order: 2, extra: {}, is_active: true },
+  { id: "bt2", category: "pull_break_time", value: "13:00", label: "พัก 13:00", sort_order: 3, extra: {}, is_active: true },
   { id: "cr0", category: "pull_cancel_reason", value: "r0", label: "งานลดลง", sort_order: 1, extra: {}, is_active: true },
   { id: "cr1", category: "pull_cancel_reason", value: "r1", label: "เปลี่ยนแผนกำลังคน", sort_order: 2, extra: {}, is_active: true },
   { id: "cr2", category: "pull_cancel_reason", value: "r2", label: "พนักงานไม่พร้อม", sort_order: 3, extra: {}, is_active: true },
@@ -334,11 +337,27 @@ export function previewPullPool(wh: string, shift: "morning" | "night"): import(
 export function previewPullBookings(wh: string, date: string, shift: "morning" | "night"): import("./pull").Booking[] {
   return previewPullPool(wh, shift)
     .filter((p) => p.status === "booked_here")
-    .map((p) => ({ id: p.booking_id!, work_date: date, shift, user_id: p.user_id, from_warehouse_id: p.warehouse_id, to_warehouse_id: wh, skill_name: p.booked_skill!, status: "booked" as const, break_time: null, booked_at: "2026-11-07T01:00:00Z" }));
+    .map((p, i) => ({ id: p.booking_id!, work_date: date, shift, user_id: p.user_id, from_warehouse_id: p.warehouse_id, to_warehouse_id: wh, skill_name: p.booked_skill!, status: "booked" as const, break_time: ["11:00:00", "12:00:00", null][i % 3], booked_at: "2026-11-07T01:00:00Z" }));
 }
 
 export function previewMyPullBookings(today: string) {
   const d = new Date(today + "T00:00:00Z");
   d.setUTCDate(d.getUTCDate() + 1);
   return [{ id: "mb1", work_date: d.toISOString().slice(0, 10), shift: "morning" as const, skill_name: "RT รับ(Domestics)", to_code: "WH32" }];
+}
+
+// ภาพรวมทุกคลังสมมติ 7 วัน (ตัวเลขตัวอย่าง)
+export function previewPullNetwork(from: string, to: string): import("./pull").NetRow[] {
+  const out: import("./pull").NetRow[] = [];
+  const d = new Date(from + "T00:00:00Z");
+  for (let i = 0; d.toISOString().slice(0, 10) <= to; i++, d.setUTCDate(d.getUTCDate() + 1)) {
+    const day = d.toISOString().slice(0, 10);
+    const w5 = { pool: 62 + (i % 3), need: 58 + ((i * 3) % 7), booked: 52 + ((i * 5) % 6) };
+    const w32 = { pool: 44 + (i % 2), need: i === 2 ? null : 38 + (i % 4), booked: 34 + ((i * 2) % 5) };
+    out.push(
+      { work_day: day, wh_id: W5, wh_code: "WH5", wh_name: "คลัง 5 (ตัวอย่าง)", pool_count: w5.pool, on_leave: 3, need: w5.need, complete: true, short: Math.max(0, w5.need - w5.booked), booked: w5.booked, pulled_in: 4, lent_out: 1 },
+      { work_day: day, wh_id: W32, wh_code: "WH32", wh_name: "คลัง 32 (ตัวอย่าง)", pool_count: w32.pool, on_leave: 2, need: w32.need, complete: w32.need !== null, short: w32.need === null ? null : Math.max(0, w32.need - w32.booked), booked: w32.booked, pulled_in: 1, lent_out: 4 },
+    );
+  }
+  return out;
 }

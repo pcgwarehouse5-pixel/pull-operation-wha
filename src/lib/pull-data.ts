@@ -1,6 +1,6 @@
 // โหลดข้อมูล Pull Operation จาก Supabase (ใช้ร่วมกันทุกหน้าของ Pull)
 import { fetchAll, sb } from "./supabase";
-import type { Booking, PoolPerson, PullConfig, PullShift, PullSkillRow, PullTask, ShiftHours, SkillCount, SkillReq, TaskRate, WorkloadType } from "./pull";
+import type { Booking, NetRow, PoolPerson, PullConfig, PullShift, PullSkillRow, PullTask, ShiftHours, SkillCount, SkillReq, TaskRate, WorkloadType } from "./pull";
 
 export type WorkloadRow = { warehouse_id: string; work_date: string; shift: PullShift; workload_type_id: string; volume: number };
 
@@ -83,4 +83,21 @@ export async function loadRequirements(wh: string, date: string, shift: PullShif
   const { data, error } = await sb().rpc("pull_requirements", { p_wh: wh, p_date: date, p_shift: shift });
   if (error) throw error;
   return ((data ?? []) as SkillReq[]).map((x) => ({ ...x, fte: x.fte === null ? null : Number(x.fte), required: x.required === null ? null : Number(x.required) }));
+}
+
+/** ภาพรวมทุกคลังช่วงวันที่ (Dashboard ผู้บริหาร) */
+export async function loadNetwork(from: string, to: string, shift: PullShift | "all"): Promise<NetRow[]> {
+  const { data, error } = await sb().rpc("pull_network", { p_from: from, p_to: to, p_shift: shift });
+  if (error) throw error;
+  const n = (v: unknown) => (v === null || v === undefined ? null : Number(v));
+  return ((data ?? []) as NetRow[]).map((r) => ({
+    ...r,
+    pool_count: Number(r.pool_count),
+    on_leave: Number(r.on_leave),
+    need: n(r.need),
+    short: n(r.short),
+    booked: Number(r.booked),
+    pulled_in: Number(r.pulled_in),
+    lent_out: Number(r.lent_out),
+  }));
 }

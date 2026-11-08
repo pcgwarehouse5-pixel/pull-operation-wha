@@ -24,6 +24,7 @@ const CATEGORIES: { key: string; label: string; hint: string }[] = [
   { key: "ot_reason", label: "เหตุผล OT", hint: "ตัวเลือกเหตุผลตอนขอ OT" },
   { key: "pull_unit", label: "หน่วยนับปริมาณงาน", hint: "หน่วยของยอดงานและ Productivity ใน Pull Operation (ค่าในระบบ เช่น pallet ห้ามแก้หลังใช้งาน)" },
   { key: "pull_cancel_reason", label: "เหตุผลยกเลิกจอง (Pull)", hint: "ตัวเลือกตอนยกเลิกการจองคนในหน้าดึงคน" },
+  { key: "pull_break_time", label: "เวลาพัก (Pull)", hint: "เวลาพักที่เลือกได้ในหน้าผังตำแหน่งพนักงาน ค่าในระบบเป็นเวลา HH:MM เช่น 12:00 (เพิ่มเวลาพักของกะดึกได้)" },
   { key: "kpi_category", label: "หัวข้อ KPI", hint: "หัวข้อประเมินรายเดือน" },
   { key: "subcontractor_company", label: "บริษัทรับเหมา", hint: "บริษัทต้นสังกัดของแรงงานรับเหมา" },
 ];
