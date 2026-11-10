@@ -13,13 +13,13 @@ import { empName } from "@/components/shifts/common";
 import { errText, fetchAll, sb } from "@/lib/supabase";
 import { downloadCsv } from "@/lib/csv";
 import { shortDay, thaiTime } from "@/lib/format";
-import { isGlobal } from "@/lib/types";
+import { canApproveRole, isGlobal, type AppRole } from "@/lib/types";
 import { addDays, addMonths, currentMonth, monthDates, thaiMonthLabel, todayIso } from "@/lib/shifts";
 import { PROBLEM, STATUS, hhmm, type AttendanceStatus, type Correction, type TeamAttendanceRow } from "@/lib/attendance";
 
 type Tab = "day" | "month" | "fix";
 type Msg = { tone: "success" | "error"; text: string };
-type Fix = Correction & { profiles: { employee_code: string; first_name_th: string; nickname: string | null; position: string | null } };
+type Fix = Correction & { profiles: { employee_code: string; first_name_th: string; nickname: string | null; position: string | null; role?: AppRole } };
 
 export default function TeamAttendancePage() {
   const { profile: me, warehouses, myWarehouseIds, demo } = useApp();
@@ -296,7 +296,7 @@ function FixTab({ wh, hidden, setMsg, setCount }: { wh: string; hidden: boolean;
       const r = await fetchAll<Fix>((f, t) =>
         sb()
           .from("attendance_corrections")
-          .select("*, profiles!inner(employee_code, first_name_th, nickname, position, warehouse_id)")
+          .select("*, profiles!inner(employee_code, first_name_th, nickname, position, warehouse_id, role)")
           .eq("profiles.warehouse_id", wh)
           .eq("status", "pending")
           .order("work_date")
@@ -346,6 +346,8 @@ function FixTab({ wh, hidden, setMsg, setCount }: { wh: string; hidden: boolean;
                 <p className="text-[14px] text-muted">เหตุผล: {c.reason}</p>
                 {c.user_id === me.id ? (
                   <p className="mt-2 text-[14px] text-muted">คำขอของคุณเอง ต้องให้คนอื่นอนุมัติ</p>
+                ) : !canApproveRole(me.role, c.profiles.role ?? "employee", true) ? (
+                  <p className="mt-2 text-[14px] text-muted">รอระดับที่สูงกว่าอนุมัติ (ผู้จัดการแผนกขึ้นไป)</p>
                 ) : (
                   <div className="mt-3 flex gap-2">
                     <Button size="sm" variant="secondary" className="flex-1" disabled={busy} onClick={() => setReject(c)}>ไม่อนุมัติ</Button>

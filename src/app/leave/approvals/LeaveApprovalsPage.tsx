@@ -13,11 +13,11 @@ import { RejectModal } from "@/components/attendance/RejectModal";
 import { EMP_COLS, empName, type Emp } from "@/components/shifts/common";
 import { errText, fetchAll, sb } from "@/lib/supabase";
 import { useOptions, labelOf } from "@/lib/useOptions";
-import { isGlobal } from "@/lib/types";
+import { ROLE_RANK, canApproveRole, isGlobal, type AppRole } from "@/lib/types";
 import { addDays, todayIso } from "@/lib/shifts";
 import { type LeaveApproval, type LeaveBalance, type LeaveRequest } from "@/lib/attendance";
 
-type Row = LeaveRequest & { profiles: { employee_code: string; first_name_th: string; last_name_th: string | null; nickname: string | null; position: string | null } };
+type Row = LeaveRequest & { profiles: { employee_code: string; first_name_th: string; last_name_th: string | null; nickname: string | null; position: string | null; warehouse_id?: string | null; role?: AppRole } };
 type Msg = { tone: "success" | "error"; text: string };
 
 export default function LeaveApprovalsPage() {
@@ -44,7 +44,7 @@ export default function LeaveApprovalsPage() {
       return;
     }
     try {
-      const sel = "*, profiles!inner(employee_code, first_name_th, last_name_th, nickname, position, warehouse_id)";
+      const sel = "*, profiles!inner(employee_code, first_name_th, last_name_th, nickname, position, warehouse_id, role)";
       const list = await fetchAll<Row>((f, t) => {
         let q = sb().from("leave_requests").select(sel);
         if (wh) q = q.eq("profiles.warehouse_id", wh);
@@ -87,7 +87,12 @@ export default function LeaveApprovalsPage() {
     load();
   }
 
-  const canAct = (r: Row) => r.user_id !== me.id && !(r.status === "pending" && r.steps_done >= 1 && !global);
+  // อนุมัติระดับถัดไป (ตรงกับ can_approve_user ในฐานข้อมูล) · ขั้นที่ 2 ต้องเป็นผู้จัดการแผนกขึ้นไป
+  const mgr = ROLE_RANK[me.role] >= 4;
+  const levelOk = (r: Row) => canApproveRole(me.role, r.profiles.role ?? "employee", global || myWarehouseIds.includes(r.profiles.warehouse_id ?? ""));
+  const canAct = (r: Row) => r.user_id !== me.id && levelOk(r) && !(r.status === "pending" && r.steps_done >= 1 && !mgr);
+  const waitText = (r: Row) =>
+    r.user_id === me.id ? "ใบลาของคุณเอง ต้องให้คนอื่นอนุมัติ" : !levelOk(r) ? "รอระดับที่สูงกว่าอนุมัติ (ผู้จัดการแผนกขึ้นไป)" : "รอผู้จัดการแผนกขึ้นไปอนุมัติขั้นที่ 2";
 
   return (
     <AppShell title="อนุมัติใบลา" minRole="supervisor" wide>
@@ -153,11 +158,11 @@ export default function LeaveApprovalsPage() {
                             {r.status === "cancel_requested" ? "ไม่ให้ยกเลิก" : "ไม่อนุมัติ"}
                           </Button>
                           <Button size="sm" className="flex-1" disabled={busy} onClick={() => decide(r, true)}>
-                            {r.status === "cancel_requested" ? "อนุมัติการยกเลิก" : r.steps_required > 1 && r.steps_done === 0 && !global ? "อนุมัติ (ส่งต่อผู้บริหาร)" : "อนุมัติ"}
+                            {r.status === "cancel_requested" ? "อนุมัติการยกเลิก" : r.steps_required > 1 && r.steps_done === 0 && !mgr ? "อนุมัติ (ส่งต่อผู้จัดการ)" : "อนุมัติ"}
                           </Button>
                         </div>
                       ) : (
-                        <p className="text-[14px] text-muted">{r.user_id === me.id ? "ใบลาของคุณเอง ต้องให้คนอื่นอนุมัติ" : "รอผู้บริหารอนุมัติ"}</p>
+                        <p className="text-[14px] text-muted">{waitText(r)}</p>
                       ))}
                   </>
                 }

@@ -20,7 +20,7 @@ export const PREVIEW_USERS: Profile[] = [
 ];
 
 export function previewProfile(role: AppRole): Profile {
-  return { ...base, id: "preview-me", employee_code: "DEMO01", first_name_th: "ผู้ใช้", last_name_th: "ตัวอย่าง", nickname: "เดโม", position: "ตัวอย่าง", warehouse_id: role === "executive" || role === "super_admin" ? null : W5, role, must_change_password: false };
+  return { ...base, id: "preview-me", employee_code: "DEMO01", first_name_th: "ผู้ใช้", last_name_th: "ตัวอย่าง", nickname: "เดโม", position: "ตัวอย่าง", warehouse_id: ["division_manager", "deputy_gm", "gm", "executive", "super_admin"].includes(role) ? null : W5, role, must_change_password: false };
 }
 
 export const PREVIEW_OPTIONS: DropdownOption[] = [
@@ -99,7 +99,7 @@ export const PREVIEW_HOLIDAYS = [
 
 // ตารางกะสมมติ: หมุนกะเช้า/ดึก หยุดวันอาทิตย์
 export function previewShifts(dates: string[]) {
-  const ids = ["p1", "p2", "preview-me"];
+  const ids = ["p1", "p2", "preview-me", "preview-lead"];
   return ids.flatMap((id, i) =>
     dates.map((d, j) => {
       const dow = new Date(d + "T00:00:00Z").getUTCDay();
@@ -111,7 +111,10 @@ export function previewShifts(dates: string[]) {
 // พนักงานในตารางกะของโหมดดูดีไซน์ (รวมผู้ใช้เดโม)
 export function previewRoster(wh: string) {
   const list = previewEmployees().filter((e) => e.warehouse_id === wh);
-  if (wh === W5) list.push({ ...list[0], id: "preview-me", employee_code: "DEMO01", first_name_th: "ผู้ใช้", nickname: "เดโม", position: "RT" });
+  if (wh === W5) {
+    list.push({ ...list[0], id: "preview-me", employee_code: "DEMO01", first_name_th: "ผู้ใช้", nickname: "เดโม", position: "RT" });
+    list.push({ ...list[0], id: "preview-lead", employee_code: "DEMO05", first_name_th: "หัวหน้า", nickname: "ห้า", position: "Supervisor" });
+  }
   return list;
 }
 

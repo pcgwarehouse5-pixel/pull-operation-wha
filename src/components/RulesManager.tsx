@@ -16,7 +16,7 @@ import { todayIso } from "@/lib/shifts";
 type Setting = { key: string; effective_from: string; value: unknown; note: string | null; created_at: string };
 type Kind = "number" | "quota" | "types" | "rates" | "steps" | "dilrules" | "date";
 type Opt = { value: string; label: string };
-type Meta = { key: string; label: string; unit?: string; hint: string; kind: Kind; min?: number; max?: number; source?: "leave" | "employment"; group: string };
+type Meta = { key: string; label: string; unit?: string; hint: string; kind: Kind; min?: number; max?: number; source?: "leave" | "employment" | "position"; group: string };
 type Rates = Record<string, { workday?: number; holiday_normal?: number; holiday_ot?: number }>;
 type DilRules = { absent?: boolean; late?: boolean; no_punch?: boolean; leave_types?: string[] };
 
@@ -28,7 +28,7 @@ const META: Meta[] = [
   { group: "ลงเวลา", key: "attendance.no_out_after_hours", label: "เลยเวลาเลิกกะกี่ชั่วโมงจึงนับว่าลืมออก", unit: "ชั่วโมง", hint: "", kind: "number", min: 1, max: 12 },
   { group: "ลงเวลา", key: "attendance.max_gps_accuracy_m", label: "ความคลาดเคลื่อน GPS สูงสุดที่ยอมรับ", unit: "เมตร", hint: "รัศมีของแต่ละคลังตั้งในหน้า \"คลัง\"", kind: "number", min: 20, max: 1000 },
   { group: "ลงเวลา", key: "attendance.correction_max_days", label: "ขอแก้เวลาย้อนหลังได้ไม่เกิน", unit: "วัน", hint: "", kind: "number", min: 1, max: 90 },
-  { group: "ลา", key: "leave.exec_approval_min_days", label: "ลาตั้งแต่กี่วันต้องให้ผู้บริหารอนุมัติต่อ", unit: "วัน", hint: "ต่ำกว่านี้ หัวหน้างาน/แอดมินคลังอนุมัติจบได้เลย", kind: "number", min: 1, max: 60 },
+  { group: "ลา", key: "leave.exec_approval_min_days", label: "ลาตั้งแต่กี่วันต้องให้ผู้จัดการแผนกขึ้นไปอนุมัติต่อ", unit: "วัน", hint: "ต่ำกว่านี้ หัวหน้างาน/แอดมินคลังอนุมัติจบได้เลย", kind: "number", min: 1, max: 60 },
   { group: "ลา", key: "leave.quota", label: "โควตาวันลาต่อปี (ค่ามาตรฐาน)", hint: `เว้นว่าง = ไม่จำกัด · ${LAW}`, kind: "quota", source: "leave" },
   { group: "ลา", key: "leave.attachment_types", label: "ประเภทลาที่แนบเอกสารได้", hint: "ใบรับรองแพทย์เป็นข้อมูลสุขภาพ (ข้อมูลอ่อนไหวตาม PDPA) เปิดเฉพาะที่จำเป็น", kind: "types", source: "leave" },
   { group: "OT", key: "ot.rates", label: "อัตรา OT แยกประเภทพนักงาน (เท่าของค่าจ้างต่อชั่วโมง)", hint: `"ค่าเริ่มต้น" ใช้กับประเภทที่ไม่ได้ตั้งเฉพาะ · ${LAW}`, kind: "rates", source: "employment" },
@@ -43,6 +43,7 @@ const META: Meta[] = [
   { group: "เบี้ยขยัน/ค่าเดินทาง", key: "diligence.rules", label: "เหตุที่ทำให้ไม่ได้เบี้ยขยัน", hint: "", kind: "dilrules", source: "leave" },
   { group: "เบี้ยขยัน/ค่าเดินทาง", key: "diligence.employment_types", label: "ประเภทพนักงานที่ได้เบี้ยขยัน", hint: "ไม่เลือกเลย = ทุกประเภท", kind: "types", source: "employment" },
   { group: "เบี้ยขยัน/ค่าเดินทาง", key: "travel.rate_per_day", label: "ค่าเดินทางต่อวันที่มาทำงาน", unit: "บาท", hint: "เฉพาะพนักงานที่ติ๊ก \"ได้ค่าเดินทาง\" ในทะเบียน", kind: "number", min: 0, max: 5000 },
+  { group: "ตารางกะ", key: "shifts.lead_positions", label: "ตำแหน่งที่อยู่ในตารางกะหัวหน้าคลัง", hint: "คนตำแหน่งนี้ (และผู้จัดการแผนก) แยกไปอยู่ตารางกะหัวหน้าคลัง ซึ่งแก้ได้เฉพาะผู้จัดการ", kind: "types", source: "position" },
   { group: "Pull Operation", key: "pull.morning_from_hour", label: "กะเช้า: เวลาเข้างานตั้งแต่", unit: "นาฬิกา", hint: "รหัสกะที่เริ่มงานตั้งแต่เวลานี้ ถึงเวลาด้านล่าง นับเป็นกะเช้า (ใช้แยกคนในคลังกลางตามกะ)", kind: "number", min: 0, max: 23 },
   { group: "Pull Operation", key: "pull.morning_to_hour", label: "กะเช้า: เวลาเข้างานถึง (รวมทั้งชั่วโมงนั้น)", unit: "นาฬิกา", hint: "เช่น 13 = เข้างานถึง 13:59 ยังเป็นกะเช้า หลังจากนั้นเป็นกะดึก", kind: "number", min: 0, max: 23 },
   { group: "แจ้งเตือน", key: "notify.missing_in_minutes", label: "กะเริ่มแล้วกี่นาทียังไม่ลงเวลา จึงแจ้งเตือนพนักงาน", unit: "นาที", hint: "", kind: "number", min: 5, max: 240 },
@@ -53,9 +54,10 @@ const GROUPS = [...new Set(META.map((m) => m.group))];
 
 export function RulesManager() {
   const { profile: me, demo } = useApp();
-  const opts = useOptions(["leave_type", "employment_type"]);
+  const opts = useOptions(["leave_type", "employment_type", "position"]);
   const leaveTypes: Opt[] = (demo ? demo.PREVIEW_LEAVE_TYPES : (opts.leave_type ?? [])).filter((o) => o.is_active).map((o) => ({ value: o.value, label: o.label }));
   const empTypes: Opt[] = (opts.employment_type ?? []).filter((o) => o.is_active).map((o) => ({ value: o.value, label: o.label }));
+  const positions: Opt[] = (opts.position ?? []).filter((o) => o.is_active).map((o) => ({ value: o.value, label: o.label }));
   const [rows, setRows] = useState<Setting[] | null>(null);
   const [edit, setEdit] = useState<Meta | null>(null);
   const [group, setGroup] = useState(GROUPS[0]);
@@ -85,7 +87,7 @@ export function RulesManager() {
     load();
   }, [load]);
 
-  const optsOf = (m: Meta) => (m.source === "employment" ? empTypes : leaveTypes);
+  const optsOf = (m: Meta) => (m.source === "employment" ? empTypes : m.source === "position" ? positions : leaveTypes);
   const labelIn = (list: Opt[], v: string) => (v === "default" ? "ค่าเริ่มต้น" : (list.find((t) => t.value === v)?.label ?? v));
   const show = (m: Meta, v: unknown): string => {
     if (v === undefined || v === null) return m.kind === "date" ? "ยังไม่ตั้ง (ยังไม่เริ่มนับ)" : "-";

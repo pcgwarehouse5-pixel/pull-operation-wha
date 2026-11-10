@@ -1,6 +1,7 @@
 // งานพนักงานที่ต้องใช้สิทธิ์ระบบ: ลาออก/คืนสภาพ (ปิด/เปิดล็อกอิน), นำเข้าเป็นชุด, ลบบัญชีที่สร้างผิด
 // ตรวจสิทธิ์ด้วยฟังก์ชันในฐานข้อมูลในนามผู้เรียกทุกครั้ง แล้วจึงใช้สิทธิ์ระบบทำส่วนที่เหลือ
 import { createEmployeeAccount, getCaller, json, pickEmployeeFields, userClient, writeAudit } from "@/lib/server";
+import { isManagerRole, type AppRole } from "@/lib/types";
 
 const CODE_RE = /^[A-Za-z0-9._-]{1,30}$/;
 const MAX_IMPORT = 1000;
@@ -31,7 +32,7 @@ export async function POST(req: Request) {
 
     // ---------------- ลบบัญชีที่สร้างผิด (เฉพาะผู้ดูแลระบบสูงสุด, บัญชีที่ไม่เคยเข้าใช้งาน) ----------------
     if (body.action === "delete") {
-      if (caller.me.role !== "super_admin") return json({ error: "เฉพาะผู้ดูแลระบบสูงสุดเท่านั้น" }, 403);
+      if (!isManagerRole(caller.me.role as AppRole)) return json({ error: "เฉพาะผู้จัดการหรือผู้ดูแลระบบสูงสุดเท่านั้น" }, 403);
       const userId = String(body.user_id ?? "");
       if (userId === caller.me.id) return json({ error: "ลบบัญชีของตัวเองไม่ได้" }, 400);
       const { data: u, error: ue } = await caller.admin.auth.admin.getUserById(userId);

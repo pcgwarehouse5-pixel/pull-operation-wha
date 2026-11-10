@@ -36,6 +36,7 @@ type Props = {
   applyChanges: (c: Change[], onlyEmpty: boolean, source: string) => void;
   reload: () => Promise<void>;
   setMsg: (m: { tone: "success" | "error" | "warning"; text: string } | null) => void;
+  scope: "staff" | "lead";
 };
 
 const MENU: { key: ToolKey; label: string; desc: string; danger?: boolean }[] = [
@@ -571,7 +572,7 @@ function ClearTool(p: Props & { close: () => void }) {
     if (!confirm(`ยืนยันล้างตารางกะ ${thaiMonthLabel(p.ym)} ของ${p.whName} ทั้งหมด?`)) return;
     if (demo) return p.close();
     setBusy(true);
-    const { data, error } = await sb().rpc("clear_schedule_month", { p_wh: p.wh, p_month: p.dates[0], p_reason: reason.trim() });
+    const { data, error } = await sb().rpc("clear_schedule_scope", { p_wh: p.wh, p_month: p.dates[0], p_reason: reason.trim(), p_scope: p.scope });
     setBusy(false);
     if (error) return setErr(errText(error));
     await p.reload();

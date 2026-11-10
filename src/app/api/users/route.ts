@@ -1,7 +1,7 @@
 // จัดการบัญชีผู้ใช้: สร้างใหม่ และรีเซ็ตรหัสผ่านกลับเป็นค่าเริ่มต้น
 // ใช้กุญแจระดับระบบเฉพาะฝั่งเซิร์ฟเวอร์ และตรวจสิทธิ์ด้วยฟังก์ชันในฐานข้อมูลทุกครั้ง
 import { createEmployeeAccount, defaultPassword, getCaller, json, pickEmployeeFields, userClient, writeAudit } from "@/lib/server";
-import { assignableRoles, type AppRole } from "@/lib/types";
+import { assignableRoles, isGlobal, type AppRole } from "@/lib/types";
 
 const CODE_RE = /^[A-Za-z0-9._-]{1,30}$/;
 
@@ -39,7 +39,7 @@ export async function POST(req: Request) {
       if (!CODE_RE.test(code)) return json({ error: "รหัสพนักงานใช้ได้เฉพาะ A-Z a-z 0-9 . _ - (ไม่เกิน 30 ตัว)" }, 400);
       if (!firstName) return json({ error: "กรุณาใส่ชื่อ" }, 400);
       if (!assignableRoles(caller.me.role as AppRole).includes(role)) return json({ error: "คุณกำหนดบทบาทนี้ไม่ได้" }, 403);
-      if (!warehouseId && role !== "executive" && role !== "super_admin") return json({ error: "กรุณาเลือกคลัง" }, 400);
+      if (!warehouseId && !isGlobal(role)) return json({ error: "กรุณาเลือกคลัง" }, 400);
       if (warehouseId) {
         const { data: can, error } = await asUser.rpc("can_manage_warehouse", { p_wh: warehouseId });
         if (error) return json({ error: error.message }, 500);

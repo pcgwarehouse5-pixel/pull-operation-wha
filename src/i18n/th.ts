@@ -55,8 +55,14 @@ export const th = {
   "role.employee": "พนักงาน",
   "role.supervisor": "หัวหน้างาน",
   "role.admin": "แอดมินคลัง",
+  "role.dept_manager": "ผู้จัดการแผนก",
+  "role.division_manager": "ผู้จัดการฝ่าย",
+  "role.deputy_gm": "รองผู้จัดการทั่วไป",
+  "role.gm": "ผู้จัดการทั่วไป",
   "role.executive": "ผู้บริหาร",
   "role.super_admin": "ผู้ดูแลระบบสูงสุด",
+  "guard.title": "ไม่ต้องลงเวลา",
+  "guard.notice": "ตำแหน่งของคุณ (ผู้จัดการฝ่ายขึ้นไป) ไม่ต้องลงเวลา ไม่อยู่ในตารางกะ ไม่มี OT และไม่ใช้ระบบลาในแอป",
 
   // ---------- เมนู ----------
   "nav.group.mine": "ของฉัน",
@@ -81,6 +87,8 @@ export const th = {
   "nav.employees.desc": "ข้อมูล ทักษะ ลาออก นำเข้า Excel",
   "nav.shifts": "ตารางกะ",
   "nav.shifts.desc": "วางกะ ประกาศ นำเข้า/ส่งออก",
+  "nav.shifts-leads": "ตารางกะหัวหน้าคลัง",
+  "nav.shifts-leads.desc": "แยกจากตารางกะปกติ แก้ได้เฉพาะผู้จัดการ",
   "nav.team-attendance": "ติดตามการเข้างาน",
   "nav.team-attendance.short": "การเข้างาน",
   "nav.team-attendance.desc": "มา/สาย/ขาด รายวัน อนุมัติแก้เวลา",

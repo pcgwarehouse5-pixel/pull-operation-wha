@@ -15,6 +15,10 @@ const ROLE_TONE: Record<AppRole, "slate" | "blue" | "green" | "amber" | "red"> =
   employee: "slate",
   supervisor: "blue",
   admin: "green",
+  dept_manager: "amber",
+  division_manager: "amber",
+  deputy_gm: "amber",
+  gm: "amber",
   executive: "amber",
   super_admin: "red",
 };

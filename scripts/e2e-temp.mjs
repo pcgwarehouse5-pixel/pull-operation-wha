@@ -15,6 +15,8 @@ const USERS = [
   { code: "ztest-emp", first: "ทดสอบพนักงาน", role: "employee", must: true },
   { code: "ztest-sup", first: "ทดสอบหัวหน้า", role: "supervisor", must: false },
   { code: "ztest-emp2", first: "ทดสอบพนักงานสอง", role: "employee", must: false },
+  { code: "ztest-dm", first: "ทดสอบผู้จัดการแผนก", role: "dept_manager", must: false },
+  { code: "ztest-lead", first: "ทดสอบหัวหน้าคลัง", role: "employee", must: false, position: "Supervisor" },
 ];
 
 async function findUser(code) {
@@ -45,7 +47,7 @@ if (cmd === "passwords") {
   for (const u of USERS) {
     const { data, error } = await admin.auth.admin.createUser({ email: `${u.code}@${domain}`, password: e.DEFAULT_USER_PASSWORD, email_confirm: true });
     if (error) throw error;
-    const { error: pe } = await admin.from("profiles").insert({ id: data.user.id, employee_code: u.code, first_name_th: u.first, role: u.role, warehouse_id: wh.id, must_change_password: u.must });
+    const { error: pe } = await admin.from("profiles").insert({ id: data.user.id, employee_code: u.code, first_name_th: u.first, role: u.role, warehouse_id: wh.id, must_change_password: u.must, position: u.position ?? null });
     if (pe) throw pe;
   }
   await setTestPasswords();

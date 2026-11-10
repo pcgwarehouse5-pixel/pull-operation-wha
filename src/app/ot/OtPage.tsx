@@ -10,7 +10,7 @@ import { RejectModal } from "@/components/attendance/RejectModal";
 import { empName } from "@/components/shifts/common";
 import { errText, sb } from "@/lib/supabase";
 import { shortDay, thaiTime } from "@/lib/format";
-import { isGlobal } from "@/lib/types";
+import { canApproveRole, isGlobal, type AppRole } from "@/lib/types";
 import { addDays, todayIso } from "@/lib/shifts";
 import { APPROVAL, DAY_TYPE, fmtHours, otBuckets, rateLabel, type TeamOtRow } from "@/lib/ot";
 
@@ -26,6 +26,7 @@ export default function OtPage() {
   const [filter, setFilter] = useState<Filter>("waiting");
   const [rows, setRows] = useState<TeamOtRow[] | null>(null);
   const [sel, setSel] = useState<Set<string>>(new Set());
+  const [roles, setRoles] = useState<Record<string, AppRole>>({});
   const [reject, setReject] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ tone: "success" | "error"; text: string } | null>(null);
@@ -34,6 +35,8 @@ export default function OtPage() {
     setRows(null);
     setSel(new Set());
     if (demo) return setRows(demo.previewOt(from) as TeamOtRow[]);
+    // บทบาทของคนในคลัง (อนุมัติ OT ได้เฉพาะระดับที่ต่ำกว่า เช่น OT ของหัวหน้างานต้องให้ผู้จัดการแผนกอนุมัติ)
+    sb().from("profiles").select("id, role").eq("warehouse_id", wh).then(({ data: ps }) => setRoles(Object.fromEntries((ps ?? []).map((p: { id: string; role: AppRole }) => [p.id, p.role]))));
     const { data, error } = await sb().rpc("warehouse_ot", { p_wh: wh, p_from: from, p_to: to });
     if (error) setMsg({ tone: "error", text: errText(error) });
     setRows((data ?? []) as TeamOtRow[]);
@@ -46,7 +49,8 @@ export default function OtPage() {
 
   const waitingRows = (rows ?? []).filter((r) => r.approval === "pending" || r.approval === "changed");
   const shown = filter === "all" ? (rows ?? []) : filter === "waiting" ? waitingRows : (rows ?? []).filter((r) => r.approval === filter);
-  const selectable = shown.filter((r) => r.user_id !== me.id);
+  const canDecide = (r: TeamOtRow) => r.user_id !== me.id && canApproveRole(me.role, roles[r.user_id] ?? "employee", true);
+  const selectable = shown.filter(canDecide);
   const approvedSum = otBuckets((rows ?? []).filter((r) => r.approval === "approved"));
 
   function toggle(r: TeamOtRow) {
@@ -148,7 +152,7 @@ export default function OtPage() {
           )}
           <ul className="grid gap-2 lg:grid-cols-2">
             {shown.map((r) => {
-              const mine = r.user_id === me.id;
+              const mine = !canDecide(r);
               const on = sel.has(key(r));
               return (
                 <li key={key(r)}>

@@ -9,7 +9,7 @@ import { Icon } from "@/components/Icon";
 import { Puinun } from "@/components/Puinun";
 import { navFor, type NavItem } from "@/lib/nav";
 import { sb } from "@/lib/supabase";
-import { isGlobal, isSupervisorUp } from "@/lib/types";
+import { isGlobal, isSupervisorUp, noTimekeeping } from "@/lib/types";
 import { todayIso } from "@/lib/shifts";
 import type { AttendanceRow } from "@/lib/attendance";
 import { useI18n } from "@/i18n";
@@ -22,6 +22,7 @@ export default function HomePage() {
   const [row, setRow] = useState<AttendanceRow | null | undefined>(undefined);
   const [pending, setPending] = useState<{ leave: number; fix: number }>({ leave: 0, fix: 0 });
   const boss = isSupervisorUp(profile.role);
+  const timekeep = !noTimekeeping(profile.role); // ผู้จัดการฝ่ายขึ้นไปไม่ลงเวลา
   const mine = warehouses.filter((w) => myWarehouseIds.includes(w.id));
   const items = navFor(profile.role).flatMap((g) => g.items).filter((i) => i.key !== "home" && i.key !== "attendance");
 
@@ -33,9 +34,10 @@ export default function HomePage() {
       return;
     }
     let live = true;
-    sb()
-      .rpc("my_attendance", { p_from: today, p_to: today })
-      .then(({ data }) => live && setRow(((data ?? []) as AttendanceRow[])[0] ?? null));
+    if (timekeep)
+      sb()
+        .rpc("my_attendance", { p_from: today, p_to: today })
+        .then(({ data }) => live && setRow(((data ?? []) as AttendanceRow[])[0] ?? null));
     if (boss) {
       Promise.all([
         sb().from("leave_requests").select("id", { count: "exact", head: true }).in("status", ["pending", "cancel_requested"]).neq("user_id", profile.id),
@@ -45,7 +47,7 @@ export default function HomePage() {
     return () => {
       live = false;
     };
-  }, [demo, today, profile.id, boss]);
+  }, [demo, today, profile.id, boss, timekeep]);
 
   const clockedIn = !!row?.first_in && !row?.last_out;
   const name = profile.nickname || profile.first_name_th;
@@ -60,7 +62,7 @@ export default function HomePage() {
           <div className="min-w-0 flex-1 pt-4 pb-4">
             <p className="text-[14px] text-muted">{t("home.today", { date: fmt.day(today) })}</p>
             <h1 className="text-[26px] leading-tight font-bold text-brand">{t("home.hello", { name })}</h1>
-            <div className="mt-2.5 rounded-2xl bg-white/80 px-3 py-2">
+            {timekeep && <div className="mt-2.5 rounded-2xl bg-white/80 px-3 py-2">
               <p className="text-[13px] text-muted">{t("home.shiftToday")}</p>
               {row === undefined ? (
                 <p className="h-7" />
@@ -72,10 +74,10 @@ export default function HomePage() {
               ) : (
                 <p className="text-[15px] font-semibold text-ink">{row?.shift_code ?? t("home.noShift")}</p>
               )}
-            </div>
+            </div>}
           </div>
         </div>
-        <div className="px-4 pb-4">
+        {timekeep && <div className="px-4 pb-4">
           <Link
             href="/attendance"
             className={`flex min-h-16 items-center justify-center gap-3 rounded-[18px] border-b-[4px] text-[19px] font-bold text-white transition active:translate-y-[2px] active:border-b-[2px] ${
@@ -86,7 +88,7 @@ export default function HomePage() {
             {clockedIn ? t("home.clockOut") : t("home.clockIn")}
           </Link>
           {clockedIn && row?.first_in && <p className="mt-2 text-center text-[14px] font-semibold text-ok">{t("home.inAt", { t: fmt.time(row.first_in) })}</p>}
-        </div>
+        </div>}
       </section>
 
       {/* งานรอดำเนินการ (หัวหน้างานขึ้นไป) */}

@@ -16,9 +16,14 @@ export type Emp = {
   status: "active" | "resigned";
   exclude_from_shift: boolean;
   warehouse_id: string | null;
+  role?: string;
 };
 
-export const EMP_COLS = "id, employee_code, title, first_name_th, last_name_th, nickname, position, status, exclude_from_shift, warehouse_id";
+export const EMP_COLS = "id, employee_code, title, first_name_th, last_name_th, nickname, position, status, exclude_from_shift, warehouse_id, role";
+
+/** อยู่ในตารางกะหัวหน้าคลังไหม (ตรงกับ public.is_lead ในฐานข้อมูล) */
+export const isLeadEmp = (e: Pick<Emp, "position" | "role">, leadPositions: string[]) =>
+  e.role === "dept_manager" || (!!e.position && leadPositions.includes(e.position));
 
 export const empName = (e: Pick<Emp, "first_name_th" | "nickname">) => (e.nickname ? `${e.first_name_th} (${e.nickname})` : e.first_name_th);
 

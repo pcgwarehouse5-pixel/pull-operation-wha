@@ -1,5 +1,5 @@
 // โหมดดูดีไซน์: ใช้ได้เฉพาะ npm run dev เท่านั้น (เว็บจริงปิดเสมอ)
-// เปิดด้วย ?preview=employee|supervisor|admin|executive|super_admin  ปิดด้วย ?preview=off
+// เปิดด้วย ?preview=employee|supervisor|admin|dept_manager|division_manager|deputy_gm|gm|super_admin  ปิดด้วย ?preview=off
 import type { AppRole } from "./types";
 import { ROLES } from "./types";
 

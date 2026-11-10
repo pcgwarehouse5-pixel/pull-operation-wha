@@ -74,9 +74,9 @@ test("การกำหนดบทบาทเป็นไปตามลำ�
   // หัวหน้างานกำหนดบทบาทไม่ได้เลย
   await assert.rejects(access(U.sup5, U.emp5, "employee", WH5), /ไม่มีสิทธิ์กำหนดบทบาท/);
 
-  // ผู้บริหาร: ตั้งแอดมินได้ทุกคลัง แต่ตั้งผู้บริหารไม่ได้ และแก้ผู้บริหารคนอื่นไม่ได้
+  // ผู้บริหาร (บทบาทเดิม เลิกใช้): ตั้งแอดมินได้ทุกคลัง แต่ตั้งผู้บริหารไม่ได้ และแก้ผู้บริหารคนอื่นไม่ได้
   await access(U.exec, U.emp32, "admin", WH32, [WH5]);
-  await assert.rejects(access(U.exec, U.emp5, "executive", WH5), /กำหนดบทบาทนี้ไม่ได้/);
+  await assert.rejects(access(U.exec, U.emp5, "executive", WH5), /เลิกใช้แล้ว/);
   await assert.rejects(access(U.exec, U.super, "employee", null), /เท่ากับหรือสูงกว่า/);
 
   // ผู้ดูแลระบบสูงสุด: ตั้งผู้บริหารได้ แต่ลดตัวเองคนสุดท้ายไม่ได้

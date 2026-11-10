@@ -56,8 +56,14 @@ export const my: Record<MsgKey, string> = {
   "role.employee": "ဝန်ထမ်း",
   "role.supervisor": "ကြီးကြပ်ရေးမှူး",
   "role.admin": "ဂိုဒေါင် Admin",
+  "role.dept_manager": "ဌာနမန်နေဂျာ",
+  "role.division_manager": "ဌာနကြီးမန်နေဂျာ",
+  "role.deputy_gm": "လက်ထောက်အထွေထွေမန်နေဂျာ",
+  "role.gm": "အထွေထွေမန်နေဂျာ",
   "role.executive": "အမှုဆောင်",
   "role.super_admin": "စနစ်စီမံသူ",
+  "guard.title": "အချိန်မှတ်ရန် မလိုပါ",
+  "guard.notice": "သင့်ရာထူး (ဌာနကြီးမန်နေဂျာနှင့်အထက်) သည် အချိန်မှတ်ရန်မလို၊ အလုပ်ချိန်ဇယားတွင်မပါ၊ OT မရှိ၊ အက်ပ်တွင် ခွင့်စနစ်ကို မသုံးပါ",
 
   // ---------- เมนู ----------
   "nav.group.mine": "ကျွန်ုပ်၏",
@@ -82,6 +88,8 @@ export const my: Record<MsgKey, string> = {
   "nav.employees.desc": "ဝန်ထမ်းအချက်အလက်၊ ကျွမ်းကျင်မှု",
   "nav.shifts": "အလုပ်ချိန်ဇယား",
   "nav.shifts.desc": "အလုပ်ချိန် စီစဉ်ရန်၊ ကြေညာရန်",
+  "nav.shifts-leads": "ဂိုဒေါင်ခေါင်းဆောင် အလုပ်ချိန်ဇယား",
+  "nav.shifts-leads.desc": "မန်နေဂျာသာ ပြင်ဆင်နိုင်သည်",
   "nav.team-attendance": "အလုပ်တက်ရောက်မှု စောင့်ကြည့်ရန်",
   "nav.team-attendance.short": "တက်ရောက်မှု",
   "nav.team-attendance.desc": "ရောက်/နောက်ကျ/ပျက် နေ့စဉ်",

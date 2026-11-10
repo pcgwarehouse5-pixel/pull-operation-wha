@@ -20,7 +20,7 @@ const kinds = async (db, uid) => (await inbox(db, uid)).map((n) => n.kind);
 const shift = (db, user, date, code = "STD1") => db.query(`insert into public.shift_schedules (user_id, work_date, shift_code) values ($1, $2, $3)`, [user, date, code]);
 const jobs = (db, at) => rows(db, `select public.run_jobs_at($1::timestamptz) as r`, [at]).then((r) => r[0].r);
 
-test("แจ้งเตือนใบลา: ผู้อนุมัติได้รับเมื่อยื่น / เจ้าของได้รับผล / ขั้นผู้บริหาร", async () => {
+test("แจ้งเตือนใบลา: ผู้อนุมัติได้รับเมื่อยื่น / เจ้าของได้รับผล / ขั้นที่ 2 ไปที่ผู้จัดการระดับต่ำสุด", async () => {
   const db = await base();
   const id = (await as(db, U.emp5, () => rows(db, `select public.submit_leave('sick', '2026-12-01', '2026-12-01', 'full', 'ไข้') as id`)))[0].id;
   assert.deepEqual(await kinds(db, U.sup5), ["leave_pending"]);
@@ -33,8 +33,8 @@ test("แจ้งเตือนใบลา: ผู้อนุมัติไ
 
   const b = (await as(db, U.emp5, () => rows(db, `select public.submit_leave('vacation', '2026-12-10', '2026-12-14', 'full', 'x') as id`)))[0].id;
   await as(db, U.sup5, () => db.query(`select public.decide_leave($1, true)`, [b]));
-  assert.ok((await inbox(db, U.exec)).some((n) => /รอผู้บริหาร/.test(n.title)));
-  assert.ok((await inbox(db, U.super)).some((n) => /รอผู้บริหาร/.test(n.title)));
+  assert.ok((await inbox(db, U.exec)).some((n) => /รอผู้จัดการอนุมัติ/.test(n.title)), "ระดับผู้จัดการต่ำสุดที่มี (ผู้บริหารเดิม = ระดับ 4)");
+  assert.ok(!(await inbox(db, U.super)).some((n) => /รอผู้จัดการ/.test(n.title)), "ผู้ดูแลระบบสูงสุดไม่ได้รับ เมื่อมีผู้จัดการอยู่แล้ว");
 });
 
 test("แจ้งเตือนคำขอแก้เวลาและประกาศตารางกะ / เห็นเฉพาะของตัวเอง / อ่านแล้ว", async () => {

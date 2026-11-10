@@ -1,28 +1,67 @@
 // ชนิดข้อมูลหลัก (ตรงกับตารางใน supabase/migrations)
 
-export type AppRole = "employee" | "supervisor" | "admin" | "executive" | "super_admin";
+export type AppRole =
+  | "employee"
+  | "supervisor"
+  | "admin"
+  | "dept_manager"
+  | "division_manager"
+  | "deputy_gm"
+  | "gm"
+  | "executive" // ผู้บริหาร: บทบาทเดิม เลิกใช้แล้ว (คงไว้ให้ข้อมูลเก่าอ่านได้)
+  | "super_admin";
 
-export const ROLES: AppRole[] = ["employee", "supervisor", "admin", "executive", "super_admin"];
+// ลำดับบทบาท (ตรงกับฟังก์ชัน role_rank ในฐานข้อมูล)
+export const ROLES: AppRole[] = ["employee", "supervisor", "admin", "dept_manager", "division_manager", "deputy_gm", "gm", "executive", "super_admin"];
 
 export const ROLE_LABEL: Record<AppRole, string> = {
   employee: "พนักงาน",
   supervisor: "หัวหน้างาน",
   admin: "แอดมินคลัง",
-  executive: "ผู้บริหาร",
+  dept_manager: "ผู้จัดการแผนก",
+  division_manager: "ผู้จัดการฝ่าย",
+  deputy_gm: "รองผู้จัดการทั่วไป",
+  gm: "ผู้จัดการทั่วไป",
+  executive: "ผู้บริหาร (เดิม)",
   super_admin: "ผู้ดูแลระบบสูงสุด",
 };
 
-export const ROLE_RANK: Record<AppRole, number> = { employee: 1, supervisor: 2, admin: 3, executive: 4, super_admin: 5 };
+export const ROLE_RANK: Record<AppRole, number> = {
+  employee: 1,
+  supervisor: 2,
+  admin: 3,
+  executive: 4,
+  dept_manager: 4,
+  division_manager: 5,
+  deputy_gm: 6,
+  gm: 7,
+  super_admin: 9,
+};
 
-// บทบาทสูงสุดที่แต่ละคนมอบให้คนอื่นได้ (ตรงกับฟังก์ชัน set_user_access ในฐานข้อมูล)
+// บทบาทสูงสุดที่แต่ละคนมอบให้คนอื่นได้ (ตรงกับฟังก์ชัน set_user_access ในฐานข้อมูล) · ไม่มอบ "ผู้บริหาร" แล้ว
 export function assignableRoles(me: AppRole): AppRole[] {
-  const max = me === "admin" ? 2 : me === "executive" ? 3 : me === "super_admin" ? 5 : 0;
-  return ROLES.filter((r) => ROLE_RANK[r] <= max);
+  const max: Partial<Record<AppRole, number>> = { admin: 2, executive: 3, dept_manager: 3, division_manager: 4, deputy_gm: 5, gm: 6, super_admin: 9 };
+  return ROLES.filter((r) => r !== "executive" && ROLE_RANK[r] <= (max[me] ?? 0));
 }
 
-export const isGlobal = (r: AppRole) => r === "executive" || r === "super_admin";
+/** เห็นและจัดการได้ทุกคลัง (ผู้จัดการทุกระดับ ผู้บริหารเดิม และผู้ดูแลระบบสูงสุด) */
+export const isGlobal = (r: AppRole) => ROLE_RANK[r] >= 4;
+/** แอดมินคลังขึ้นไป */
 export const isManager = (r: AppRole) => ROLE_RANK[r] >= 3;
 export const isSupervisorUp = (r: AppRole) => ROLE_RANK[r] >= 2;
+/** ผู้จัดการ (ทำได้ทุกอย่าง เช่น เพิ่มคลัง แก้ตารางกะหัวหน้าคลัง) */
+export const isManagerRole = (r: AppRole) => ["dept_manager", "division_manager", "deputy_gm", "gm", "super_admin"].includes(r);
+/** ไม่ลงเวลา ไม่อยู่ในตารางกะ ไม่มี OT ไม่ใช้ระบบลา (ผู้จัดการฝ่ายขึ้นไป) */
+export const noTimekeeping = (r: AppRole) => ["division_manager", "deputy_gm", "gm", "executive", "super_admin"].includes(r);
+
+// ระดับต่ำสุดที่อนุมัติคำขอของบทบาทนี้ได้ (ตรงกับ approval_min_rank ในฐานข้อมูล)
+const APPROVAL_MIN: Partial<Record<AppRole, number>> = { employee: 2, supervisor: 4, admin: 4, dept_manager: 5 };
+
+/** ฉันอนุมัติคำขอ (ลา/แก้เวลา/OT) ของคนบทบาทนี้ได้ไหม · sameWarehouse = ฉันดูแลคลังของเขา */
+export function canApproveRole(me: AppRole, target: AppRole, sameWarehouse: boolean): boolean {
+  const r = ROLE_RANK[me];
+  return r >= (APPROVAL_MIN[target] ?? 99) && r > ROLE_RANK[target] && (isGlobal(me) || sameWarehouse);
+}
 
 export type Warehouse = {
   id: string;

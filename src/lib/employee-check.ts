@@ -23,6 +23,9 @@ type Checkable = {
   role?: string;
 };
 
+// บทบาทส่วนกลาง (ไม่ต้องสังกัดคลัง)
+const GLOBAL_ROLES = ["dept_manager", "division_manager", "deputy_gm", "gm", "executive", "super_admin"];
+
 const blank = (v: string | null | undefined) => !v || !v.trim();
 
 /**
@@ -37,7 +40,7 @@ export function missingFields(e: Checkable, skillCount: number): MissingKey[] {
   if (blank(e.salary_code)) out.push("salary_code");
   if (blank(e.position)) out.push("position");
   if (blank(e.employment_type)) out.push("employment_type");
-  if (!e.warehouse_id && e.role !== "super_admin" && e.role !== "executive") out.push("warehouse");
+  if (!e.warehouse_id && !GLOBAL_ROLES.includes(e.role ?? "")) out.push("warehouse");
   if (skillCount <= 0) out.push("skill");
   return out;
 }

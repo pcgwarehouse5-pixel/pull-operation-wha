@@ -20,7 +20,7 @@ function SummaryItem({ label, value, missing }: { label: string; value: string |
     </div>
   );
 }
-import { EMPLOYEE_FLAGS, ROLE_LABEL, ROLE_RANK, fullName, isGlobal, isManager, type Employee, type Skill } from "@/lib/types";
+import { EMPLOYEE_FLAGS, ROLE_LABEL, ROLE_RANK, fullName, isGlobal, isManager, isManagerRole, type Employee, type Skill } from "@/lib/types";
 
 function toValues(e: Employee): EmployeeValues {
   return {
@@ -241,7 +241,7 @@ export default function EmployeePage({ id }: { id: string }) {
               <Button onClick={() => setDialog("reinstate")}>คืนสภาพ (กลับมาทำงาน)</Button>
             )}
             {emp.status === "active" && <Button variant="secondary" onClick={() => setDialog("reset")}>รีเซ็ตรหัสผ่าน</Button>}
-            {me.role === "super_admin" && <Button variant="ghost" className="text-bad" onClick={() => setDialog("delete")}>ลบบัญชีที่สร้างผิด</Button>}
+            {isManagerRole(me.role) && <Button variant="ghost" className="text-bad" onClick={() => setDialog("delete")}>ลบบัญชีที่สร้างผิด</Button>}
           </div>
         </Card>
       )}

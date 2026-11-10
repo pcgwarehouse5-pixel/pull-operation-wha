@@ -186,7 +186,7 @@ test("ใบลา: นับเฉพาะวันทำงานตามต
   await assert.rejects(submit(db, U.emp5, "xyz", "2026-12-07", "2026-12-07"), /ไม่รู้จักประเภท/);
 });
 
-test("ใบลา: ขั้นตอนอนุมัติ 1 ขั้น / ลาตั้งแต่ 4 วันต้องผ่านผู้บริหาร / อนุมัติของตัวเองไม่ได้", async () => {
+test("ใบลา: ขั้นตอนอนุมัติ 1 ขั้น / ลาตั้งแต่ 4 วันต้องผ่านผู้จัดการ / อนุมัติของตัวเองไม่ได้", async () => {
   const db = await base();
   const a = await submit(db, U.emp5, "personal", "2026-12-01", "2026-12-02");
   assert.deepEqual(await leave(db, a), { status: "pending", days: "2.0", steps_required: 1, steps_done: 0, over_quota: false });
@@ -201,7 +201,7 @@ test("ใบลา: ขั้นตอนอนุมัติ 1 ขั้น / 
   const b = await submit(db, U.emp5, "vacation", "2026-12-10", "2026-12-14");
   assert.equal((await leave(db, b)).steps_required, 2);
   assert.equal(await decide(db, U.sup5, b, true), "pending");
-  await assert.rejects(decide(db, U.admin5, b, true), /ต้องให้ผู้บริหารอนุมัติ/);
+  await assert.rejects(decide(db, U.admin5, b, true), /ผู้จัดการแผนกขึ้นไป/);
   assert.equal(await decide(db, U.exec, b, true), "approved");
   // ผู้บริหารอนุมัติขั้นแรกเอง = ครบ
   const c = await submit(db, U.emp5, "vacation", "2026-12-20", "2026-12-24");

@@ -6,13 +6,13 @@ import { PageHelper } from "@/components/Puinun";
 import { useApp } from "@/components/AuthProvider";
 import { Alert, Badge, Button, Card, Empty, Loading, Modal, inputCls } from "@/components/ui";
 import { Icon } from "@/components/Icon";
-import { EMP_COLS, empName, ShiftChip, type Emp, type Holiday } from "@/components/shifts/common";
+import { EMP_COLS, empName, isLeadEmp, ShiftChip, type Emp, type Holiday } from "@/components/shifts/common";
 import { ShiftTools, type ToolKey } from "@/components/shifts/ShiftTools";
 import { ExcelGrid, GridHelp, type Group } from "@/components/shifts/ExcelGrid";
 import { errText, fetchAll, sb } from "@/lib/supabase";
 import { useOptions } from "@/lib/useOptions";
 import { thaiDateTime } from "@/lib/format";
-import { isGlobal } from "@/lib/types";
+import { isGlobal, isManagerRole } from "@/lib/types";
 import {
   THAI_DAYS_SHORT, addMonths, cellOf, currentMonth, mergeGrid, monthDates, shiftDef, shiftTimeText, stage, thaiMonthLabel,
   toRows, todayIso, weekday, type Cell, type Change, type Grid, type ShiftDef,
@@ -25,8 +25,13 @@ type Brush = { code: string | null; holiday_work: Cell["holiday_work"] };
 const HW_LABEL = { OFF: "ทำงานวันหยุดประจำสัปดาห์", HOL: "ทำงานวันนักขัตฤกษ์" } as const;
 const WH_KEY = "wha-shifts-wh";
 
-export default function ShiftsPage() {
+// scope "staff" = ตารางกะปกติ (ไม่รวมหัวหน้าคลัง) · "lead" = ตารางกะหัวหน้าคลัง (แก้ได้เฉพาะผู้จัดการ)
+export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lead" }) {
   const { profile: me, warehouses, myWarehouseIds, demo } = useApp();
+  const lead = scope === "lead";
+  const canEdit = !lead || isManagerRole(me.role);
+  const audience = lead ? "หัวหน้าคลัง" : "พนักงาน";
+  const title = lead ? "ตารางกะหัวหน้าคลัง" : "ตารางกะ";
   const opts = useOptions(["shift_type", "position"]);
   const visible = useMemo(
     () => warehouses.filter((w) => w.is_active && (isGlobal(me.role) || myWarehouseIds.includes(w.id))),
@@ -61,6 +66,7 @@ export default function ShiftsPage() {
   const [groupOrder, setGroupOrder] = useState<string[]>([]);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [source, setSource] = useState("manual"); // ที่มาของการแก้ล่าสุด (บันทึกในประวัติ)
+  const [leadPositions, setLeadPositions] = useState<string[]>(["Supervisor"]);
 
   const defs = useMemo(() => new Map((opts.shift_type ?? []).map((o) => [o.value, shiftDef(o)])), [opts.shift_type]);
   const activeDefs = useMemo(() => (opts.shift_type ?? []).filter((o) => o.is_active).map(shiftDef), [opts.shift_type]);
@@ -87,7 +93,7 @@ export default function ShiftsPage() {
         rows = demo.previewShifts(dates).filter((r) => people.some((p) => p.id === r.user_id));
         hol = demo.PREVIEW_HOLIDAYS.filter((h) => h.holiday_date >= from && h.holiday_date < to);
       } else {
-        const [p, r, s, h, go] = await Promise.all([
+        const [p, r, s, h, go, lp] = await Promise.all([
           fetchAll<Emp>((f, t) => sb().from("profiles").select(EMP_COLS).eq("warehouse_id", wh).order("employee_code").range(f, t)),
           fetchAll<Row & { profiles: unknown }>((f, t) =>
             sb()
@@ -100,10 +106,13 @@ export default function ShiftsPage() {
               .order("work_date")
               .range(f, t),
           ),
-          sb().from("schedule_months").select("status, published_at").eq("warehouse_id", wh).eq("month", from).maybeSingle(),
+          sb().from("schedule_months").select("status, published_at").eq("warehouse_id", wh).eq("month", from).eq("scope", scope).maybeSingle(),
           sb().from("holidays").select("holiday_date, name").gte("holiday_date", from).lt("holiday_date", to).order("holiday_date"),
           sb().from("schedule_group_order").select("positions").eq("warehouse_id", wh).maybeSingle(),
+          sb().from("app_settings").select("value").eq("key", "shifts.lead_positions").lte("effective_from", todayIso()).order("effective_from", { ascending: false }).limit(1).maybeSingle(),
         ]);
+        const lpv = (lp.data as { value?: unknown } | null)?.value;
+        setLeadPositions(Array.isArray(lpv) ? (lpv as string[]) : []);
         setGroupOrder(((go.data as { positions?: string[] } | null)?.positions ?? []) as string[]);
         people = p;
         rows = r;
@@ -120,7 +129,7 @@ export default function ShiftsPage() {
       setEmps([]);
       setMsg({ tone: "error", text: errText(e) });
     }
-  }, [wh, ym, dates, demo]);
+  }, [wh, ym, dates, demo, scope]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- โหลดข้อมูลจาก Supabase ตอนเปลี่ยนคลัง/เดือน
@@ -143,6 +152,7 @@ export default function ShiftsPage() {
   const roster = useMemo(
     () =>
       (emps ?? [])
+        .filter((e) => isLeadEmp(e, leadPositions) === lead)
         .filter((e) => (e.status === "active" && !e.exclude_from_shift) || base[e.id])
         .sort(
           (a, b) =>
@@ -150,7 +160,7 @@ export default function ShiftsPage() {
             (a.position ?? "").localeCompare(b.position ?? "", "th") ||
             a.employee_code.localeCompare(b.employee_code),
         ),
-    [emps, base, posOrder],
+    [emps, base, posOrder, leadPositions, lead],
   );
   const positions = useMemo(() => [...new Set(roster.map((e) => e.position ?? ""))].filter(Boolean), [roster]);
   const shown = useMemo(() => {
@@ -234,31 +244,35 @@ export default function ShiftsPage() {
     setBusy(false);
     if (error) return setMsg({ tone: "error", text: errText(error) });
     await load();
-    setMsg({ tone: "success", text: `บันทึกแล้ว ${data} ช่อง${status?.status === "published" ? " (เดือนนี้ประกาศแล้ว พนักงานเห็นทันที)" : ""}` });
+    setMsg({ tone: "success", text: `บันทึกแล้ว ${data} ช่อง${status?.status === "published" ? " (เดือนนี้ประกาศแล้ว ${audience}เห็นทันที)" : ""}` });
   }
 
   async function setPublished(next: "published" | "draft") {
     const text =
       next === "published"
-        ? `ประกาศตารางกะ ${thaiMonthLabel(ym)} ให้พนักงานในคลังเห็น?`
-        : `กลับเป็นร่าง? พนักงานจะไม่เห็นตารางกะ ${thaiMonthLabel(ym)} จนกว่าจะประกาศอีกครั้ง`;
+        ? `ประกาศ${title} ${thaiMonthLabel(ym)} ให้${audience}ในคลังเห็น?`
+        : `กลับเป็นร่าง? ${audience}จะไม่เห็น${title} ${thaiMonthLabel(ym)} จนกว่าจะประกาศอีกครั้ง`;
     if (!confirm(text)) return;
     if (demo) return setStatus({ status: next, published_at: new Date().toISOString() });
     setBusy(true);
-    const { error } = await sb().rpc("set_schedule_status", { p_wh: wh, p_month: dates[0], p_status: next });
+    const { error } = await sb().rpc("set_schedule_status_scope", { p_wh: wh, p_month: dates[0], p_status: next, p_scope: scope });
     setBusy(false);
     if (error) return setMsg({ tone: "error", text: errText(error) });
     setStatus({ status: next, published_at: next === "published" ? new Date().toISOString() : null });
-    setMsg({ tone: "success", text: next === "published" ? "ประกาศแล้ว พนักงานเห็นตารางกะเดือนนี้แล้ว" : "กลับเป็นร่างแล้ว" });
+    setMsg({ tone: "success", text: next === "published" ? `ประกาศแล้ว ${audience}เห็น${title}เดือนนี้แล้ว` : "กลับเป็นร่างแล้ว" });
   }
 
   const published = status?.status === "published";
   const whName = visible.find((w) => w.id === wh)?.name ?? "";
 
   return (
-    <AppShell title="ตารางกะ" minRole="supervisor" wide>
-      <PageHelper pose="point" title="ตารางกะ">
-        ใช้เหมือน Excel: ลากเลือกหลายช่อง พิมพ์เวลา เช่น 8-17 · Ctrl+C / Ctrl+V · ลากจุดมุมเพื่อเติม ตรวจแล้วกด &quot;ประกาศ&quot; พนักงานจึงจะเห็น
+    <AppShell title={title} minRole="supervisor" wide>
+      <PageHelper pose="point" title={title}>
+        {lead
+          ? canEdit
+            ? "ตารางกะของหัวหน้าคลังแยกจากตารางกะปกติ แก้และประกาศได้เฉพาะผู้จัดการ · ใช้เหมือน Excel ตรวจแล้วกด \"ประกาศ\" หัวหน้าคลังจึงจะเห็น"
+            : "ดูอย่างเดียว: ตารางกะหัวหน้าคลังแก้และประกาศได้เฉพาะผู้จัดการแผนกขึ้นไป"
+          : <>ใช้เหมือน Excel: ลากเลือกหลายช่อง พิมพ์เวลา เช่น 8-17 · Ctrl+C / Ctrl+V · ลากจุดมุมเพื่อเติม ตรวจแล้วกด &quot;ประกาศ&quot; พนักงานจึงจะเห็น · หัวหน้าคลังอยู่ในเมนู &quot;ตารางกะหัวหน้าคลัง&quot;</>}
       </PageHelper>
       {!visible.length ? (
         <Empty>คุณยังไม่ได้ดูแลคลังใด</Empty>
@@ -299,8 +313,9 @@ export default function ShiftsPage() {
                 {published ? (
                   <Badge tone="green">ประกาศแล้ว{status?.published_at ? ` · ${thaiDateTime(status.published_at)}` : ""}</Badge>
                 ) : (
-                  <Badge tone="amber">ร่าง · พนักงานยังไม่เห็น</Badge>
+                  <Badge tone="amber">ร่าง · {audience}ยังไม่เห็น</Badge>
                 )}
+                {canEdit ? (
                 <Button
                   size="sm"
                   variant={published ? "secondary" : "primary"}
@@ -308,8 +323,11 @@ export default function ShiftsPage() {
                   title={nChanges ? "บันทึกการแก้ไขก่อน" : ""}
                   onClick={() => setPublished(published ? "draft" : "published")}
                 >
-                  {published ? "กลับเป็นร่าง" : "ประกาศให้พนักงานเห็น"}
+                  {published ? "กลับเป็นร่าง" : `ประกาศให้${audience}เห็น`}
                 </Button>
+                ) : (
+                  <Badge>ดูอย่างเดียว</Badge>
+                )}
               </div>
             </div>
           </Card>
@@ -338,6 +356,7 @@ export default function ShiftsPage() {
               ))}
             </select>
             <input className={`${inputCls} !min-h-11 !w-40 flex-1 sm:!flex-none`} placeholder="ค้นหาชื่อ/รหัส" value={q} onChange={(e) => setQ(e.target.value)} aria-label="ค้นหา" />
+            {canEdit && (
             <div className="flex w-full gap-2 sm:ml-auto sm:w-auto">
                 <Button
                   size="sm"
@@ -355,6 +374,7 @@ export default function ShiftsPage() {
                   <Icon name="tool" size={18} /> เครื่องมือ
                 </Button>
             </div>
+            )}
           </div>
 
           {/* แปรงทาสี: เลือกกะแล้วแตะช่อง */}
@@ -400,7 +420,7 @@ export default function ShiftsPage() {
           {!emps ? (
             <Loading />
           ) : !shown.length ? (
-            <Empty>{roster.length ? "ไม่พบพนักงานตามตัวกรอง" : `ยังไม่มีพนักงานใน${whName}`}</Empty>
+            <Empty>{roster.length ? "ไม่พบพนักงานตามตัวกรอง" : lead ? `ยังไม่มีหัวหน้าคลังใน${whName} (ตั้งตำแหน่งได้ที่หน้าตั้งค่า > ตารางกะ)` : `ยังไม่มีพนักงานใน${whName}`}</Empty>
           ) : view === "month" ? (
             <>
               <ExcelGrid
@@ -412,18 +432,18 @@ export default function ShiftsPage() {
                   else n.add(g);
                   return n;
                 })}
-                onReorder={reorderGroups}
+                onReorder={canEdit ? reorderGroups : () => {}}
                 dates={dates}
                 grid={grid}
                 pending={pending}
                 defs={defs}
                 activeDefs={activeDefs}
                 holidayMap={holidayMap}
-                brush={editing ? brush : null}
-                onChanges={(c) => applyChanges(c)}
+                brush={editing && canEdit ? brush : null}
+                onChanges={(c) => (canEdit ? applyChanges(c) : setMsg({ tone: "warning", text: "ดูอย่างเดียว · ตารางกะหัวหน้าคลังแก้ได้เฉพาะผู้จัดการ" }))}
                 onUndo={undo}
                 onRedo={redo}
-                onOpenCell={(emp, date) => setCellEdit({ emp, date })}
+                onOpenCell={(emp, date) => canEdit && setCellEdit({ emp, date })}
                 onMessage={(tone, text) => setMsg({ tone, text })}
               />
               <GridHelp />
@@ -491,6 +511,7 @@ export default function ShiftsPage() {
               }}
               reload={load}
               setMsg={setMsg}
+              scope={scope}
             />
           )}
         </>

@@ -7,7 +7,7 @@ import { Alert, Badge, Button, Card, Empty, Field, Modal, inputCls } from "@/com
 import { PageHelper } from "@/components/Puinun";
 import { Icon } from "@/components/Icon";
 import { errText, sb } from "@/lib/supabase";
-import type { Warehouse } from "@/lib/types";
+import { isManagerRole, type Warehouse } from "@/lib/types";
 
 type Form = { id?: string; code: string; name: string; address: string; latitude: string; longitude: string; checkin_radius_m: string; color: string; is_active: boolean };
 
@@ -29,7 +29,7 @@ function toForm(w: Warehouse): Form {
 
 export default function WarehousesPage() {
   const { profile, warehouses, reload, preview } = useApp();
-  const canEdit = profile.role === "super_admin";
+  const canEdit = isManagerRole(profile.role);
   const [form, setForm] = useState<Form | null>(null);
 
   return (
