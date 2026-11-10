@@ -179,3 +179,20 @@ test("ลำดับกลุ่มตำแหน่ง: หัวหน้า
   assert.equal((await read(U.admin32)).length, 0);
   await assert.rejects(as(db, U.sup5, () => db.query(`update public.schedule_group_order set positions = '{}'`)), /permission denied/);
 });
+
+test("ลำดับรายชื่อในกลุ่ม: หัวหน้าของคลังจัดได้ เก็บเฉพาะคนในคลัง ไม่ทับลำดับกลุ่ม", async () => {
+  const db = await setup();
+  await as(db, U.sup5, () => db.query(`select public.set_group_order($1, $2)`, [WH5, ["Checker", "RT"]]));
+  // ส่งคนคลังอื่นและคนซ้ำมาด้วย → ตัดทิ้ง เหลือเฉพาะคนคลัง 5 ตามลำดับ
+  await as(db, U.sup5, () => db.query(`select public.set_member_order($1, $2)`, [WH5, [U.emp5, U.emp32, U.sup5, U.emp5]]));
+  const read = (uid) => as(db, uid, () => rows(db, `select positions, members from public.schedule_group_order where warehouse_id = $1`, [WH5]));
+  assert.deepEqual((await read(U.admin5))[0], { positions: ["Checker", "RT"], members: [U.emp5, U.sup5] });
+  await as(db, U.admin5, () => db.query(`select public.set_member_order($1, $2)`, [WH5, [U.sup5, U.emp5]]));
+  assert.deepEqual((await read(U.sup5))[0].members, [U.sup5, U.emp5]);
+  assert.deepEqual((await read(U.sup5))[0].positions, ["Checker", "RT"], "ลำดับกลุ่มยังอยู่");
+  await assert.rejects(as(db, U.emp5, () => db.query(`select public.set_member_order($1, '{}')`, [WH5])), /ไม่มีสิทธิ์/);
+  await assert.rejects(as(db, U.admin32, () => db.query(`select public.set_member_order($1, '{}')`, [WH5])), /ไม่มีสิทธิ์/);
+  // คลังที่ยังไม่มีแถว: สร้างใหม่ได้
+  await as(db, U.admin32, () => db.query(`select public.set_member_order($1, $2)`, [WH32, [U.emp32]]));
+  assert.deepEqual((await as(db, U.admin32, () => rows(db, `select positions, members from public.schedule_group_order where warehouse_id = $1`, [WH32])))[0], { positions: [], members: [U.emp32] });
+});

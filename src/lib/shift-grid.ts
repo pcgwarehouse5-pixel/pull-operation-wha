@@ -126,3 +126,29 @@ export function moveTarget(src: Range, dr: number, dc: number, rows: number, col
   const c0 = Math.max(0, Math.min(cols - w, src.c0 + dc));
   return { r0, c0, r1: r0 + h - 1, c1: c0 + w - 1 };
 }
+
+// ---------- ลำดับรายชื่อในกลุ่ม (ลากชื่อขึ้น/ลง) ----------
+/** ย้าย id ไปไว้ตำแหน่งของ over: ลากลง = ไปอยู่หลัง over · ลากขึ้น = ไปอยู่ก่อน over */
+export function moveItem(list: string[], id: string, over: string): string[] {
+  const from = list.indexOf(id);
+  const to = list.indexOf(over);
+  if (from < 0 || to < 0 || from === to) return list;
+  const out = list.filter((x) => x !== id);
+  out.splice(to, 0, id);
+  return out;
+}
+
+/** เรียงคนในกลุ่มตามลำดับที่บันทึกไว้ คนที่ไม่อยู่ในรายการคงลำดับเดิมต่อท้าย */
+export function sortByMembers<T extends { id: string }>(list: T[], members: string[]): T[] {
+  const at = new Map(members.map((id, i) => [id, i]));
+  return list
+    .map((e, i) => ({ e, k: at.get(e.id) ?? members.length + i }))
+    .sort((a, b) => a.k - b.k)
+    .map((x) => x.e);
+}
+
+/** ลำดับใหม่ทั้งคลังหลังจัดกลุ่มหนึ่ง: คนในกลุ่มนี้ตามลำดับใหม่ ต่อด้วยคนอื่นตามลำดับเดิม */
+export function mergeMembers(members: string[], groupIds: string[]): string[] {
+  const inGroup = new Set(groupIds);
+  return [...groupIds, ...members.filter((id) => !inGroup.has(id))];
+}

@@ -84,3 +84,14 @@ test("ลากย้าย: ไม่ล้นขอบตาราง", () => 
   assert.deepEqual(moveTarget(norm({ r: 0, c: 0 }, { r: 1, c: 2 }), 20, 40, 10, 31), { r0: 8, c0: 28, r1: 9, c1: 30 });
   assert.deepEqual(moveTarget(norm({ r: 2, c: 2 }, { r: 2, c: 2 }), -5, -5, 10, 31), { r0: 0, c0: 0, r1: 0, c1: 0 });
 });
+
+test("ลากเรียงรายชื่อในกลุ่ม: ลงไปอยู่หลัง / ขึ้นไปอยู่ก่อน / เรียงตามที่บันทึก", async () => {
+  const { moveItem, sortByMembers, mergeMembers } = await import("../src/lib/shift-grid.ts");
+  assert.deepEqual(moveItem(["a", "b", "c", "d"], "a", "c"), ["b", "c", "a", "d"]);
+  assert.deepEqual(moveItem(["a", "b", "c", "d"], "d", "b"), ["a", "d", "b", "c"]);
+  assert.deepEqual(moveItem(["a", "b"], "a", "a"), ["a", "b"]);
+  assert.deepEqual(moveItem(["a", "b"], "x", "a"), ["a", "b"]);
+  const emps = [{ id: "e1" }, { id: "e2" }, { id: "e3" }, { id: "e4" }];
+  assert.deepEqual(sortByMembers(emps, ["e3", "e1"]).map((e) => e.id), ["e3", "e1", "e2", "e4"], "คนใหม่ต่อท้ายตามลำดับเดิม");
+  assert.deepEqual(mergeMembers(["x", "e1", "y", "e2"], ["e2", "e1"]), ["e2", "e1", "x", "y"]);
+});

@@ -2,14 +2,14 @@
 
 // ตารางกะแบบ Excel: ลากเลือก / Shift+คลิก / ลูกศร / พิมพ์เวลา / Ctrl+C Ctrl+X Ctrl+V (วางจาก Excel ได้) /
 // ลากจุดมุมเพื่อเติม / ลากขอบเพื่อย้าย (Ctrl = คัดลอก) / Delete / Ctrl+Z Ctrl+Y / คลิกขวา
-// กลุ่มตามตำแหน่ง: พับ/กาง และลากหัวกลุ่มเพื่อเรียงลำดับ
+// กลุ่มตามตำแหน่ง: พับ/กาง และลากหัวกลุ่มเพื่อเรียงลำดับ · ลากจุด ⋮⋮ หน้าชื่อเพื่อเรียงคนในกลุ่ม (ใช้ได้ทั้งเมาส์และนิ้ว)
 // บนจอสัมผัส: แตะช่องเพื่อเลือกกะจากรายการ (ลากคลุมช่วงชนกับการเลื่อนจอ)
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { empName, type Emp } from "./common";
 import { Icon } from "../Icon";
 import { THAI_DAYS_SHORT, keyOf, weekday, type Cell, type Change, type Grid, type ShiftDef } from "@/lib/shifts";
 import {
-  cellCopyText, cellLines, fillPlan, fromTsv, inRange, moveTarget, norm, parseCellText, pastePlan, size, toTsv, type Pos, type Range,
+  cellCopyText, cellLines, fillPlan, fromTsv, inRange, moveItem, moveTarget, norm, parseCellText, pastePlan, size, toTsv, type Pos, type Range,
 } from "@/lib/shift-grid";
 
 export type Group = { position: string; emps: Emp[] };
@@ -19,6 +19,7 @@ type Props = {
   collapsed: Set<string>;
   onToggle: (position: string) => void;
   onReorder: (positions: string[]) => void;
+  onReorderEmps?: (position: string, ids: string[]) => void; // ไม่ส่ง = เรียงรายชื่อไม่ได้ (ดูอย่างเดียว)
   dates: string[];
   grid: Grid;
   pending: Record<string, Cell | null>;
@@ -57,6 +58,7 @@ export function ExcelGrid(p: Props) {
   const [editing, setEditing] = useState<{ r: number; c: number; text: string } | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [dragGroup, setDragGroup] = useState<string | null>(null);
+  const [empDrag, setEmpDrag] = useState<{ group: string; id: string; over: string } | null>(null);
   const sel = useMemo(() => norm(anchor, focus), [anchor, focus]);
 
   const clamp = useCallback((q: Pos): Pos => ({ r: Math.max(0, Math.min(R - 1, q.r)), c: Math.max(0, Math.min(C - 1, q.c)) }), [R, C]);
@@ -418,6 +420,52 @@ export function ExcelGrid(p: Props) {
     p.onReorder(list);
   };
 
+  // ---------- รายชื่อในกลุ่ม: ลากจุด ⋮⋮ ขึ้น/ลง (pointer events จึงใช้ได้ทั้งเมาส์และจอสัมผัส) ----------
+  const groupIds = (pos: string) => groups.find((g) => g.position === pos)?.emps.map((e) => e.id) ?? [];
+  const dropEmp = (group: string, id: string, over: string) => {
+    const ids = groupIds(group);
+    const next = moveItem(ids, id, over);
+    if (next !== ids) p.onReorderEmps?.(group, next);
+  };
+  const empHandle = (g: Group, e: Emp) => (
+    <span
+      role="button"
+      tabIndex={0}
+      className="-ml-1 flex w-6 shrink-0 cursor-grab touch-none items-center justify-center self-stretch rounded text-[15px] font-bold text-ink/45 select-none hover:bg-sky active:cursor-grabbing"
+      title="ลากขึ้น/ลงเพื่อเรียงลำดับ (หรือกดปุ่มลูกศรขึ้น/ลง)"
+      aria-label={`เลื่อนลำดับ ${empName(e)} (ลูกศรขึ้น/ลง)`}
+      onPointerDown={(ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.currentTarget.setPointerCapture(ev.pointerId);
+        setEmpDrag({ group: g.position, id: e.id, over: e.id });
+      }}
+      onPointerMove={(ev) => {
+        if (!empDrag) return;
+        // เลื่อนจออัตโนมัติเมื่อลากใกล้ขอบบน/ล่าง
+        if (ev.clientY < 90) window.scrollBy(0, -12);
+        else if (ev.clientY > window.innerHeight - 90) window.scrollBy(0, 12);
+        const row = document.elementFromPoint(ev.clientX, ev.clientY)?.closest<HTMLElement>("tr[data-emp]");
+        if (row && row.dataset.group === empDrag.group && row.dataset.emp !== empDrag.over) setEmpDrag({ ...empDrag, over: row.dataset.emp! });
+      }}
+      onPointerUp={() => {
+        if (empDrag) dropEmp(empDrag.group, empDrag.id, empDrag.over);
+        setEmpDrag(null);
+      }}
+      onPointerCancel={() => setEmpDrag(null)}
+      onKeyDown={(ev) => {
+        if (ev.key !== "ArrowUp" && ev.key !== "ArrowDown") return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        const ids = groupIds(g.position);
+        const over = ids[ids.indexOf(e.id) + (ev.key === "ArrowUp" ? -1 : 1)];
+        if (over) dropEmp(g.position, e.id, over);
+      }}
+    >
+      ⋮⋮
+    </span>
+  );
+
   // ---------- ตัวตาราง (ไม่ขึ้นกับการเลือก จึงไม่วาดใหม่ตอนลากเมาส์) ----------
   const working = (emps: Emp[], d: string) => emps.filter((e) => defs.get(grid[e.id]?.[d]?.shift_code ?? "")?.working).length;
   const body = useMemo(() => {
@@ -465,16 +513,26 @@ export function ExcelGrid(p: Props) {
         </tr>,
       );
       if (closed) continue;
+      const ids = g.emps.map((e) => e.id);
       for (const e of g.emps) {
         r++;
         const row = grid[e.id] ?? {};
         const workDays = dates.filter((d) => defs.get(row[d]?.shift_code ?? "")?.working).length;
+        // เส้นบอกตำแหน่งที่จะวาง: ลากลง = ใต้แถว · ลากขึ้น = เหนือแถว
+        const isOver = empDrag && empDrag.group === g.position && empDrag.over === e.id && empDrag.over !== empDrag.id;
+        const dropLine = isOver
+          ? ids.indexOf(empDrag.id) < ids.indexOf(e.id)
+            ? "[&>*]:shadow-[inset_0_-3px_0_var(--color-brand)]"
+            : "[&>*]:shadow-[inset_0_3px_0_var(--color-brand)]"
+          : "";
         out.push(
-          <tr key={e.id}>
-            <th scope="row" className="sticky left-0 z-10 max-w-36 border-b border-r border-line bg-white px-2 py-0.5 text-left font-normal sm:max-w-48">
+          <tr key={e.id} data-emp={e.id} data-group={g.position} className={`${dropLine} ${empDrag?.id === e.id ? "opacity-50" : ""}`}>
+            <th scope="row" className={`sticky left-0 z-10 max-w-36 border-b border-r border-line bg-white py-0.5 text-left font-normal sm:max-w-48 ${p.onReorderEmps ? "pr-2 pl-1" : "px-2"}`}>
+              <span className="flex items-stretch gap-1">
+              {p.onReorderEmps && empHandle(g, e)}
               <button
                 type="button"
-                className="block w-full text-left"
+                className="block min-w-0 flex-1 text-left"
                 onClick={() => {
                   const rr = rows.indexOf(e);
                   setAnchor({ r: rr, c: 0 });
@@ -489,6 +547,7 @@ export function ExcelGrid(p: Props) {
                   {e.status === "resigned" ? " · ลาออก" : ""}
                 </span>
               </button>
+              </span>
             </th>
             {dates.map((d, c) => {
               const cell = row[d];
@@ -525,7 +584,7 @@ export function ExcelGrid(p: Props) {
     }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- วาดใหม่เมื่อข้อมูล/กลุ่มเปลี่ยนเท่านั้น
-  }, [groups, collapsed, grid, pending, defs, dates, rows, dragGroup]);
+  }, [groups, collapsed, grid, pending, defs, dates, rows, dragGroup, empDrag, p.onReorderEmps]);
 
   const allEmps = useMemo(() => groups.flatMap((g) => g.emps), [groups]);
   const S = boxes.sel;

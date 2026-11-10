@@ -10,6 +10,7 @@ import { EMP_COLS, empName, isLeadEmp, ShiftChip, type Emp, type Holiday } from 
 import { ShiftTools, type ToolKey } from "@/components/shifts/ShiftTools";
 import { ExcelGrid, GridHelp, type Group } from "@/components/shifts/ExcelGrid";
 import { errText, fetchAll, sb } from "@/lib/supabase";
+import { mergeMembers, sortByMembers } from "@/lib/shift-grid";
 import { useOptions } from "@/lib/useOptions";
 import { thaiDateTime } from "@/lib/format";
 import { isGlobal, isManagerRole } from "@/lib/types";
@@ -64,6 +65,7 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
   const undoStack = useRef<Record<string, Cell | null>[]>([]);
   const redoStack = useRef<Record<string, Cell | null>[]>([]);
   const [groupOrder, setGroupOrder] = useState<string[]>([]);
+  const [memberOrder, setMemberOrder] = useState<string[]>([]); // ลำดับรายชื่อในกลุ่ม (ลากเรียงได้ บันทึกต่อคลัง)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [source, setSource] = useState("manual"); // ที่มาของการแก้ล่าสุด (บันทึกในประวัติ)
   const [leadPositions, setLeadPositions] = useState<string[]>(["Supervisor"]);
@@ -108,12 +110,13 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
           ),
           sb().from("schedule_months").select("status, published_at").eq("warehouse_id", wh).eq("month", from).eq("scope", scope).maybeSingle(),
           sb().from("holidays").select("holiday_date, name").gte("holiday_date", from).lt("holiday_date", to).order("holiday_date"),
-          sb().from("schedule_group_order").select("positions").eq("warehouse_id", wh).maybeSingle(),
+          sb().from("schedule_group_order").select("positions, members").eq("warehouse_id", wh).maybeSingle(),
           sb().from("app_settings").select("value").eq("key", "shifts.lead_positions").lte("effective_from", todayIso()).order("effective_from", { ascending: false }).limit(1).maybeSingle(),
         ]);
         const lpv = (lp.data as { value?: unknown } | null)?.value;
         setLeadPositions(Array.isArray(lpv) ? (lpv as string[]) : []);
         setGroupOrder(((go.data as { positions?: string[] } | null)?.positions ?? []) as string[]);
+        setMemberOrder(((go.data as { members?: string[] } | null)?.members ?? []) as string[]);
         people = p;
         rows = r;
         st = (s.data as Status | null) ?? null;
@@ -221,14 +224,24 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
       if (ia !== -1 || ib !== -1) return (ia === -1 ? 9999 : ia) - (ib === -1 ? 9999 : ib);
       return (posOrder.get(a) ?? 999) - (posOrder.get(b) ?? 999) || a.localeCompare(b, "th");
     });
-    return keys.map((k) => ({ position: k, emps: m.get(k)! }));
-  }, [shown, groupOrder, posOrder]);
+    return keys.map((k) => ({ position: k, emps: sortByMembers(m.get(k)!, memberOrder) }));
+  }, [shown, groupOrder, posOrder, memberOrder]);
 
   async function reorderGroups(list: string[]) {
     const full = [...list, ...groupOrder.filter((x) => !list.includes(x))];
     setGroupOrder(full);
     if (demo) return;
     const { error } = await sb().rpc("set_group_order", { p_wh: wh, p_positions: full });
+    if (error) setMsg({ tone: "error", text: errText(error) });
+  }
+
+  // เรียงรายชื่อในกลุ่มใหม่ (ลากชื่อ) · ตอนค้นหา/กรองอยู่ กลุ่มอาจไม่ครบ จึงต่อท้ายด้วยคนที่ซ่อนอยู่ตามลำดับเดิม
+  async function reorderEmps(position: string, ids: string[]) {
+    const hidden = roster.filter((e) => (e.position ?? "") === position && !ids.includes(e.id));
+    const full = mergeMembers(memberOrder, [...ids, ...sortByMembers(hidden, memberOrder).map((e) => e.id)]);
+    setMemberOrder(full);
+    if (demo) return;
+    const { error } = await sb().rpc("set_member_order", { p_wh: wh, p_members: full });
     if (error) setMsg({ tone: "error", text: errText(error) });
   }
 
@@ -433,6 +446,7 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
                   return n;
                 })}
                 onReorder={canEdit ? reorderGroups : () => {}}
+                onReorderEmps={canEdit ? reorderEmps : undefined}
                 dates={dates}
                 grid={grid}
                 pending={pending}
