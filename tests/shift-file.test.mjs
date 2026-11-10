@@ -74,18 +74,37 @@ test("นำเข้ารูปแบบตารางผลัดเดิ�
   assert.ok(r.problems.some((x) => x.includes("วันลา 4 วัน")));
 });
 
-test("แม่แบบ: นำเข้ากลับได้ (จับคู่ด้วยรหัส) และมีวิธีกรอกตามรหัสกะที่ใช้อยู่", async () => {
-  const { shiftDef } = await import("../src/lib/shifts.ts");
-  const { templateRows } = await import("../src/lib/shift-file.ts");
-  const defs = [{ value: "STD1", label: "08:00-17:00", extra: { start_time: "08:00", end_time: "17:00" } }, { value: "GN_5", label: "20:00-05:00", extra: { start_time: "20:00", end_time: "05:00" } }, { value: "OFF", label: "หยุด", extra: {} }].map(shiftDef);
-  const rows = templateRows(people, dec, defs);
-  assert.deepEqual(rows[0].slice(0, 4), ["รหัสพนักงาน", "ชื่อ", "ตำแหน่ง", "1"]);
-  assert.ok(rows.some((r) => r.join(" ").includes("8 = STD1") && r.join(" ").includes("20 = GN_5")));
-  rows[2][3] = "8";
-  rows[3][4] = "พักร้อน";
-  const r = parseShiftImport(parseCsv(toCsv(rows)), dec, people, new Set(["STD1", "GN_5", "OFF"]), new Set(), defs);
+test("แม่แบบ Excel: ดาวน์โหลด → กรอก → อัปโหลดกลับ ได้ครบ (เปิดด้วยตัวอ่าน .xlsx ของแอป)", async () => {
+  const { shiftDef, cellOf } = await import("../src/lib/shifts.ts");
+  const { templateSheets, hourShifts } = await import("../src/lib/shift-file.ts");
+  const { buildXlsx } = await import("../src/lib/xlsx-write.ts");
+  const { readXlsx } = await import("../src/lib/xlsx-read.ts");
+  const o = (value, label, s, e) => ({ value, label, extra: s ? { start_time: s, end_time: e } : {} });
+  const defs = [o("STD1", "08:00-17:00", "08:00", "17:00"), o("GN_5", "20:00-05:00", "20:00", "05:00"), o("GN_12", "08:30-17:30", "08:30", "17:30"), o("OFF", "หยุด")].map(shiftDef);
+  assert.deepEqual(hourShifts(defs).map((h) => [h.hour, h.def.code]), [[8, "STD1"], [20, "GN_5"]]);
+  // มีกะเดิมอยู่บางช่อง → แม่แบบใส่ให้เป็นเลขเวลาเข้า / รหัสกะ
+  const grid = { u1: { "2026-12-01": cellOf("GN_5"), "2026-12-02": cellOf("GN_12"), "2026-12-03": cellOf("STD1", "HOL") } };
+  const sheets = templateSheets(people, dec, defs, grid, "ตารางผลัด คลัง 5 · ธันวาคม 2569");
+  const [main, guide] = sheets;
+  assert.equal(main.rows[1][3].v, "TUE", "1 ธ.ค. 2569 = วันอังคาร");
+  assert.equal(main.rows[2][3].v, 1);
+  assert.deepEqual(main.rows[3].slice(0, 6).map((c) => c.v), ["A001", "หนึ่ง (นึ่ง)", "RT", 20, "GN_12", "8+HOL"]);
+  assert.ok(main.lists[0].values.includes("8") && main.lists[0].values.includes("พักร้อน"));
+  assert.ok(main.lists[0].values.join(",").length < 255, "รายการให้เลือกใน Excel ยาวไม่เกิน 255 ตัวอักษร");
+  assert.ok(guide.rows.some((r) => r[0]?.v === "GN_12"), "รหัสกะที่พิมพ์เป็นเลขไม่ได้อยู่ในวิธีกรอก");
+  // หัวหน้ากรอกเพิ่มใน Excel
+  main.rows[3][6] = { v: "พักร้อน" };
+  main.rows[4][3] = { v: 8 };
+  main.rows[4][4] = { v: "OFF" };
+  const table = await readXlsx(buildXlsx(sheets));
+  assert.equal(table[0][0], "ตารางผลัด คลัง 5 · ธันวาคม 2569");
+  const r = parseShiftImport(table, dec, people, new Set(["STD1", "GN_5", "GN_12", "OFF"]), new Set(), defs);
   assert.equal(r.matchedBy, "code");
-  assert.deepEqual(r.changes.map((c) => [c.user_id, c.work_date, c.cell.shift_code]), [["u1", "2026-12-01", "STD1"]]);
-  assert.equal(r.leaves.length, 1);
-  assert.equal(r.problems.filter((p) => !p.startsWith("วันลา")).length, 0, "แถววิธีกรอกไม่ถูกนับเป็นปัญหา");
+  assert.equal(r.people, 2);
+  assert.deepEqual(
+    r.changes.map((c) => [c.user_id, Number(c.work_date.slice(8)), cellText(c.cell)]),
+    [["u1", 1, "GN_5"], ["u1", 2, "GN_12"], ["u1", 3, "STD1+HOL"], ["u2", 1, "STD1"], ["u2", 2, "OFF"]],
+  );
+  assert.deepEqual(r.leaves.map((l) => [l.user_id, Number(l.work_date.slice(8))]), [["u1", 4]]);
+  assert.deepEqual(r.problems.filter((p) => !p.startsWith("วันลา")), []);
 });

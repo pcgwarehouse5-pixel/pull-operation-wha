@@ -1,6 +1,7 @@
 // ส่งออก/นำเข้าตารางกะเป็นไฟล์ (CSV / Excel / วางจาก Excel) ทดสอบได้ด้วย tests/shift-file.test.mjs
 import { THAI_DAYS_SHORT, weekday, type Cell, type Change, type Grid, type ShiftDef } from "./shifts.ts";
 import { parseCellText } from "./shift-grid.ts";
+import { STYLE, colName, type XSheet } from "./xlsx-write.ts";
 
 type Person = { id: string; employee_code: string; first_name_th: string; last_name_th: string | null; nickname: string | null; position: string | null };
 
@@ -196,23 +197,80 @@ export function parseShiftImport(
   return { changes, people: count, problems, unknownCodes, leaves, matchedBy };
 }
 
-/** แม่แบบตารางผลัด: รหัสพนักงาน | ชื่อ | ตำแหน่ง | วันที่ 1..N (ช่องว่างให้กรอก) + วิธีกรอกด้านล่าง */
-export function templateRows(people: Person[], dates: string[], defs: ShiftDef[]): string[][] {
-  const head = ["รหัสพนักงาน", "ชื่อ", "ตำแหน่ง", ...dates.map((d) => String(Number(d.slice(8))))];
-  const dow = ["", "", "วัน", ...dates.map((d) => THAI_DAYS_SHORT[weekday(d)])];
-  const body = people.map((p) => [p.employee_code, [p.first_name_th, p.last_name_th].filter(Boolean).join(" "), p.position ?? "", ...dates.map(() => "")]);
-  // เลขเวลาเข้าที่ใช้ได้ (เฉพาะเวลาที่มีกะเดียว และเป็นชั่วโมงเต็ม)
+// ---------- แม่แบบตารางผลัด (Excel) ----------
+const DOW_EN = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+const LEAVE_CHOICES = ["ลา", "ลากิจ", "ป่วย", "พักร้อน", "อบรม"];
+
+/** กะที่พิมพ์เป็นเลขเวลาเข้าได้ (เริ่มชั่วโมงเต็ม และมีกะเดียวที่เริ่มเวลานั้น) เรียงตามเวลา */
+export function hourShifts(defs: ShiftDef[]): { hour: number; def: ShiftDef }[] {
   const starts = new Map<number, ShiftDef[]>();
   for (const d of defs) if (d.working && d.start !== null) starts.set(d.start, [...(starts.get(d.start) ?? []), d]);
-  const hours = [...starts.entries()]
+  return [...starts.entries()]
     .filter(([m, l]) => l.length === 1 && m % 60 === 0)
     .sort((a, b) => a[0] - b[0])
-    .map(([m, l]) => `${m / 60} = ${l[0].code} (${l[0].label})`);
-  return [
-    head, dow, ...body, [],
-    ["วิธีกรอก", "ใส่เวลาเข้างานเป็นตัวเลข หรือรหัสกะ"],
-    ["", hours.join(" · ")],
-    ["", "OFF = หยุด · ลา / ลากิจ / ป่วย / พักร้อน = วันลา (ไม่ใส่กะ ให้ยื่นใบลาในระบบ) · อบรม = กะที่เริ่ม 08:00"],
-    ["", "ทำงานวันหยุด: เขียนต่อท้าย +OFF หรือ +HOL เช่น 8+HOL · ช่องว่าง = ไม่แก้กะเดิม"],
-  ];
+    .map(([m, l]) => ({ hour: m / 60, def: l[0] }));
+}
+
+/** ช่องในแม่แบบ: กะที่มีอยู่แสดงเป็นเลขเวลาเข้า (8, 20) ถ้าทำได้ ไม่งั้นเป็นรหัสกะ */
+function templateCell(c: Cell | undefined, byHour: Map<string, number>): string | number {
+  if (!c) return "";
+  const h = byHour.get(c.shift_code);
+  const base = h ?? c.shift_code;
+  return c.holiday_work ? `${base}+${c.holiday_work}` : base;
+}
+
+/**
+ * แม่แบบตารางผลัดแบบเดียวกับไฟล์เดิมของหัวหน้า: ชื่อ | วัน (SUN..SAT) | วันที่ 1..N
+ * เพิ่มคอลัมน์รหัสพนักงาน (จับคู่คนแม่นกว่าชื่อ) · ใส่กะที่มีอยู่แล้วให้แก้ต่อได้ · มีรายการให้เลือกในช่อง · แผ่นที่ 2 = วิธีกรอก
+ */
+export function templateSheets(
+  people: Person[], dates: string[], defs: ShiftDef[], grid: Grid, title: string,
+): XSheet[] {
+  const hours = hourShifts(defs);
+  const byHour = new Map(hours.map((h) => [h.def.code, h.hour]));
+  const weekend = dates.map((d) => [0, 6].includes(weekday(d)));
+  const lastCol = colName(3 + dates.length - 1);
+  const body = people.map((p) => [
+    { v: p.employee_code, s: STYLE.text },
+    { v: p.nickname ? `${p.first_name_th} (${p.nickname})` : p.first_name_th, s: STYLE.text },
+    { v: p.position ?? "", s: STYLE.text },
+    ...dates.map((d, i) => ({ v: templateCell(grid[p.id]?.[d], byHour), s: weekend[i] ? STYLE.cellWeekend : STYLE.cell })),
+  ]);
+  const main: XSheet = {
+    name: "ตารางผลัด",
+    rows: [
+      [{ v: title, s: STYLE.title }],
+      [{ v: "รหัสพนักงาน", s: STYLE.head }, { v: "ชื่อ", s: STYLE.head }, { v: "ตำแหน่ง", s: STYLE.head }, ...dates.map((d, i) => ({ v: DOW_EN[weekday(d)], s: weekend[i] ? STYLE.headWeekend : STYLE.head }))],
+      [{ v: "", s: STYLE.head }, { v: "", s: STYLE.head }, { v: "", s: STYLE.head }, ...dates.map((d, i) => ({ v: Number(d.slice(8)), s: weekend[i] ? STYLE.headWeekend : STYLE.head }))],
+      ...body,
+    ],
+    cols: [13, 24, 12, ...dates.map(() => 6.5)],
+    merges: ["A2:A3", "B2:B3", "C2:C3"],
+    freeze: { cols: 3, rows: 3 },
+    lists: [{ range: `D4:${lastCol}${3 + people.length + 30}`, values: [...hours.map((h) => String(h.hour)), "OFF", ...LEAVE_CHOICES] }],
+  };
+  const other = defs.filter((d) => !byHour.has(d.code) && d.code.toUpperCase() !== "OFF");
+  const row = (a: string, b: string, s: number = STYLE.wrap) => [{ v: a, s: STYLE.bold }, { v: b, s }];
+  const guide: XSheet = {
+    name: "วิธีกรอก",
+    rows: [
+      [{ v: "วิธีกรอกตารางผลัด", s: STYLE.title }],
+      [],
+      [{ v: "พิมพ์ในช่อง", s: STYLE.head }, { v: "ความหมาย", s: STYLE.head }],
+      ...hours.map((h) => row(String(h.hour), `เข้างาน ${String(h.hour).padStart(2, "0")}:00 → รหัสกะ ${h.def.code} (${h.def.label})`)),
+      row("OFF", "วันหยุด"),
+      row("ลา / ลากิจ / ป่วย / พักร้อน", "วันลา: ไม่ใส่กะ ระบบจะสรุปรายชื่อให้ไปยื่นใบลาแทนพนักงานในแอป"),
+      row("อบรม", "นับเป็นวันทำงาน ใช้กะที่เริ่ม 08:00"),
+      row("8+HOL / 8+OFF", "ทำงานวันนักขัตฤกษ์ / ทำงานวันหยุดประจำสัปดาห์ (เลขหน้า + คือเวลาเข้า)"),
+      row("(เว้นว่าง)", "ไม่แก้กะเดิมของวันนั้น"),
+      ...other.map((d) => row(d.code, d.label === d.code ? "รหัสกะในแอป" : `รหัสกะในแอป: ${d.label}`)),
+      [],
+      [{ v: "ข้อควรรู้", s: STYLE.title }],
+      [{ v: "• อย่าแก้คอลัมน์รหัสพนักงาน (ใช้จับคู่คน) · ลบแถวคนที่ไม่ต้องการนำเข้าได้ · เพิ่มคนได้โดยใส่รหัสพนักงาน" }],
+      [{ v: "• นำเข้า: ตารางกะ → เครื่องมือ → นำเข้าจาก Excel/CSV → ตรวจผล → ใส่ลงตาราง → บันทึก" }],
+      [{ v: "• แผ่นงานนี้ไม่ถูกนำเข้า · ใช้แผ่นงาน \"ตารางผลัด\" เป็นแผ่นแรกเสมอ" }],
+    ],
+    cols: [26, 70],
+  };
+  return [main, guide];
 }

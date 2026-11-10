@@ -11,7 +11,8 @@ import { errText, fetchAll, sb } from "@/lib/supabase";
 import { downloadCsv, parseCsv } from "@/lib/csv";
 import { readXlsx } from "@/lib/xlsx-read";
 import { thaiDate, thaiDateTime } from "@/lib/format";
-import { exportRows, parseShiftImport, templateRows, type ImportResult } from "@/lib/shift-file";
+import { exportRows, parseShiftImport, templateSheets, type ImportResult } from "@/lib/shift-file";
+import { downloadXlsx } from "@/lib/xlsx-write";
 import {
   THAI_DAYS_SHORT, addMonths, copyFromPrevious, fillRange, generatePlan, holidayFill, monthDates, planChanges, repeatPattern,
   shiftTimeText, thaiMonthLabel, weekday, type Change, type Grid, type PlanResult, type ShiftDef, type ShiftNeed,
@@ -46,7 +47,7 @@ const MENU: { key: ToolKey; label: string; desc: string; danger?: boolean }[] = 
   { key: "repeat", label: "ทำซ้ำรูปแบบ", desc: "เช่น เช้า 5 วัน หยุด 2 วัน วนจนสิ้นเดือน" },
   { key: "fill", label: "เติมกะหลายคน", desc: "กะเดียวกัน ช่วงวันที่/วันในสัปดาห์ที่เลือก เช่น หยุดทุกวันอาทิตย์" },
   { key: "holiday", label: "เติมวันนักขัตฤกษ์", desc: "ใส่ HOL ตามปฏิทินวันหยุดในหน้าตั้งค่า" },
-  { key: "import", label: "นำเข้าจาก Excel/CSV", desc: "ตารางผลัดแบบเดิม (ชื่อ + เวลาเข้า เช่น 8, 20) แม่แบบ หรือไฟล์ที่ส่งออกจากแอป" },
+  { key: "import", label: "แม่แบบ Excel / นำเข้าจาก Excel", desc: "ดาวน์โหลดแม่แบบตารางผลัด กรอกใน Excel แล้วอัปโหลดกลับ (ใช้ไฟล์ตารางผลัดแบบเดิมก็ได้)" },
   { key: "export", label: "ส่งออกเป็น CSV", desc: "เปิดใน Excel ได้ (เฉพาะคนที่แสดงอยู่)" },
   { key: "history", label: "ประวัติและย้อนกลับ", desc: "ย้อนการบันทึกหลายช่อง หรือคืนเดือนที่ล้างไป" },
   { key: "clear", label: "ล้างตารางกะทั้งเดือน", desc: "ลบทุกช่องของเดือนนี้ในคลังนี้ (เก็บสำเนาไว้ ย้อนคืนได้)", danger: true },
@@ -521,7 +522,8 @@ function ImportTool(p: ToolProps) {
   const posNames = [...new Set(p.emps.map((e) => e.position ?? "").filter(Boolean))];
   function downloadTemplate() {
     const tag = posNames.length === 1 ? `_${posNames[0].replace(/\s+/g, "")}` : "";
-    downloadCsv(`แม่แบบตารางกะ_${p.whName.replace(/\s+/g, "")}${tag}_${p.ym}.csv`, templateRows(p.emps, p.dates, p.activeDefs));
+    const title = `ตารางผลัด ${p.whName} · ${thaiMonthLabel(p.ym)}${posNames.length === 1 ? ` · ${posNames[0]}` : ""}`;
+    downloadXlsx(`แม่แบบตารางผลัด_${p.whName.replace(/\s+/g, "")}${tag}_${p.ym}.xlsx`, templateSheets(p.emps, p.dates, p.activeDefs, p.grid, title));
   }
 
   async function onFile(f?: File) {
@@ -540,15 +542,22 @@ function ImportTool(p: ToolProps) {
   return (
     <Modal title={`นำเข้าตารางกะ ${thaiMonthLabel(p.ym)}`} onClose={p.close}>
       <p className="mb-3 text-[15px] text-muted">
-        ใช้ตารางผลัดแบบเดิมได้เลย: คอลัมน์ <b>ชื่อ</b> (หรือรหัสพนักงาน) แถวเลขวันที่ 1, 2, 3 ... ในช่องใส่<b>เวลาเข้างาน</b> เช่น 8 = เข้า 08:00, 20 = เข้า 20:00 หรือรหัสกะ · OFF = หยุด · ลา/ป่วย/พักร้อน = วันลา (ไม่ใส่กะ) · อบรม = กะ 08:00 · ช่องว่างไม่ลบกะเดิม · นำเข้าทีละตำแหน่งได้ (แก้เฉพาะคนที่อยู่ในไฟล์)
+        ใช้แม่แบบ หรือไฟล์ตารางผลัดแบบเดิม (คอลัมน์ชื่อ + เวลาเข้างาน เช่น 8, 20) ก็ได้ · ลา/ป่วย/พักร้อน = ไม่ใส่กะ · ช่องว่างไม่ลบกะเดิม · นำเข้าทีละตำแหน่งได้
       </p>
-      <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl bg-sky px-3 py-2.5">
-        <span className="min-w-0 flex-1 text-[14px]">
-          แม่แบบ {p.emps.length} คน{posNames.length === 1 ? ` (ตำแหน่ง ${posNames[0]})` : posNames.length > 1 ? ` (${posNames.length} ตำแหน่ง · เลือกตำแหน่งที่ตัวกรองก่อนถ้าจะแยกไฟล์)` : ""}
-        </span>
-        <Button size="sm" variant="secondary" onClick={downloadTemplate} disabled={!p.emps.length}>
-          ดาวน์โหลดแม่แบบ
-        </Button>
+      <div className="mb-3 rounded-xl bg-sky px-3 py-3">
+        <ol className="mb-2.5 list-decimal space-y-0.5 pl-5 text-[14px]">
+          <li>ดาวน์โหลดแม่แบบ Excel (มีรายชื่อ วันที่ และกะที่มีอยู่แล้ว)</li>
+          <li>กรอกเวลาเข้างานใน Excel เช่น 8, 20 หรือ OFF / ลา (มีรายการให้เลือกในช่อง)</li>
+          <li>บันทึกไฟล์ แล้วเลือกไฟล์ด้านล่าง ตรวจผล กดใส่ลงตาราง แล้วบันทึก</li>
+        </ol>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="min-w-0 flex-1 text-[13px] text-muted">
+            {p.emps.length} คน{posNames.length === 1 ? ` · ตำแหน่ง ${posNames[0]}` : posNames.length > 1 ? ` · ${posNames.length} ตำแหน่ง (เลือกตำแหน่งที่ตัวกรองก่อนถ้าจะแยกไฟล์ทีละตำแหน่ง)` : ""}
+          </span>
+          <Button size="sm" onClick={downloadTemplate} disabled={!p.emps.length}>
+            ดาวน์โหลดแม่แบบ Excel
+          </Button>
+        </div>
       </div>
       <div className="space-y-3">
         <input type="file" accept=".xlsx,.csv,.txt" className={`${inputCls} py-2.5`} onChange={(e) => onFile(e.target.files?.[0])} aria-label="เลือกไฟล์" />
