@@ -8,12 +8,13 @@ import { useApp } from "./AuthProvider";
 import { Icon } from "./Icon";
 import { NotificationBell } from "./NotificationBell";
 import { LanguageSwitch } from "./LanguageSwitch";
+import { LogoMark } from "./LogoMark";
 import { ROLE_RANK, fullName, type AppRole } from "@/lib/types";
 import { activeKey, bottomKeys, navFor, type NavItem } from "@/lib/nav";
 import { useI18n } from "@/i18n";
 import type { MsgKey } from "@/i18n/th";
 
-/** หน้าปุยนุ่นในวงกลมขาว = สัญลักษณ์ของแอป */
+/** หน้าปุยนุ่นในวงกลมขาว (ใช้เป็นรูปคู่ชื่อผู้ใช้ในหน้ารวมเมนู · โลโก้แอปอยู่ที่ LogoMark) */
 export function Mark({ size = 40 }: { size?: number }) {
   return (
     <span className="relative inline-block shrink-0 overflow-hidden rounded-full bg-white ring-2 ring-white" style={{ width: size, height: size }}>
@@ -26,7 +27,8 @@ export function Logo({ onDark, compact }: { onDark?: boolean; compact?: boolean 
   const { t } = useI18n();
   return (
     <span className="flex items-center gap-2.5">
-      <Mark size={40} />
+      {/* บนพื้นกรมท่า ใส่ขอบจางๆ ให้กรอบไอคอนไม่กลืนกับพื้น */}
+      <LogoMark size={40} className={onDark ? "rounded-[9px] ring-1 ring-white/30" : ""} />
       <span className={`leading-tight ${onDark ? "text-white" : "text-brand"}`}>
         <span className="block text-[17px] font-bold tracking-tight">{t("app.name")}</span>
         {!compact && <span className={`block text-[12px] ${onDark ? "text-white/70" : "text-muted"}`}>{t("app.tagline")}</span>}
