@@ -2,6 +2,7 @@
 
 // เครื่องมือวางกะ: คัดลอกเดือนก่อน ทำซ้ำรูปแบบ เติมช่วงวันที่ วันนักขัตฤกษ์ วางกะอัตโนมัติ นำเข้า/ส่งออก ล้างเดือน ประวัติ
 // ทุกเครื่องมือ (ยกเว้นล้างเดือน/ย้อนกลับ) ใส่ผลลงตารางเป็น "ยังไม่บันทึก" ให้ตรวจก่อนกดบันทึก
+import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
 import { useApp } from "../AuthProvider";
 import { Alert, Badge, Button, Field, Loading, Modal, inputCls } from "../ui";
@@ -10,7 +11,7 @@ import { errText, fetchAll, sb } from "@/lib/supabase";
 import { downloadCsv, parseCsv } from "@/lib/csv";
 import { readXlsx } from "@/lib/xlsx-read";
 import { thaiDate, thaiDateTime } from "@/lib/format";
-import { exportRows, parseShiftImport, type ImportResult } from "@/lib/shift-file";
+import { exportRows, parseShiftImport, templateRows, type ImportResult } from "@/lib/shift-file";
 import {
   THAI_DAYS_SHORT, addMonths, copyFromPrevious, fillRange, generatePlan, holidayFill, monthDates, planChanges, repeatPattern,
   shiftTimeText, thaiMonthLabel, weekday, type Change, type Grid, type PlanResult, type ShiftDef, type ShiftNeed,
@@ -45,7 +46,7 @@ const MENU: { key: ToolKey; label: string; desc: string; danger?: boolean }[] = 
   { key: "repeat", label: "ทำซ้ำรูปแบบ", desc: "เช่น เช้า 5 วัน หยุด 2 วัน วนจนสิ้นเดือน" },
   { key: "fill", label: "เติมกะหลายคน", desc: "กะเดียวกัน ช่วงวันที่/วันในสัปดาห์ที่เลือก เช่น หยุดทุกวันอาทิตย์" },
   { key: "holiday", label: "เติมวันนักขัตฤกษ์", desc: "ใส่ HOL ตามปฏิทินวันหยุดในหน้าตั้งค่า" },
-  { key: "import", label: "นำเข้าจาก Excel/CSV", desc: "ไฟล์ที่ส่งออกจากแอปนี้หรือแอปเดิม" },
+  { key: "import", label: "นำเข้าจาก Excel/CSV", desc: "ตารางผลัดแบบเดิม (ชื่อ + เวลาเข้า เช่น 8, 20) แม่แบบ หรือไฟล์ที่ส่งออกจากแอป" },
   { key: "export", label: "ส่งออกเป็น CSV", desc: "เปิดใน Excel ได้ (เฉพาะคนที่แสดงอยู่)" },
   { key: "history", label: "ประวัติและย้อนกลับ", desc: "ย้อนการบันทึกหลายช่อง หรือคืนเดือนที่ล้างไป" },
   { key: "clear", label: "ล้างตารางกะทั้งเดือน", desc: "ลบทุกช่องของเดือนนี้ในคลังนี้ (เก็บสำเนาไว้ ย้อนคืนได้)", danger: true },
@@ -515,7 +516,13 @@ function ImportTool(p: ToolProps) {
   const validCodes = new Set(p.defs.keys());
   const holidaySet = new Set(p.holidays.map((h) => h.holiday_date));
 
-  const parse = (table: string[][]) => setRes(parseShiftImport(table, p.dates, p.allEmps, validCodes, holidaySet));
+  const parse = (table: string[][]) => setRes(parseShiftImport(table, p.dates, p.allEmps, validCodes, holidaySet, p.activeDefs));
+  // แม่แบบ: เฉพาะคนที่แสดงอยู่ (เลือกตำแหน่งที่ตัวกรองก่อน = แม่แบบทีละตำแหน่ง)
+  const posNames = [...new Set(p.emps.map((e) => e.position ?? "").filter(Boolean))];
+  function downloadTemplate() {
+    const tag = posNames.length === 1 ? `_${posNames[0].replace(/\s+/g, "")}` : "";
+    downloadCsv(`แม่แบบตารางกะ_${p.whName.replace(/\s+/g, "")}${tag}_${p.ym}.csv`, templateRows(p.emps, p.dates, p.activeDefs));
+  }
 
   async function onFile(f?: File) {
     if (!f) return;
@@ -533,8 +540,16 @@ function ImportTool(p: ToolProps) {
   return (
     <Modal title={`นำเข้าตารางกะ ${thaiMonthLabel(p.ym)}`} onClose={p.close}>
       <p className="mb-3 text-[15px] text-muted">
-        ใช้ไฟล์ที่ส่งออกจากหน้านี้ (แก้ใน Excel แล้วนำเข้ากลับ) หรือคัดลอกจาก Excel มาวาง: คอลัมน์ รหัสพนักงาน แล้วตามด้วยวันที่ 1, 2, 3 ... ช่องว่างในไฟล์จะไม่ลบกะเดิม · ทำงานวันหยุดเขียนเป็น GN_5+OFF หรือ GN_5+HOL
+        ใช้ตารางผลัดแบบเดิมได้เลย: คอลัมน์ <b>ชื่อ</b> (หรือรหัสพนักงาน) แถวเลขวันที่ 1, 2, 3 ... ในช่องใส่<b>เวลาเข้างาน</b> เช่น 8 = เข้า 08:00, 20 = เข้า 20:00 หรือรหัสกะ · OFF = หยุด · ลา/ป่วย/พักร้อน = วันลา (ไม่ใส่กะ) · อบรม = กะ 08:00 · ช่องว่างไม่ลบกะเดิม · นำเข้าทีละตำแหน่งได้ (แก้เฉพาะคนที่อยู่ในไฟล์)
       </p>
+      <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl bg-sky px-3 py-2.5">
+        <span className="min-w-0 flex-1 text-[14px]">
+          แม่แบบ {p.emps.length} คน{posNames.length === 1 ? ` (ตำแหน่ง ${posNames[0]})` : posNames.length > 1 ? ` (${posNames.length} ตำแหน่ง · เลือกตำแหน่งที่ตัวกรองก่อนถ้าจะแยกไฟล์)` : ""}
+        </span>
+        <Button size="sm" variant="secondary" onClick={downloadTemplate} disabled={!p.emps.length}>
+          ดาวน์โหลดแม่แบบ
+        </Button>
+      </div>
       <div className="space-y-3">
         <input type="file" accept=".xlsx,.csv,.txt" className={`${inputCls} py-2.5`} onChange={(e) => onFile(e.target.files?.[0])} aria-label="เลือกไฟล์" />
         {fileName && <p className="text-[14px] text-muted">ไฟล์: {fileName}</p>}
@@ -554,10 +569,32 @@ function ImportTool(p: ToolProps) {
             {res.problems.length > 8 && <p className="text-[14px]">... และอีก {res.problems.length - 8} รายการ</p>}
           </Alert>
         )}
+        {res && res.leaves.length > 0 && <LeaveList leaves={res.leaves} />}
         {res && <OnlyEmpty value={onlyEmpty} onChange={setOnlyEmpty} />}
       </div>
       <Footer onCancel={p.close} ok="ใส่ลงตาราง" disabled={!res?.changes.length} onOk={() => res && p.done(res.changes, onlyEmpty, `นำเข้า ${res.changes.length} ช่องแล้ว`)} />
     </Modal>
+  );
+}
+
+// วันลาในไฟล์: ไม่ใส่กะ ให้หัวหน้ายื่นใบลาแทนในระบบลา (โควตา/เบี้ยขยันจะคิดถูก)
+function LeaveList({ leaves }: { leaves: ImportResult["leaves"] }) {
+  const byPerson = new Map<string, typeof leaves>();
+  for (const l of leaves) byPerson.set(l.name, [...(byPerson.get(l.name) ?? []), l]);
+  return (
+    <div className="rounded-xl bg-white p-3 ring-1 ring-line">
+      <p className="mb-1.5 text-[15px] font-semibold">วันลาในไฟล์ ({leaves.length} วัน) — ไม่ได้ใส่กะ</p>
+      <ul className="space-y-1 text-[14px]">
+        {[...byPerson.entries()].map(([name, list]) => (
+          <li key={name}>
+            <b>{name}</b>: {list.map((l) => `${Number(l.work_date.slice(8))} ${l.text}`).join(", ")}
+          </li>
+        ))}
+      </ul>
+      <p className="mt-2 text-[13px] text-muted">
+        ยื่นใบลาแทนพนักงานได้ที่ <Link href="/leave/approvals" className="font-semibold text-brand underline">อนุมัติใบลา</Link> → ยื่นใบลาแทนพนักงาน
+      </p>
+    </div>
   );
 }
 
