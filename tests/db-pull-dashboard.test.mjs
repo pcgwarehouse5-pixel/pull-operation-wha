@@ -84,10 +84,21 @@ test("เวลาพัก: คลังปลายทางตั้ง/ล�
   const id = (await q1(db, `select id from public.pull_bookings where user_id = $1`, [U.emp32])).id;
   await as(db, U.sup5, () => db.query(`select public.set_pull_break($1, '12:00')`, [id]));
   assert.equal((await q1(db, `select break_time::text as t from public.pull_bookings where id = $1`, [id])).t, "12:00:00");
+  // แจ้งพนักงาน · ตั้งค่าเดิมซ้ำไม่แจ้งซ้ำ · เปลี่ยนเวลาแจ้งใหม่ · ล้างเวลาพักไม่แจ้ง
+  const brk = () => rows(db, `select user_id, title, link from public.notifications where kind = 'pull_break' order by id`);
+  assert.deepEqual(await brk(), [{ user_id: U.emp32, title: "เวลาพักของคุณ: พัก 12:00", link: "/my-position" }]);
+  await as(db, U.sup5, () => db.query(`select public.set_pull_break($1, '12:00')`, [id]));
+  assert.equal((await brk()).length, 1);
+  await as(db, U.sup5, () => db.query(`select public.set_pull_break($1, '13:00')`, [id]));
+  assert.deepEqual((await brk()).map((n) => n.title), ["เวลาพักของคุณ: พัก 12:00", "เวลาพักของคุณ: พัก 13:00"]);
+  // พนักงานเห็นเวลาพักของตัวเอง (RLS) แต่ไม่เห็นของคนอื่น
+  assert.equal((await as(db, U.emp32, () => rows(db, `select break_time::text as t from public.pull_bookings`)))[0].t, "13:00:00");
+  assert.equal((await as(db, U.emp5, () => rows(db, `select 1 from public.pull_bookings`))).length, 0);
   await assert.rejects(as(db, U.admin32, () => db.query(`select public.set_pull_break($1, '11:00')`, [id])), /เฉพาะคลังที่จอง/);
   await assert.rejects(as(db, U.sup5, () => db.query(`select public.set_pull_break($1, '25:00')`, [id])), /ไม่ถูกต้อง/);
   await as(db, U.sup5, () => db.query(`select public.set_pull_break($1, null)`, [id]));
   assert.equal((await q1(db, `select break_time from public.pull_bookings where id = $1`, [id])).break_time, null);
+  assert.equal((await brk()).length, 2);
   await as(db, U.sup5, () => db.query(`select public.cancel_pull_booking($1, 'จองผิด')`, [id]));
   await assert.rejects(as(db, U.sup5, () => db.query(`select public.set_pull_break($1, '11:00')`, [id])), /ไม่พบรายการ/);
 });

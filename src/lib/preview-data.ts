@@ -120,8 +120,8 @@ export function previewRoster(wh: string) {
 
 // ตารางกะของเพื่อนร่วมคลัง (หน้า "ตารางกะของฉัน")
 export function previewTeam(dates: string[], meId: string) {
-  const names: Record<string, [string, string | null, string]> = { p1: ["ผู้ทดลอง", "หนึ่ง", "RT"], p2: ["ทดสอบ", null, "Checker"], "preview-me": ["ผู้ใช้", "เดโม", "RT"] };
-  return previewShifts(dates).map((r) => ({
+  const names: Record<string, [string, string | null, string]> = { p1: ["ผู้ทดลอง", "หนึ่ง", "RT"], p2: ["ทดสอบ", null, "Checker"], "preview-me": ["ผู้ใช้", "เดโม", "RT"], "preview-lead": ["หัวหน้า", "ห้า", "Supervisor"] };
+  return previewShifts(dates).filter((r) => names[r.user_id]).map((r) => ({
     ...r,
     holiday_work: null as "OFF" | "HOL" | null,
     user_id: r.user_id === "preview-me" ? meId : r.user_id,
@@ -343,10 +343,18 @@ export function previewPullBookings(wh: string, date: string, shift: "morning" |
     .map((p, i) => ({ id: p.booking_id!, work_date: date, shift, user_id: p.user_id, from_warehouse_id: p.warehouse_id, to_warehouse_id: wh, skill_name: p.booked_skill!, status: "booked" as const, break_time: ["11:00:00", "12:00:00", null][i % 3], booked_at: "2026-11-07T01:00:00Z" }));
 }
 
-export function previewMyPullBookings(today: string) {
-  const d = new Date(today + "T00:00:00Z");
-  d.setUTCDate(d.getUTCDate() + 1);
-  return [{ id: "mb1", work_date: d.toISOString().slice(0, 10), shift: "morning" as const, skill_name: "RT รับ(Domestics)", to_code: "WH32" }];
+// ตำแหน่งงานที่หัวหน้าจัดให้ผู้ใช้เดโม: วันนี้ในคลังตัวเอง (มีเวลาพัก) / พรุ่งนี้ไปช่วยคลัง 32 / อีก 3 วัน Checker
+export function previewMyPullBookings(today: string): import("./my-position").MyPos[] {
+  const day = (n: number) => {
+    const d = new Date(today + "T00:00:00Z");
+    d.setUTCDate(d.getUTCDate() + n);
+    return d.toISOString().slice(0, 10);
+  };
+  return [
+    { id: "mb0", work_date: today, shift: "morning", skill_name: "RT รับ(Domestics)", to_code: "WH5", to_name: "คลัง 5 (ตัวอย่าง)", break_time: "12:00:00", away: false },
+    { id: "mb1", work_date: day(1), shift: "morning", skill_name: "RT รับ(Domestics)", to_code: "WH32", to_name: "คลัง 32 (ตัวอย่าง)", break_time: null, away: true },
+    { id: "mb2", work_date: day(3), shift: "morning", skill_name: "Checker", to_code: "WH5", to_name: "คลัง 5 (ตัวอย่าง)", break_time: "11:00:00", away: false },
+  ];
 }
 
 // ภาพรวมทุกคลังสมมติ 7 วัน (ตัวเลขตัวอย่าง)

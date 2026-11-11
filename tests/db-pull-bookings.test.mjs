@@ -63,7 +63,7 @@ test("จองข้ามคลัง: จองได้ทันที แ�
   const notes = await rows(db, `select user_id, kind, body, link from public.notifications order by kind`);
   assert.deepEqual(notes.map((n) => `${n.kind}:${n.user_id === U.emp32 ? "emp32" : n.user_id === U.admin32 ? "admin32" : n.user_id}`), ["pull_booked:emp32", "pull_source:admin32"]);
   assert.match(notes[0].body, /คลัง WH5 · RT รับ/);
-  assert.equal(notes[0].link, "/my-shifts");
+  assert.equal(notes[0].link, "/my-position");
   assert.equal((await pool(db, U.sup5, WH5, d)).E32.status, "booked_here");
   const fromWh32 = await pool(db, U.admin32, WH32, d);
   assert.equal(fromWh32.E32.status, "busy");
@@ -89,8 +89,9 @@ test("จอง: ตรวจทักษะ สถานะ และบัน�
   ]);
   assert.equal(r.booked, 1);
   assert.deepEqual(r.conflicts.map((c) => c.reason), ["ไม่มีทักษะ Checker", "คลังนี้ไม่ได้เปิดทักษะ OP ลาก", "ไม่มีกะในวันนี้"]);
-  // จองคนคลังตัวเอง: ไม่แจ้งคลังต้นทาง (คลังเดียวกัน)
-  assert.deepEqual((await rows(db, `select kind from public.notifications`)).map((n) => n.kind), ["pull_booked"]);
+  // จองคนคลังตัวเอง: ไม่แจ้งคลังต้นทาง (คลังเดียวกัน) · แจ้งพนักงานว่า "จัดตำแหน่งงาน" ไม่ใช่ "ไปช่วยงาน"
+  const own = await rows(db, `select user_id, kind, title, link from public.notifications`);
+  assert.deepEqual(own.map((n) => [n.user_id, n.kind, n.title, n.link]), [[U.emp5, "pull_placed", "หัวหน้าจัดตำแหน่งงานให้คุณ", "/my-position"]]);
 });
 
 test("จอง: สิทธิ์และวันที่", async () => {
@@ -118,7 +119,8 @@ test("ยกเลิกจอง: ต้องมีเหตุผล เฉ�
   const b = await q1(db, `select status, cancel_reason, cancelled_by from public.pull_bookings where id = $1`, [id]);
   assert.deepEqual(b, { status: "cancelled", cancel_reason: "งานลดลง", cancelled_by: U.sup5 });
   await assert.rejects(as(db, U.sup5, () => db.query(`select public.cancel_pull_booking($1, 'ซ้ำ')`, [id])), /ยกเลิกไปแล้ว/);
-  assert.equal((await rows(db, `select 1 from public.notifications where kind = 'pull_cancelled' and user_id = $1`, [U.emp32])).length, 1);
+  const cn = await rows(db, `select title, link from public.notifications where kind = 'pull_cancelled' and user_id = $1`, [U.emp32]);
+  assert.deepEqual(cn, [{ title: "ยกเลิกการไปช่วยงาน", link: "/my-position" }]);
   // ยกเลิกแล้ว คลังอื่นจองได้
   assert.equal((await book(db, U.admin32, WH32, d, [{ user_id: U.emp32, skill: "RT รับ" }])).booked, 1);
   // วันที่ผ่านไปแล้วยกเลิกไม่ได้

@@ -23,6 +23,7 @@ export const NAV_GROUPS: { id: "mine" | "staff" | "pull" | "manage"; title: stri
       { key: "attendance", href: "/attendance", label: "ลงเวลา", desc: "กดเข้า-ออกงาน ดูเวลาย้อนหลัง ขอแก้เวลา", icon: "pin", timekeeping: true },
       { key: "leave", href: "/leave", label: "ลางาน", desc: "ยื่นใบลา ดูวันลาคงเหลือ", icon: "leave", timekeeping: true },
       { key: "my-shifts", href: "/my-shifts", label: "ตารางกะของฉัน", desc: "กะของฉันและเพื่อนร่วมคลัง", icon: "calendar", short: "กะของฉัน", timekeeping: true },
+      { key: "my-position", href: "/my-position", label: "ตำแหน่งงานวันนี้", desc: "ตำแหน่งที่หัวหน้าจัดให้ และเวลาพัก", icon: "grid", short: "ตำแหน่ง", timekeeping: true },
       { key: "notifications", href: "/notifications", label: "แจ้งเตือน", desc: "ใบลา คำขอแก้เวลา ตารางกะ ลืมลงเวลา", icon: "bell" },
       { key: "profile", href: "/profile", label: "ข้อมูลของฉัน", desc: "ข้อมูลส่วนตัวและรหัสผ่าน", icon: "user" },
     ],

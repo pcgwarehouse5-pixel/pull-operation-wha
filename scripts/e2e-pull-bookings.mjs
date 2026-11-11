@@ -55,8 +55,30 @@ try {
 
   const mine = await emp.c.from("pull_bookings").select("id, skill_name, status").eq("user_id", emp.id);
   check("พนักงานเห็นงานที่ตัวเองถูกจอง", mine.data?.length === 1 && mine.data[0].status === "booked");
-  const note = await emp.c.from("notifications").select("kind, link").eq("kind", "pull_booked");
-  check("พนักงานได้แจ้งเตือน", note.data?.length === 1 && note.data[0].link === "/my-shifts");
+  const note = await emp.c.from("notifications").select("kind, title, link").in("kind", ["pull_booked", "pull_placed"]);
+  check("พนักงานได้แจ้งเตือน \"หัวหน้าจัดตำแหน่งงานให้คุณ\" ลิงก์ไปหน้าตำแหน่งงาน", note.data?.length === 1 && note.data[0].kind === "pull_placed" && note.data[0].link === "/my-position", JSON.stringify(note.data));
+  // เวลาพัก: หัวหน้าตั้ง → พนักงานเห็นและได้แจ้งเตือน / ตั้งค่าเดิมซ้ำไม่แจ้งซ้ำ
+  r = await sup.c.rpc("set_pull_break", { p_id: mine.data[0].id, p_time: "12:00" });
+  check("หัวหน้าตั้งเวลาพัก", !r.error, r.error?.message);
+  await sup.c.rpc("set_pull_break", { p_id: mine.data[0].id, p_time: "12:00" });
+  const brk = await emp.c.from("pull_bookings").select("break_time").eq("id", mine.data[0].id).single();
+  check("พนักงานเห็นเวลาพักของตัวเอง", brk.data?.break_time === "12:00:00", brk.data?.break_time);
+  const nb = await emp.c.from("notifications").select("title, link").eq("kind", "pull_break");
+  check("พนักงานได้แจ้งเตือนเวลาพัก 1 ครั้ง (ตั้งซ้ำไม่แจ้งซ้ำ)", nb.data?.length === 1 && nb.data[0].title === "เวลาพักของคุณ: พัก 12:00" && nb.data[0].link === "/my-position", JSON.stringify(nb.data));
+  r = await emp.c.rpc("set_pull_break", { p_id: mine.data[0].id, p_time: "13:00" });
+  check("พนักงานตั้งเวลาพักเองไม่ได้", !!r.error);
+  // ข้อมูลที่หน้าหลักของพนักงานใช้ (OT เดือนนี้ วันลาคงเหลือ ใบลาล่าสุด กะ)
+  const m0 = today.slice(0, 8) + "01";
+  const [o1, b1, l1, a1] = await Promise.all([
+    emp.c.rpc("my_ot", { p_from: m0, p_to: today }),
+    emp.c.rpc("leave_balance", { p_year: Number(today.slice(0, 4)) }),
+    emp.c.from("leave_requests").select("id").eq("user_id", emp.id).limit(3),
+    emp.c.rpc("my_attendance", { p_from: today, p_to: today }),
+  ]);
+  check("พนักงานดึง OT ของตัวเองได้", !o1.error, o1.error?.message);
+  check("พนักงานดึงวันลาคงเหลือได้ (มีประเภทลา)", !b1.error && (b1.data ?? []).length > 0, b1.error?.message ?? `${b1.data?.length} ประเภท`);
+  check("พนักงานดึงใบลาของตัวเองได้", !l1.error, l1.error?.message);
+  check("พนักงานดึงกะวันนี้ได้", !a1.error && (a1.data ?? []).length === 1, a1.error?.message);
   const other = await emp1.c.from("pull_bookings").select("id");
   check("พนักงานคนอื่นไม่เห็นการจองของเพื่อน", (other.data ?? []).length === 0);
 
@@ -67,8 +89,8 @@ try {
   check("ยกเลิกพร้อมเหตุผล", !r.error, r.error?.message);
   const after = await sup.c.from("pull_bookings").select("status, cancel_reason").eq("id", id).single();
   check("บันทึกสถานะและเหตุผลการยกเลิก", after.data?.status === "cancelled" && after.data.cancel_reason === "จองผิด");
-  const n2 = await emp.c.from("notifications").select("kind").eq("kind", "pull_cancelled");
-  check("พนักงานได้แจ้งเตือนว่ายกเลิก", n2.data?.length === 1);
+  const n2 = await emp.c.from("notifications").select("title, link").eq("kind", "pull_cancelled");
+  check("พนักงานได้แจ้งเตือนว่ายกเลิก (ตำแหน่งในคลังตัวเอง)", n2.data?.length === 1 && n2.data[0].title === "ยกเลิกตำแหน่งงานที่จัดไว้" && n2.data[0].link === "/my-position", JSON.stringify(n2.data));
   r = await sup.c.from("pull_bookings").update({ status: "booked" }).eq("id", id).select();
   check("แก้รายการจองตรงๆ ไม่ได้", !!r.error || (r.data ?? []).length === 0);
 } finally {

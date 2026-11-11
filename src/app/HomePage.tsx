@@ -7,6 +7,7 @@ import { AppShell } from "@/components/AppShell";
 import { useApp } from "@/components/AuthProvider";
 import { Icon } from "@/components/Icon";
 import { Puinun } from "@/components/Puinun";
+import { MySummary } from "@/components/home/MySummary";
 import { navFor, type NavItem } from "@/lib/nav";
 import { sb } from "@/lib/supabase";
 import { isGlobal, isSupervisorUp, noTimekeeping } from "@/lib/types";
@@ -90,6 +91,9 @@ export default function HomePage() {
           {clockedIn && row?.first_in && <p className="mt-2 text-center text-[14px] font-semibold text-ok">{t("home.inAt", { t: fmt.time(row.first_in) })}</p>}
         </div>}
       </section>
+
+      {/* สรุปของฉัน: ตำแหน่งวันนี้ OT วันลา (คนที่ลงเวลา) */}
+      {timekeep && <MySummary />}
 
       {/* งานรอดำเนินการ (หัวหน้างานขึ้นไป) */}
       {boss && (pending.leave > 0 || pending.fix > 0) && (
