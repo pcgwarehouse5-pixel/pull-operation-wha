@@ -209,13 +209,17 @@ export function AppShell({
       {/* หน้ารวมเมนู (มือถือ) */}
       {menuOpen && (
         <div className="fixed inset-0 z-50 bg-[#0b1433]/55 lg:hidden" onClick={() => setMenuOpen(false)} role="dialog" aria-modal="true" aria-label={t("common.allMenu")}>
-          <div className="absolute inset-x-0 bottom-0 max-h-[88vh] overflow-y-auto rounded-t-[28px] bg-paper pb-[max(16px,env(safe-area-inset-bottom))]" onClick={(e) => e.stopPropagation()}>
+          <div className="absolute inset-x-0 bottom-0 max-h-[88dvh] overflow-y-auto overscroll-contain rounded-t-[28px] bg-paper pb-[max(16px,env(safe-area-inset-bottom))]" onClick={(e) => e.stopPropagation()}>
             <div className="relative flex items-center gap-3 rounded-t-[28px] bg-brand px-5 pt-4 pb-5 text-white">
               <Mark size={44} />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-lg font-bold">{name}</p>
                 <p className="text-sm text-white/75">{role}</p>
               </div>
+              {/* ออกจากระบบไว้ด้านบนด้วย (เมนูของหัวหน้ายาวมาก ไม่ต้องเลื่อนลงไปหาข้างล่าง) */}
+              <button onClick={signOut} className="flex min-h-11 items-center gap-1.5 rounded-full bg-white/12 px-3 text-[14px] font-semibold text-white hover:bg-white/20">
+                <Icon name="logout" size={18} /> {t("common.logout")}
+              </button>
               <button onClick={() => setMenuOpen(false)} className="rounded-full p-2 text-white/80 hover:bg-white/10" aria-label={t("common.closeMenu")}>
                 <Icon name="close" />
               </button>

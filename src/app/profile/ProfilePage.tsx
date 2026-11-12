@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { Icon } from "@/components/Icon";
 import { AppShell } from "@/components/AppShell";
 import { useApp } from "@/components/AuthProvider";
 import { Alert, Button, Card, Field, inputCls } from "@/components/ui";
@@ -13,7 +14,7 @@ import { localizeError, useI18n } from "@/i18n";
 import type { MsgKey } from "@/i18n/th";
 
 export default function ProfilePage() {
-  const { profile, warehouses, reload, preview } = useApp();
+  const { profile, warehouses, reload, preview, signOut } = useApp();
   const { t } = useI18n();
   const [nickname, setNickname] = useState(profile.nickname ?? "");
   const [phone, setPhone] = useState(profile.phone ?? "");
@@ -108,6 +109,11 @@ export default function ProfilePage() {
           {t("pf.changePassword")}
         </Link>
       </Card>
+
+      {/* ออกจากระบบ (อีกทางหนึ่ง นอกจากเมนู) */}
+      <button onClick={signOut} className="mt-4 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-white font-semibold text-bad ring-1 ring-line">
+        <Icon name="logout" size={20} /> {t("common.logout")}
+      </button>
     </AppShell>
   );
 }

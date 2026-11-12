@@ -109,10 +109,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // ใช้ข้อมูลเฉพาะของผู้ใช้ที่ล็อกอินอยู่ตอนนี้ (ออกจากระบบ/สลับบัญชีแล้วไม่ค้างของเก่า)
   const data = session && loaded?.uid === session.user.id ? loaded : null;
 
+  // ออกจากระบบต้องสำเร็จเสมอ แม้เน็ตในคลังช้า/หลุด:
+  // ลองยกเลิกการล็อกอินที่เซิร์ฟเวอร์ก่อน (รอไม่เกิน 3 วินาที) แล้วล้างการล็อกอินในเครื่องนี้ทุกครั้ง
+  // จากนั้นโหลดหน้าล็อกอินใหม่ทั้งหน้า (ไม่ค้างข้อมูลของบัญชีเดิมในหน่วยความจำ)
   const signOut = useCallback(async () => {
-    await sb().auth.signOut();
-    router.replace("/login");
-  }, [router]);
+    const c = sb();
+    await Promise.race([c.auth.signOut().catch(() => null), new Promise((r) => setTimeout(r, 3000))]);
+    await c.auth.signOut({ scope: "local" }).catch(() => null);
+    window.location.replace("/login");
+  }, []);
 
   // ยังใช้รหัสผ่านเริ่มต้นอยู่ → ต้องตั้งรหัสใหม่ก่อนใช้งานทุกหน้า
   const mustChange = !!data?.profile?.must_change_password;
