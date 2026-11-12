@@ -40,14 +40,14 @@ export const ROLE_RANK: Record<AppRole, number> = {
 
 // บทบาทสูงสุดที่แต่ละคนมอบให้คนอื่นได้ (ตรงกับฟังก์ชัน set_user_access ในฐานข้อมูล) · ไม่มอบ "ผู้บริหาร" แล้ว
 export function assignableRoles(me: AppRole): AppRole[] {
-  const max: Partial<Record<AppRole, number>> = { admin: 2, executive: 3, dept_manager: 3, division_manager: 4, deputy_gm: 5, gm: 6, super_admin: 9 };
+  const max: Partial<Record<AppRole, number>> = { supervisor: 2, admin: 2, executive: 3, dept_manager: 3, division_manager: 4, deputy_gm: 5, gm: 6, super_admin: 9 };
   return ROLES.filter((r) => r !== "executive" && ROLE_RANK[r] <= (max[me] ?? 0));
 }
 
 /** เห็นและจัดการได้ทุกคลัง (ผู้จัดการทุกระดับ ผู้บริหารเดิม และผู้ดูแลระบบสูงสุด) */
 export const isGlobal = (r: AppRole) => ROLE_RANK[r] >= 4;
-/** แอดมินคลังขึ้นไป */
-export const isManager = (r: AppRole) => ROLE_RANK[r] >= 3;
+/** ทำงานระดับแอดมินคลังได้ (หัวหน้างานขึ้นไป · หัวหน้างานทำได้เท่าแอดมิน ยกเว้นตั้งค่า Pull) */
+export const isManager = (r: AppRole) => ROLE_RANK[r] >= 2;
 export const isSupervisorUp = (r: AppRole) => ROLE_RANK[r] >= 2;
 /** ผู้จัดการ (ทำได้ทุกอย่าง เช่น เพิ่มคลัง แก้ตารางกะหัวหน้าคลัง) */
 export const isManagerRole = (r: AppRole) => ["dept_manager", "division_manager", "deputy_gm", "gm", "super_admin"].includes(r);

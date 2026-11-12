@@ -73,7 +73,8 @@ test("บันทึกยอดงาน: สิทธิ์ วันที�
   await assert.rejects(save(U.emp5, "public.pull_today()", 1), /ไม่มีสิทธิ์/);
   await assert.rejects(save(U.admin32, "public.pull_today()", 1), /ไม่มีสิทธิ์/);
   await assert.rejects(save(U.admin32, "public.pull_today()", 1, WH32), /ไม่พบประเภทงาน/, "ใช้ประเภทงานของคลังอื่นไม่ได้");
-  await assert.rejects(save(U.sup5, "public.pull_today() - 1", 1), /เฉพาะแอดมิน/, "หัวหน้างานแก้ย้อนหลังไม่ได้");
+  await save(U.sup5, "public.pull_today() - 1", 380); // หัวหน้างานแก้ย้อนหลังได้เหมือนแอดมิน
+  await assert.rejects(save(U.emp5, "public.pull_today() - 1", 1), /ไม่มีสิทธิ์|เฉพาะแอดมิน/);
   await save(U.admin5, "public.pull_today() - 1", 390);
   await assert.rejects(save(U.sup5, "public.pull_today() + 91", 1), /ไม่เกิน 90 วัน/);
   await assert.rejects(save(U.sup5, "public.pull_today()", -1), /ไม่ติดลบ/);

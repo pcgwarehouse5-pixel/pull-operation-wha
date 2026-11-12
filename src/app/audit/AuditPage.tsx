@@ -110,7 +110,7 @@ export default function AuditPage() {
   }, [load]);
 
   return (
-    <AppShell title="ประวัติการใช้งาน" minRole="admin">
+    <AppShell title="ประวัติการใช้งาน" minRole="supervisor">
       <PageHelper pose="paper" title="ประวัติการใช้งาน">ระบบบันทึกเองทุกครั้ง แก้ไขหรือลบไม่ได้</PageHelper>
       <div className="mb-3 max-w-xs">
         <select className={inputCls} value={action} onChange={(e) => setAction(e.target.value)} aria-label="ประเภท">

@@ -51,9 +51,10 @@ test("แอดมินแก้ข้อมูลพนักงานได�
     const r = await db.query(`update public.profiles set position = 'Picker' where id = $1`, [U.emp32]);
     assert.equal(r.affectedRows, 0, "แอดมินคลัง 5 แก้คนคลัง 32 ไม่ได้");
   });
-  // หัวหน้างานดูได้แต่แก้ข้อมูลพนักงานไม่ได้ (ไม่มีแถวไหนถูกแก้)
-  const sup = await as(db, U.sup5, () => db.query(`update public.profiles set position = 'RT' where id = $1`, [U.emp5]));
-  assert.equal(sup.affectedRows, 0);
+  // หัวหน้างานแก้ข้อมูลพนักงานคลังตัวเองได้เหมือนแอดมิน แต่คลังอื่นไม่ได้
+  await as(db, U.sup5, () => db.query(`update public.profiles set position = 'Picker' where id = $1`, [U.emp5]));
+  const sup32 = await as(db, U.sup5, () => db.query(`update public.profiles set position = 'RT' where id = $1`, [U.emp32]));
+  assert.equal(sup32.affectedRows, 0, "หัวหน้างานคลัง 5 แก้คนคลัง 32 ไม่ได้");
   assert.equal((await rows(db, `select position from public.profiles where id = $1`, [U.emp5]))[0].position, "Picker");
   // ผู้บริหารแก้ได้ทุกคลังเหมือนแอดมิน
   await as(db, U.exec, () => db.query(`update public.profiles set position = 'RT' where id = $1`, [U.emp32]));
@@ -71,8 +72,13 @@ test("การกำหนดบทบาทเป็นไปตามลำ�
   await assert.rejects(access(U.admin5, U.emp32, "supervisor", WH32), /ไม่มีสิทธิ์จัดการผู้ใช้คลังนี้/);
   await assert.rejects(access(U.admin5, U.admin5, "admin", WH5), /ของตัวเอง/);
   await assert.rejects(access(U.admin5, U.emp5, "employee", WH32), /ย้ายผู้ใช้ไปคลังนี้/);
-  // หัวหน้างานกำหนดบทบาทไม่ได้เลย
-  await assert.rejects(access(U.sup5, U.emp5, "employee", WH5), /ไม่มีสิทธิ์กำหนดบทบาท/);
+  // หัวหน้างาน (= แอดมิน): ตั้งได้ถึงหัวหน้างาน เฉพาะคลังตัวเอง จัดการคนที่บทบาทเท่ากันหรือสูงกว่าไม่ได้ · พนักงานกำหนดไม่ได้
+  await access(U.admin5, U.emp5, "employee", WH5);
+  await assert.rejects(access(U.sup5, U.emp5, "admin", WH5), /กำหนดบทบาทนี้ไม่ได้/);
+  await assert.rejects(access(U.sup5, U.emp32, "employee", WH32), /ไม่มีสิทธิ์จัดการผู้ใช้คลังนี้/);
+  await assert.rejects(access(U.sup5, U.admin5, "employee", WH5), /เท่ากับหรือสูงกว่า/);
+  await access(U.sup5, U.emp5, "supervisor", WH5);
+  await assert.rejects(access(U.emp32, U.emp5, "employee", WH5), /ไม่มีสิทธิ์กำหนดบทบาท/);
 
   // ผู้บริหาร (บทบาทเดิม เลิกใช้): ตั้งแอดมินได้ทุกคลัง แต่ตั้งผู้บริหารไม่ได้ และแก้ผู้บริหารคนอื่นไม่ได้
   await access(U.exec, U.emp32, "admin", WH32, [WH5]);
@@ -127,8 +133,8 @@ test("คลัง: ทุกคนดูได้ เฉพาะผู้ด�
 test("ตัวเลือกตั้งค่า: ทุกคนอ่านได้ แอดมินขึ้นไปแก้ได้", async () => {
   const db = await setup();
   const ins = `insert into public.dropdown_options (category, value, label) values ('position', 'RT', 'RT')`;
-  await assert.rejects(as(db, U.sup5, () => db.query(ins)), /row-level security/);
-  await as(db, U.admin5, () => db.query(ins));
+  await assert.rejects(as(db, U.emp5, () => db.query(ins)), /row-level security/);
+  await as(db, U.sup5, () => db.query(ins));
   assert.equal((await as(db, U.emp5, () => rows(db, `select value from public.dropdown_options where category = 'position'`))).length, 1);
 });
 
@@ -163,7 +169,9 @@ test("ตรวจสิทธิ์รีเซ็ตรหัสผ่าน (
   assert.equal(await can(U.admin5, U.emp32), false, "คนละคลัง");
   assert.equal(await can(U.admin5, U.admin5), false, "ตัวเอง");
   assert.equal(await can(U.admin5, U.exec), false, "บทบาทสูงกว่า");
-  assert.equal(await can(U.sup5, U.emp5), false, "หัวหน้างานรีเซ็ตไม่ได้");
+  assert.equal(await can(U.sup5, U.emp5), true, "หัวหน้างานรีเซ็ตรหัสคนในคลังได้เหมือนแอดมิน");
+  assert.equal(await can(U.sup5, U.admin5), false, "แต่จัดการแอดมินไม่ได้");
+  assert.equal(await can(U.emp5, U.emp5), false);
   assert.equal(await can(U.exec, U.admin32), true);
   assert.equal(await can(U.super, U.exec), true);
 });

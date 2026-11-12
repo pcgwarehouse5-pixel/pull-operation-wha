@@ -10,7 +10,8 @@ test("ให้บทบาทได้ต่ำกว่าตัวเอง�
   assert.deepEqual(assignableRoles("gm"), ["employee", "supervisor", "admin", "dept_manager", "division_manager", "deputy_gm"]);
   assert.ok(!assignableRoles("super_admin").includes("executive"));
   assert.ok(assignableRoles("super_admin").includes("gm"));
-  assert.deepEqual(assignableRoles("supervisor"), []);
+  assert.deepEqual(assignableRoles("supervisor"), ["employee", "supervisor"], "หัวหน้างานให้บทบาทได้เท่าแอดมิน");
+  assert.deepEqual(assignableRoles("employee"), []);
 });
 
 test("อนุมัติระดับถัดไป (ตรงกับ can_approve_user)", () => {

@@ -74,7 +74,7 @@ export default function WorkloadPage() {
     };
   }, [demo, wh, from, to, today]);
 
-  const isManager = isGlobal(profile.role) || (ROLE_RANK[profile.role] >= ROLE_RANK.admin && myWarehouseIds.includes(wh));
+  const isManager = isGlobal(profile.role) || (ROLE_RANK[profile.role] >= ROLE_RANK.supervisor && myWarehouseIds.includes(wh));
   const canEdit = date >= today || isManager;
   const maxDate = addDays(today, 90);
 
@@ -135,7 +135,7 @@ export default function WorkloadPage() {
         <div className="mb-4">
           <Alert tone="warning">
             การตั้งค่าของคลังนี้ยังไม่ครบ บางทักษะจะยังไม่มีตัวเลข
-            {ROLE_RANK[profile.role] >= ROLE_RANK.admin ? <> · <Link href="/pull/settings" className="font-semibold underline">ไปตั้งค่า Pull</Link></> : " · แจ้งแอดมินคลังให้ตั้งค่า"}
+            {ROLE_RANK[profile.role] >= ROLE_RANK.supervisor ? <> · <Link href="/pull/settings" className="font-semibold underline">ไปตั้งค่า Pull</Link></> : " · แจ้งแอดมินคลังให้ตั้งค่า"}
           </Alert>
         </div>
       )}

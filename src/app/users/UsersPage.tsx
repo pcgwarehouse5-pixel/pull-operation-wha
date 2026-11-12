@@ -82,7 +82,7 @@ export default function UsersPage() {
   const pending = (rows ?? []).filter((r) => r.must_change_password && r.status === "active").length;
 
   return (
-    <AppShell title="ผู้ใช้และสิทธิ์" wide minRole="admin">
+    <AppShell title="ผู้ใช้และสิทธิ์" wide minRole="supervisor">
       <PageHelper pose="hello"
         title="ผู้ใช้และสิทธิ์"
         action={

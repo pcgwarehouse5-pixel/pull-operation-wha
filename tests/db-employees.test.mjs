@@ -25,13 +25,15 @@ test("ทักษะ: แอดมินกำหนดได้เฉพาะ
   await as(db, U.admin5, () => db.query(`select public.set_employee_skills($1, $2)`, [U.emp5, [S2]]));
   assert.deepEqual(await skillsOf(db, U.emp5), [S2]);
   await assert.rejects(as(db, U.admin5, () => db.query(`select public.set_employee_skills($1, $2)`, [U.emp32, [S1]])), /ไม่มีสิทธิ์/);
-  await assert.rejects(as(db, U.sup5, () => db.query(`select public.set_employee_skills($1, $2)`, [U.emp5, [S1]])), /ไม่มีสิทธิ์/);
+  // หัวหน้างานกำหนดทักษะได้เหมือนแอดมิน (คลังตัวเอง)
+  await as(db, U.sup5, () => db.query(`select public.set_employee_skills($1, $2)`, [U.emp5, [S2]]));
+  await assert.rejects(as(db, U.sup5, () => db.query(`select public.set_employee_skills($1, $2)`, [U.emp32, [S1]])), /ไม่มีสิทธิ์/);
   await assert.rejects(as(db, U.emp5, () => db.query(`select public.set_employee_skills($1, $2)`, [U.emp5, [S1]])), /ไม่มีสิทธิ์/);
   // ผู้บริหารแก้ได้ทุกคลัง
   await as(db, U.exec, () => db.query(`select public.set_employee_skills($1, $2)`, [U.emp32, [S1]]));
   assert.deepEqual(await skillsOf(db, U.emp32), [S1]);
   const logs = await rows(db, `select new_data->'skills' as s from public.audit_logs where action = 'skills_update' and record_id = $1 order by id`, [U.emp5]);
-  assert.deepEqual(logs.map((l) => l.s), [["RT ยกจ่าย", "RT ยกรับ"], ["RT ยกจ่าย"]]);
+  assert.deepEqual(logs.map((l) => l.s), [["RT ยกจ่าย", "RT ยกรับ"], ["RT ยกจ่าย"]], "หัวหน้างานบันทึกค่าเดิมซ้ำ ไม่เพิ่มประวัติ");
 });
 
 test("ทักษะ: แก้ตรงๆ ไม่ได้ และเห็นเฉพาะคนที่มีสิทธิ์เห็น", async () => {
@@ -44,9 +46,10 @@ test("ทักษะ: แก้ตรงๆ ไม่ได้ และเห�
   assert.deepEqual(await seen(U.emp5), [U.emp5], "พนักงานเห็นแค่ของตัวเอง");
   assert.deepEqual(await seen(U.sup5), [U.emp5], "หัวหน้างานคลัง 5 เห็นคนในคลัง 5");
   assert.equal((await seen(U.exec)).length, 2, "ผู้บริหารเห็นทุกคลัง");
-  // รายการทักษะ: แอดมินเพิ่มได้ หัวหน้างานเพิ่มไม่ได้
+  // รายการทักษะ: แอดมินและหัวหน้างานเพิ่มได้ พนักงานเพิ่มไม่ได้
   await as(db, U.admin5, () => db.query(`insert into public.skills (position, name) values ('OP', 'OP ลากรับ')`));
-  await assert.rejects(as(db, U.sup5, () => db.query(`insert into public.skills (position, name) values ('OP', 'OP ลากจ่าย')`)), /row-level security/);
+  await as(db, U.sup5, () => db.query(`insert into public.skills (position, name) values ('OP', 'OP ลากจ่าย')`));
+  await assert.rejects(as(db, U.emp5, () => db.query(`insert into public.skills (position, name) values ('OP', 'OP ลากอื่น')`)), /row-level security/);
 });
 
 test("อัตรากำลัง: แยกตามคลัง แอดมินแก้ได้เฉพาะคลังตัวเอง", async () => {
@@ -56,8 +59,10 @@ test("อัตรากำลัง: แยกตามคลัง แอด�
     as(db, U.admin5, () => db.query(`insert into public.headcount_budgets (warehouse_id, position, budget_count) values ($1, 'RT', 6)`, [WH32])),
     /row-level security/,
   );
+  // หัวหน้างานแก้อัตรากำลังคลังตัวเองได้ คลังอื่นไม่ได้
+  await as(db, U.sup5, () => db.query(`insert into public.headcount_budgets (warehouse_id, position, budget_count) values ($1, 'OP', 2)`, [WH5]));
   await assert.rejects(
-    as(db, U.sup5, () => db.query(`insert into public.headcount_budgets (warehouse_id, position, budget_count) values ($1, 'OP', 2)`, [WH5])),
+    as(db, U.sup5, () => db.query(`insert into public.headcount_budgets (warehouse_id, position, budget_count) values ($1, 'OP', 2)`, [WH32])),
     /row-level security/,
   );
   await as(db, U.exec, () => db.query(`insert into public.headcount_budgets (warehouse_id, position, budget_count) values ($1, 'RT', 4)`, [WH32]));
@@ -66,9 +71,9 @@ test("อัตรากำลัง: แยกตามคลัง แอด�
     /check/,
   );
   const seen = async (uid) => (await as(db, uid, () => rows(db, `select warehouse_id from public.headcount_budgets`))).length;
-  assert.equal(await seen(U.sup5), 1, "หัวหน้างานคลัง 5 เห็นเฉพาะคลัง 5");
+  assert.equal(await seen(U.sup5), 2, "หัวหน้างานคลัง 5 เห็นเฉพาะคลัง 5 (RT + OP ที่เพิ่มเอง)");
   assert.equal(await seen(U.emp5), 0, "พนักงานไม่เห็นอัตรากำลัง");
-  assert.equal(await seen(U.exec), 2);
+  assert.equal(await seen(U.exec), 3, "ผู้บริหารเห็นทุกคลัง");
 });
 
 test("ลาออก/คืนสภาพ: ต้องมีวันที่และเหตุผล ทำได้ตามสิทธิ์ และหมดสิทธิ์ทันที", async () => {
@@ -77,7 +82,8 @@ test("ลาออก/คืนสภาพ: ต้องมีวันที�
   await assert.rejects(as(db, U.admin5, () => status(U.sup5, "resigned", null, "ย้ายงาน")), /วันที่/);
   await assert.rejects(as(db, U.admin5, () => status(U.sup5, "resigned", "2026-11-30", " ")), /เหตุผล/);
   await assert.rejects(as(db, U.admin5, () => status(U.emp32, "resigned", "2026-11-30", "ย้ายงาน")), /ไม่มีสิทธิ์/);
-  await assert.rejects(as(db, U.sup5, () => status(U.emp5, "resigned", "2026-11-30", "ย้ายงาน")), /ไม่มีสิทธิ์/);
+  await assert.rejects(as(db, U.sup5, () => status(U.emp32, "resigned", "2026-11-30", "ย้ายงาน")), /ไม่มีสิทธิ์/, "หัวหน้างานทำได้เฉพาะคลังตัวเอง");
+  await assert.rejects(as(db, U.emp5, () => status(U.emp5, "resigned", "2026-11-30", "ย้ายงาน")), /ไม่มีสิทธิ์/);
   await assert.rejects(as(db, U.admin5, () => status(U.admin5, "resigned", "2026-11-30", "ลาออกเอง")), /ไม่มีสิทธิ์/, "ทำกับตัวเองไม่ได้");
 
   // หัวหน้างานคลัง 5 ลาออก → หมดสิทธิ์ดูคนอื่นทันที

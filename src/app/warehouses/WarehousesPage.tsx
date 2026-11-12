@@ -33,7 +33,7 @@ export default function WarehousesPage() {
   const [form, setForm] = useState<Form | null>(null);
 
   return (
-    <AppShell title="คลัง" minRole="admin">
+    <AppShell title="คลัง" minRole="supervisor">
       <PageHelper pose="point"
         title="คลัง"
         action={

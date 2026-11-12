@@ -56,7 +56,7 @@ export default function ExecutivePage() {
   const points = trend(scoped);
 
   return (
-    <AppShell title="Dashboard ผู้บริหาร" minRole="admin" wide>
+    <AppShell title="Dashboard ผู้บริหาร" minRole="supervisor" wide>
       <PullBar title="ภาพรวมการจัดกำลังคนคลังสินค้า" sub={`สำหรับผู้บริหาร · ข้อมูลล่าสุด ${at ? at.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }) : "—"}`}>
         <BarDate value={date} onChange={setDate} max={addDays(today, 60)} />
         <BarSelect label="กะ" value={shift} onChange={(v) => setShift(v as Shift)}>

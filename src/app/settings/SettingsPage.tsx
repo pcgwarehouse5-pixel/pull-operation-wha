@@ -78,7 +78,7 @@ export default function SettingsPage() {
     });
 
   return (
-    <AppShell title="ตั้งค่าตัวเลือก" minRole="admin">
+    <AppShell title="ตั้งค่าตัวเลือก" minRole="supervisor">
       <PageHelper pose="think"
         title="ตั้งค่าตัวเลือก"
         action={

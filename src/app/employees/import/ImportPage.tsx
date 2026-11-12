@@ -104,7 +104,7 @@ export default function ImportPage() {
   const toImport = sum ? sum.create + sum.update : 0;
 
   return (
-    <AppShell title="นำเข้าพนักงานจาก Excel" back="/employees" minRole="admin">
+    <AppShell title="นำเข้าพนักงานจาก Excel" back="/employees" minRole="supervisor">
       <Card className="mb-4">
         <h2 className="mb-2 text-lg font-bold text-brand">1. ดาวน์โหลดแม่แบบ</h2>
         <p className="mb-3 text-[15px] text-muted">

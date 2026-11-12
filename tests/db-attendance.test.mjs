@@ -234,8 +234,10 @@ test("ใบลา: ยกเลิก, ขอยกเลิกหลังอ�
 
   // โควตา: ตั้งรายคน 1 วัน → เกินโควตา (ยังยื่นได้ ให้ผู้อนุมัติเห็น)
   await as(db, U.admin5, () => db.query(`insert into public.leave_quota_overrides (user_id, year, leave_type, days) values ($1, 2026, 'sick', 1)`, [U.emp5]));
+  // หัวหน้างานตั้งโควตารายคนได้เหมือนแอดมิน (คลังตัวเอง) แต่คลังอื่นไม่ได้
+  await as(db, U.sup5, () => db.query(`insert into public.leave_quota_overrides (user_id, year, leave_type, days) values ($1, 2026, 'personal', 6)`, [U.emp5]));
   await assert.rejects(
-    as(db, U.sup5, () => db.query(`insert into public.leave_quota_overrides (user_id, year, leave_type, days) values ($1, 2026, 'vacation', 1)`, [U.emp5])),
+    as(db, U.sup5, () => db.query(`insert into public.leave_quota_overrides (user_id, year, leave_type, days) values ($1, 2026, 'vacation', 1)`, [U.emp32])),
     /row-level security/,
   );
   const c = await submit(db, U.emp5, "sick", "2026-12-07", "2026-12-08");

@@ -50,7 +50,7 @@ export const NAV_GROUPS: { id: "mine" | "staff" | "pull" | "manage"; title: stri
       { key: "pull-workload", href: "/pull/workload", label: "กรอกปริมาณงาน", desc: "ยอดงานคาดการณ์ต่อวัน/กะ เห็นคนที่ต้องการทันที", icon: "leave", minRole: "supervisor" },
       { key: "pull-requirements", href: "/pull/requirements", label: "ผลคำนวณกำลังคน", desc: "สูตรและตัวเลขรายทักษะ ตรวจสอบย้อนกลับได้", icon: "chart", minRole: "supervisor" },
       { key: "pull-layout", href: "/pull/layout", label: "ผังตำแหน่งพนักงาน", desc: "ใครอยู่ตำแหน่งไหน เวลาพัก ใช้ประชุมก่อนเริ่มงาน", icon: "grid", minRole: "supervisor" },
-      { key: "pull-dashboard", href: "/pull/dashboard", label: "Dashboard ผู้บริหาร", desc: "ความต้องการเทียบจองแล้ว ทุกคลัง แนวโน้ม 7 วัน", icon: "chart", minRole: "admin" },
+      { key: "pull-dashboard", href: "/pull/dashboard", label: "Dashboard ผู้บริหาร", desc: "ความต้องการเทียบจองแล้ว ทุกคลัง แนวโน้ม 7 วัน", icon: "chart", minRole: "supervisor" },
       { key: "pull-settings", href: "/pull/settings", label: "ตั้งค่า Pull", desc: "ทักษะที่ดึงได้ Productivity ประเภทงาน ชั่วโมงต่อกะ", icon: "link", minRole: "admin" },
     ],
   },
@@ -58,10 +58,10 @@ export const NAV_GROUPS: { id: "mine" | "staff" | "pull" | "manage"; title: stri
     id: "manage",
     title: "จัดการ",
     items: [
-      { key: "users", href: "/users", label: "ผู้ใช้และสิทธิ์", desc: "บทบาท คลัง และรีเซ็ตรหัสผ่าน", icon: "key", minRole: "admin" },
-      { key: "warehouses", href: "/warehouses", label: "คลัง", desc: "รายชื่อคลังและพิกัด", icon: "warehouse", minRole: "admin" },
-      { key: "settings", href: "/settings", label: "ตั้งค่าตัวเลือก", desc: "ตำแหน่ง รหัสกะ ประเภทลา", icon: "gear", minRole: "admin" },
-      { key: "audit", href: "/audit", label: "ประวัติการใช้งาน", desc: "ใครทำอะไร เมื่อไร", icon: "clock", minRole: "admin" },
+      { key: "users", href: "/users", label: "ผู้ใช้และสิทธิ์", desc: "บทบาท คลัง และรีเซ็ตรหัสผ่าน", icon: "key", minRole: "supervisor" },
+      { key: "warehouses", href: "/warehouses", label: "คลัง", desc: "รายชื่อคลังและพิกัด", icon: "warehouse", minRole: "supervisor" },
+      { key: "settings", href: "/settings", label: "ตั้งค่าตัวเลือก", desc: "ตำแหน่ง รหัสกะ ประเภทลา", icon: "gear", minRole: "supervisor" },
+      { key: "audit", href: "/audit", label: "ประวัติการใช้งาน", desc: "ใครทำอะไร เมื่อไร", icon: "clock", minRole: "supervisor" },
     ],
   },
 ];

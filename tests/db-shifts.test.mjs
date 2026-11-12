@@ -106,10 +106,12 @@ test("ตารางกะ: ล้างทั้งเดือนต้อง
   await assert.rejects(as(db, U.emp5, () => db.query(`select public.restore_schedule_month($1)`, [log.id])), /ไม่มีสิทธิ์/);
 });
 
-test("ปฏิทินวันหยุด: ทุกคนดูได้ แอดมินขึ้นไปแก้ได้", async () => {
+test("ปฏิทินวันหยุด: ทุกคนดูได้ หัวหน้างานขึ้นไปแก้ได้", async () => {
   const db = await setup();
   await as(db, U.admin5, () => db.query(`insert into public.holidays (holiday_date, name) values ('2026-12-05', 'วันพ่อแห่งชาติ (ตัวอย่าง)')`));
-  await assert.rejects(as(db, U.sup5, () => db.query(`insert into public.holidays (holiday_date, name) values ('2026-12-10', 'x')`)), /row-level security/);
+  await as(db, U.sup5, () => db.query(`insert into public.holidays (holiday_date, name) values ('2026-12-10', 'x')`));
+  await as(db, U.sup5, () => db.query(`delete from public.holidays where holiday_date = '2026-12-10'`));
+  await assert.rejects(as(db, U.emp5, () => db.query(`insert into public.holidays (holiday_date, name) values ('2026-12-10', 'x')`)), /row-level security/);
   await assert.rejects(as(db, U.admin5, () => db.query(`insert into public.holidays (holiday_date, name) values ('2026-12-05', 'ซ้ำ')`)), /duplicate/);
   assert.equal((await as(db, U.emp5, () => rows(db, `select * from public.holidays`))).length, 1);
 });

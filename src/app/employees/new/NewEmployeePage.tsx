@@ -45,7 +45,7 @@ export default function NewEmployeePage() {
   }
 
   return (
-    <AppShell title="เพิ่มพนักงาน" back="/employees" minRole="admin">
+    <AppShell title="เพิ่มพนักงาน" back="/employees" minRole="supervisor">
       <Card className="mb-4">
         <Field label="คลัง">
           <select className={inputCls} value={wh} onChange={(e) => setWh(e.target.value)}>

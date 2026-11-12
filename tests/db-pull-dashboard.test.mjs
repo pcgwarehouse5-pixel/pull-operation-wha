@@ -68,9 +68,9 @@ test("ภาพรวม: ทั้งวัน (รวม 2 กะ) และ�
   assert.equal(days.at(-1).work_day, d);
 });
 
-test("ภาพรวม: สิทธิ์ (แอดมินขึ้นไป) และช่วงวันที่", async () => {
+test("ภาพรวม: สิทธิ์ (หัวหน้างานขึ้นไป) และช่วงวันที่", async () => {
   const { db, d } = await world();
-  await assert.rejects(net(db, U.sup5, d), /ไม่มีสิทธิ์/);
+  assert.equal(Object.keys(await net(db, U.sup5, d)).length, 2, "หัวหน้างานเห็นตัวเลขรวมทุกคลังเหมือนแอดมิน");
   await assert.rejects(net(db, U.emp5, d), /ไม่มีสิทธิ์/);
   assert.equal(Object.keys(await net(db, U.admin5, d)).length, 2, "แอดมินเห็นตัวเลขรวมทุกคลัง");
   await assert.rejects(as(db, U.exec, () => db.query(`select * from public.pull_network($1::date - 40, $1::date, 'morning')`, [d])), /ไม่เกิน 31 วัน/);
