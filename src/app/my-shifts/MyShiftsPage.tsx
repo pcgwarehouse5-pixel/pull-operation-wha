@@ -44,13 +44,12 @@ export default function MyShiftsPage() {
       const [team, hol, st] = await Promise.all([
         fetchAll<TeamRow>((f, tt) => sb().rpc("team_schedule", { p_month: from }).range(f, tt)),
         sb().from("holidays").select("holiday_date, name").gte("holiday_date", from).lt("holiday_date", to).order("holiday_date"),
-        me.warehouse_id
-          ? sb().from("schedule_months").select("status").eq("warehouse_id", me.warehouse_id).eq("month", from).maybeSingle()
-          : Promise.resolve({ data: null }),
+        // ประกาศแล้วหรือยัง: ดูตามตารางของฉัน (ปกติ หรือ หัวหน้าคลัง) · 1 เดือนมี 2 แถว (ตารางปกติ + ตารางหัวหน้าคลัง)
+        me.warehouse_id ? sb().rpc("is_published_for", { p_user: me.id, p_date: from }) : Promise.resolve({ data: false }),
       ]);
       setRows(team);
       setHolidays((hol.data ?? []) as Holiday[]);
-      setPublished((st.data as { status?: string } | null)?.status === "published");
+      setPublished(st.data === true);
     } catch (e) {
       setRows([]);
       setErr(localizeError((e as Error).message ?? String(e), t));
