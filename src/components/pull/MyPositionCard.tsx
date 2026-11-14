@@ -9,7 +9,7 @@ import { breakHm, type MyPos, type ShiftTime } from "@/lib/my-position";
 function ShiftLine({ pos, shift }: { pos: MyPos; shift?: ShiftTime }) {
   const { t, fmt } = useI18n();
   return (
-    <span className="flex items-center gap-1.5 text-[15px] font-semibold text-ink">
+    <span className="flex flex-wrap items-center gap-x-1.5 text-[15px] font-semibold whitespace-nowrap text-ink">
       <Icon name={pos.shift === "morning" ? "sun" : "moon"} size={18} className="text-[#f97316]" />
       {t(pos.shift === "morning" ? "pull.my.morning" : "pull.my.night")}
       {shift?.start && <span className="num text-muted">· {fmt.time(shift.start)}–{fmt.time(shift.end)}</span>}

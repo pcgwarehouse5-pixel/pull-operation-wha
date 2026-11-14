@@ -119,6 +119,8 @@ export const th = {
   "nav.warehouses.desc": "รายชื่อคลังและพิกัด",
   "nav.settings": "ตั้งค่า",
   "nav.settings.desc": "ตัวเลือก กฎและอัตรา วันหยุด",
+  "nav.holidays": "วันหยุดประจำปี",
+  "nav.holidays.desc": "วันหยุดตามประกาศบริษัท แสดงในตารางกะ คิด OT ให้เอง",
   "nav.audit": "ประวัติการใช้งาน",
   "nav.audit.desc": "ใครทำอะไร เมื่อไร",
 

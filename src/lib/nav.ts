@@ -60,6 +60,7 @@ export const NAV_GROUPS: { id: "mine" | "staff" | "pull" | "manage"; title: stri
     items: [
       { key: "users", href: "/users", label: "ผู้ใช้และสิทธิ์", desc: "บทบาท คลัง และรีเซ็ตรหัสผ่าน", icon: "key", minRole: "supervisor" },
       { key: "warehouses", href: "/warehouses", label: "คลัง", desc: "รายชื่อคลังและพิกัด", icon: "warehouse", minRole: "supervisor" },
+      { key: "holidays", href: "/holidays", label: "วันหยุดประจำปี", desc: "วันหยุดตามประกาศบริษัท แสดงในตารางกะ คิด OT ให้เอง", icon: "calendar", minRole: "supervisor" },
       { key: "settings", href: "/settings", label: "ตั้งค่าตัวเลือก", desc: "ตำแหน่ง รหัสกะ ประเภทลา", icon: "gear", minRole: "supervisor" },
       { key: "audit", href: "/audit", label: "ประวัติการใช้งาน", desc: "ใครทำอะไร เมื่อไร", icon: "clock", minRole: "supervisor" },
     ],

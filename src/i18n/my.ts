@@ -120,6 +120,8 @@ export const my: Record<MsgKey, string> = {
   "nav.warehouses.desc": "ဂိုဒေါင်စာရင်းနှင့် တည်နေရာ",
   "nav.settings": "ဆက်တင်",
   "nav.settings.desc": "ရွေးချယ်စရာ၊ စည်းမျဉ်း၊ ပိတ်ရက်",
+  "nav.holidays": "နှစ်စဉ် အားလပ်ရက်",
+  "nav.holidays.desc": "ကုမ္ပဏီ ကြေညာသော အားလပ်ရက်၊ အလုပ်ချိန်ဇယားတွင် ပြမည်၊ OT အလိုအလျောက် တွက်မည်",
   "nav.audit": "အသုံးပြုမှု မှတ်တမ်း",
   "nav.audit.desc": "ဘယ်သူ ဘာလုပ်ခဲ့သလဲ",
 

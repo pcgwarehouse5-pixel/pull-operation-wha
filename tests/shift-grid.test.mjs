@@ -95,3 +95,31 @@ test("ลากเรียงรายชื่อในกลุ่ม: ลง
   assert.deepEqual(sortByMembers(emps, ["e3", "e1"]).map((e) => e.id), ["e3", "e1", "e2", "e4"], "คนใหม่ต่อท้ายตามลำดับเดิม");
   assert.deepEqual(mergeMembers(["x", "e1", "y", "e2"], ["e2", "e1"]), ["e2", "e1", "x", "y"]);
 });
+
+test("ทำงานวันหยุด: ติดธงให้เองเมื่อเปลี่ยนเป็นกะทำงาน (OFF แดง / วันหยุดประจำปี) ไม่ติดเมื่อเป็น OFF เหลือง", async () => {
+  const { autoHolidayWork, otDayKind, cellCopyText } = await import("../src/lib/shift-grid.ts");
+  const { shiftDef } = await import("../src/lib/shifts.ts");
+  const defs = new Map([
+    shiftDef({ value: "STD1", label: "08:00-17:00", extra: { start_time: "08:00", end_time: "17:00" } }),
+    shiftDef({ value: "OFF", label: "OFF", extra: {} }),
+    shiftDef({ value: "OFFC", label: "OFF", extra: { no_ot: true } }),
+    shiftDef({ value: "HOL", label: "นักขัตฤกษ์", extra: {} }),
+  ].map((d) => [d.code, d]));
+  const c = (code, hw = null) => ({ shift_code: code, holiday_work: hw, is_volunteer: false });
+  assert.equal(defs.get("OFFC").noOt, true);
+  assert.equal(autoHolidayWork(c("OFF"), c("STD1"), defs, false).holiday_work, "OFF", "OFF แดง → ทำงาน = ได้ OT");
+  assert.equal(autoHolidayWork(c("OFFC"), c("STD1"), defs, false).holiday_work, null, "OFF เหลือง → ทำงาน = ไม่ได้ OT");
+  assert.equal(autoHolidayWork(c("HOL"), c("STD1"), defs, false).holiday_work, "HOL");
+  assert.equal(autoHolidayWork(undefined, c("STD1"), defs, true).holiday_work, "HOL", "วันหยุดประจำปี");
+  assert.equal(autoHolidayWork(c("STD1", "OFF"), c("STD1"), defs, false).holiday_work, "OFF", "เปลี่ยนเวลากะในวันที่ได้ OT คงธงเดิม");
+  assert.equal(autoHolidayWork(c("STD1"), c("STD1"), defs, false).holiday_work, null);
+  assert.equal(autoHolidayWork(c("STD1", "OFF"), c("OFF"), defs, false).holiday_work, null, "กลับเป็นวันหยุด ล้างธง");
+  assert.equal(autoHolidayWork(c("STD1"), null, defs, true), null);
+  // สีช่อง: ตรงกับการคิด OT ในฐานข้อมูล
+  assert.equal(otDayKind(c("STD1"), defs.get("STD1"), true), "HOL");
+  assert.equal(otDayKind(c("STD1", "OFF"), defs.get("STD1"), false), "OFF");
+  assert.equal(otDayKind(c("OFF"), defs.get("OFF"), true), null);
+  // คัดลอกวันหยุดเป็นรหัส (OFF กับ OFFC ชื่อเหมือนกัน)
+  assert.equal(cellCopyText(c("OFFC"), defs.get("OFFC")), "OFFC");
+  assert.equal(cellCopyText(c("STD1", "OFF"), defs.get("STD1")), "08:00-17:00+OFF");
+});

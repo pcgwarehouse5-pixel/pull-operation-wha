@@ -50,8 +50,9 @@ export const PREVIEW_EXTRA_OPTIONS: DropdownOption[] = [
   { id: "o6", category: "employment_type", value: "mou", label: "MOU", sort_order: 2, extra: {}, is_active: true },
   { id: "o7", category: "employment_type", value: "daily_worker", label: "คนงานรายวัน", sort_order: 3, extra: {}, is_active: true },
   { id: "o9", category: "shift_type", value: "GN_5", label: "20:00-05:00", sort_order: 2, extra: { start_time: "20:00", end_time: "05:00", bg: "#3b82f6" }, is_active: true },
-  { id: "o10", category: "shift_type", value: "OFF", label: "หยุด", sort_order: 3, extra: { bg: "#ef4444" }, is_active: true },
-  { id: "o11", category: "shift_type", value: "HOL", label: "นักขัตฤกษ์", sort_order: 4, extra: { bg: "#f59e0b" }, is_active: true },
+  { id: "o10", category: "shift_type", value: "OFF", label: "OFF", sort_order: 3, extra: { bg: "#ff0000" }, is_active: true },
+  { id: "o10b", category: "shift_type", value: "OFFC", label: "OFF", sort_order: 3, extra: { bg: "#facc15", text: "#16204a", no_ot: true }, is_active: true },
+  { id: "o11", category: "shift_type", value: "HOL", label: "นักขัตฤกษ์", sort_order: 4, extra: { bg: "#7c3aed" }, is_active: true },
   { id: "o8", category: "subcontractor_company", value: "บริษัทตัวอย่าง", label: "บริษัทตัวอย่าง", sort_order: 1, extra: {}, is_active: true },
 ];
 
@@ -93,6 +94,7 @@ export const PREVIEW_EMPLOYEE_SKILLS = [
 ];
 
 export const PREVIEW_HOLIDAYS = [
+  { id: "h0", holiday_date: "2026-11-20", name: "วันหยุดตัวอย่าง พ.ย." },
   { id: "h1", holiday_date: "2026-12-05", name: "วันหยุดตัวอย่าง 1" },
   { id: "h2", holiday_date: "2026-12-31", name: "วันหยุดตัวอย่าง 2" },
 ];
@@ -103,7 +105,9 @@ export function previewShifts(dates: string[]) {
   return ids.flatMap((id, i) =>
     dates.map((d, j) => {
       const dow = new Date(d + "T00:00:00Z").getUTCDay();
-      return { user_id: id, work_date: d, shift_code: dow === 0 ? "OFF" : (Math.floor(j / 7) + i) % 2 ? "GN_5" : "STD1", holiday_work: null, is_volunteer: false };
+      // ตัวอย่าง: อาทิตย์ = OFF แดง · เสาร์ของบางคน = OFF เหลือง · วันที่ 10 ของคนแรก = มาทำงานวัน OFF (ได้ OT)
+      const code = dow === 0 ? "OFF" : dow === 6 && i % 2 === 0 ? "OFFC" : (Math.floor(j / 7) + i) % 2 ? "GN_5" : "STD1";
+      return { user_id: id, work_date: d, shift_code: code, holiday_work: (i === 0 && j === 9 ? "OFF" : null) as "OFF" | "HOL" | null, is_volunteer: false };
     }),
   );
 }

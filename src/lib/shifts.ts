@@ -61,6 +61,7 @@ export type ShiftDef = {
   text: string;
   working: boolean; // มีเวลาเข้า-ออก = กะทำงาน (OFF, HOL ฯลฯ ไม่ใช่)
   night: boolean;
+  noOt: boolean; // วันหยุดที่บริษัทให้พิเศษ (เช่น OFF เหลือง) มาทำงานไม่คิด OT
 };
 
 export function parseTime(t: unknown): number | null {
@@ -85,6 +86,7 @@ export function shiftDef(o: Pick<DropdownOption, "value" | "label" | "extra">): 
     text: typeof o.extra?.text === "string" ? (o.extra.text as string) : "#fff",
     working,
     night: working && e! > 1440,
+    noOt: o.extra?.no_ot === true,
   };
 }
 

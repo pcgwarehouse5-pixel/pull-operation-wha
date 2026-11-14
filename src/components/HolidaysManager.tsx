@@ -1,6 +1,7 @@
 "use client";
 
-// ปฏิทินวันหยุดนักขัตฤกษ์ (หน้าตั้งค่าตัวเลือก → วันหยุด) ใช้เติม "HOL" ในตารางกะ และคิดค่าทำงานวันหยุดในโมดูล OT
+// วันหยุดประจำปี (เมนู จัดการ → วันหยุดประจำปี และหน้าตั้งค่าตัวเลือก → วันหยุด)
+// แสดงในตารางกะเป็นสีม่วง · ใครมีกะทำงานวันนั้นคิด OT วันหยุดให้อัตโนมัติ · แก้ได้เฉพาะแอดมินคลังขึ้นไป
 import { useCallback, useEffect, useState } from "react";
 import { useApp } from "./AuthProvider";
 import { Alert, Button, Card, Empty, Field, Loading, Modal, inputCls } from "./ui";
@@ -8,12 +9,15 @@ import { Icon } from "./Icon";
 import { errText, sb } from "@/lib/supabase";
 import { thaiDate } from "@/lib/format";
 import { THAI_DAYS_SHORT, weekday } from "@/lib/shifts";
+import { ROLE_RANK } from "@/lib/types";
 
 type Holiday = { id: string; holiday_date: string; name: string };
 type Form = { id?: string; holiday_date: string; name: string };
 
 export function HolidaysManager() {
-  const { demo } = useApp();
+  const { demo, profile } = useApp();
+  const canEdit = ROLE_RANK[profile.role] >= ROLE_RANK.admin; // วันหยุดมีผลกับ OT ทุกคลัง
+  const [minDays, setMinDays] = useState<number | null>(null);
   const [year, setYear] = useState(() => new Date().getFullYear());
   const [rows, setRows] = useState<Holiday[] | null>(null);
   const [form, setForm] = useState<Form | null>(null);
@@ -32,6 +36,34 @@ export function HolidaysManager() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- โหลดข้อมูลจาก Supabase ตอนเปลี่ยนปี
     load();
   }, [load]);
+
+  // จำนวนวันหยุดตามประเพณีขั้นต่ำ (ตั้งค่าได้ · ค่าเริ่มต้นตาม พ.ร.บ.คุ้มครองแรงงาน มาตรา 29)
+  useEffect(() => {
+    if (demo) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- โหมดดูดีไซน์
+      setMinDays(13);
+      return;
+    }
+    sb()
+      .rpc("setting", { p_key: "holidays.min_per_year", p_date: `${year}-12-31` })
+      .then(({ data }) => setMinDays(typeof data === "number" ? data : Number(data) || null));
+  }, [demo, year]);
+
+  // คัดลอกรายการวันหยุดจากปีก่อน (วันที่เดิม +1 ปี) แล้วให้ตรวจแก้วันที่ตามประกาศจริง
+  async function copyLastYear() {
+    if (demo) return;
+    const { data, error } = await sb().from("holidays").select("holiday_date, name").gte("holiday_date", `${year - 1}-01-01`).lte("holiday_date", `${year - 1}-12-31`);
+    if (error) return setErr(errText(error));
+    const list = ((data ?? []) as { holiday_date: string; name: string }[])
+      .map((h) => ({ holiday_date: `${year}${h.holiday_date.slice(4)}`, name: h.name }))
+      .filter((h) => !Number.isNaN(Date.parse(h.holiday_date)) && !(rows ?? []).some((r) => r.holiday_date === h.holiday_date));
+    if (!list.length) return setErr(`ปี ${year + 542} ไม่มีวันหยุดให้คัดลอก (หรือมีครบแล้ว)`);
+    if (!confirm(`คัดลอก ${list.length} วันจากปี ${year + 542} มาเป็นปี ${year + 543}?
+วันหยุดตามจันทรคติ (เช่น มาฆบูชา วิสาขบูชา อาสาฬหบูชา) วันที่จะเปลี่ยนทุกปี ต้องแก้ให้ตรงประกาศของบริษัท`)) return;
+    const { error: e2 } = await sb().from("holidays").insert(list);
+    if (e2) return setErr(errText(e2));
+    load();
+  }
 
   async function save() {
     if (!form) return;
@@ -65,11 +97,31 @@ export function HolidaysManager() {
         <Button variant="secondary" size="sm" onClick={() => setYear(year + 1)} aria-label="ปีถัดไป">
           <Icon name="next" size={18} />
         </Button>
-        <Button size="sm" className="ml-auto" onClick={() => setForm({ holiday_date: `${year}-01-01`, name: "" })}>
-          <Icon name="plus" size={18} /> เพิ่มวันหยุด
-        </Button>
+        {canEdit && (
+          <div className="ml-auto flex flex-wrap gap-2">
+            <Button size="sm" variant="secondary" onClick={copyLastYear}>
+              <Icon name="history" size={18} /> คัดลอกจากปี {year + 542}
+            </Button>
+            <Button size="sm" onClick={() => setForm({ holiday_date: `${year}-01-01`, name: "" })}>
+              <Icon name="plus" size={18} /> เพิ่มวันหยุด
+            </Button>
+          </div>
+        )}
       </div>
-      <p className="mb-3 text-[14px] text-muted">ตรวจรายการวันหยุดตามประกาศของบริษัททุกปี (ต้องมีวันหยุดตามประเพณีไม่น้อยกว่าที่กฎหมายกำหนด ตรวจกับกรมสวัสดิการและคุ้มครองแรงงาน)</p>
+      {rows && minDays !== null && (
+        <div className="mb-3">
+          <Alert tone={rows.length >= minDays ? "success" : "warning"}>
+            ปี {year + 543} มีวันหยุด {rows.length} วัน
+            {rows.length >= minDays ? ` · ครบขั้นต่ำ ${minDays} วันแล้ว` : ` · ยังไม่ถึงขั้นต่ำ ${minDays} วัน (ตามที่ตั้งค่าไว้)`}
+          </Alert>
+        </div>
+      )}
+      <p className="mb-3 text-[14px] text-muted">
+        วันหยุดในหน้านี้ขึ้นเป็น<b className="text-[#7c3aed]">สีม่วง</b>ในตารางกะ · ใครมีกะทำงานวันนั้น ระบบคิด OT วันหยุดให้อัตโนมัติ
+        · ใส่ตามประกาศวันหยุดของบริษัททุกปี (พ.ร.บ.คุ้มครองแรงงาน มาตรา 29: ไม่น้อยกว่าปีละ 13 วัน รวมวันแรงงานแห่งชาติ
+        ถ้าตรงวันหยุดประจำสัปดาห์ให้หยุดชดเชยวันทำงานถัดไป) ตรวจกับกรมสวัสดิการและคุ้มครองแรงงาน
+        {!canEdit && " · แก้ได้เฉพาะแอดมินคลังขึ้นไป"}
+      </p>
       {err && <div className="mb-3"><Alert tone="error">{err}</Alert></div>}
       {!rows ? (
         <Loading />
@@ -81,7 +133,7 @@ export function HolidaysManager() {
             <li key={h.id}>
               <Card className="!p-3.5">
                 <div className="flex items-center gap-3">
-                  <span className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-xl bg-[#fce6e7] text-bad">
+                  <span className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-xl bg-[#ede4fe] text-[#7c3aed]">
                     <span className="text-[17px] font-bold leading-none">{Number(h.holiday_date.slice(8))}</span>
                     <span className="text-[12px]">{THAI_DAYS_SHORT[weekday(h.holiday_date)]}</span>
                   </span>
@@ -89,10 +141,14 @@ export function HolidaysManager() {
                     <p className="font-semibold">{h.name}</p>
                     <p className="text-[14px] text-muted">{thaiDate(`${h.holiday_date}T12:00:00+07:00`)}</p>
                   </div>
-                  <Button size="sm" variant="secondary" onClick={() => setForm(h)}>แก้ไข</Button>
-                  <Button size="sm" variant="ghost" onClick={() => remove(h)} aria-label={`ลบ ${h.name}`}>
-                    <Icon name="close" size={18} />
-                  </Button>
+                  {canEdit && (
+                    <>
+                      <Button size="sm" variant="secondary" onClick={() => setForm(h)}>แก้ไข</Button>
+                      <Button size="sm" variant="ghost" onClick={() => remove(h)} aria-label={`ลบ ${h.name}`}>
+                        <Icon name="close" size={18} />
+                      </Button>
+                    </>
+                  )}
                 </div>
               </Card>
             </li>

@@ -247,9 +247,9 @@ export function templateSheets(
     cols: [13, 24, 12, ...dates.map(() => 6.5)],
     merges: ["A2:A3", "B2:B3", "C2:C3"],
     freeze: { cols: 3, rows: 3 },
-    lists: [{ range: `D4:${lastCol}${3 + people.length + 30}`, values: [...hours.map((h) => String(h.hour)), "OFF", ...LEAVE_CHOICES] }],
+    lists: [{ range: `D4:${lastCol}${3 + people.length + 30}`, values: [...hours.map((h) => String(h.hour)), "OFF", ...(defs.some((d) => d.code === "OFFC") ? ["OFFC"] : []), ...LEAVE_CHOICES] }],
   };
-  const other = defs.filter((d) => !byHour.has(d.code) && d.code.toUpperCase() !== "OFF");
+  const other = defs.filter((d) => !byHour.has(d.code) && !["OFF", "OFFC"].includes(d.code.toUpperCase()));
   const row = (a: string, b: string, s: number = STYLE.wrap) => [{ v: a, s: STYLE.bold }, { v: b, s }];
   const guide: XSheet = {
     name: "วิธีกรอก",
@@ -258,10 +258,11 @@ export function templateSheets(
       [],
       [{ v: "พิมพ์ในช่อง", s: STYLE.head }, { v: "ความหมาย", s: STYLE.head }],
       ...hours.map((h) => row(String(h.hour), `เข้างาน ${String(h.hour).padStart(2, "0")}:00 → รหัสกะ ${h.def.code} (${h.def.label})`)),
-      row("OFF", "วันหยุด"),
+      row("OFF", "OFF แดง = วันหยุดประจำสัปดาห์ (ถ้าให้มาทำงาน ใส่ 8+OFF = ได้ OT)"),
+      ...(defs.some((d) => d.code === "OFFC") ? [row("OFFC", "OFF เหลือง = วันหยุดที่บริษัทให้พิเศษ (เปลี่ยนเป็นวันทำงาน ไม่ได้ OT)")] : []),
       row("ลา / ลากิจ / ป่วย / พักร้อน", "วันลา: ไม่ใส่กะ ระบบจะสรุปรายชื่อให้ไปยื่นใบลาแทนพนักงานในแอป"),
       row("อบรม", "นับเป็นวันทำงาน ใช้กะที่เริ่ม 08:00"),
-      row("8+HOL / 8+OFF", "ทำงานวันนักขัตฤกษ์ / ทำงานวันหยุดประจำสัปดาห์ (เลขหน้า + คือเวลาเข้า)"),
+      row("8+OFF", "มาทำงานวัน OFF แดง (เลขหน้า + คือเวลาเข้า) = ได้ OT · วันหยุดประจำปีไม่ต้องใส่ +HOL ระบบคิด OT ให้เอง"),
       row("(เว้นว่าง)", "ไม่แก้กะเดิมของวันนั้น"),
       ...other.map((d) => row(d.code, d.label === d.code ? "รหัสกะในแอป" : `รหัสกะในแอป: ${d.label}`)),
       [],

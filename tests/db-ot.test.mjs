@@ -166,3 +166,43 @@ test("ค่าเดินทาง สรุปลา และภาพรว
   assert.deepEqual(own.map((x) => x.code), ["WH5"]);
   await assert.rejects(as(db, U.emp5, () => db.query(`select * from public.dashboard_summary('2026-12-10')`)), /ไม่มีสิทธิ์/);
 });
+
+test("วันหยุดประจำปี + OFF 2 สี: กะทำงานวันนักขัตฤกษ์ได้ OT อัตโนมัติ / OFF แดงติดธง = OT / OFF เหลือง (no_ot) ไม่คิด OT", async () => {
+  const db = await base();
+  await db.exec(`insert into public.holidays (holiday_date, name) values ('2026-12-10', 'วันรัฐธรรมนูญ (ตัวอย่าง)')`);
+  // กะทำงานปกติตรงวันหยุดประจำปี ไม่ได้ติ๊กธง → คิดเป็นทำงานวันหยุด
+  await shift(db, U.emp5, "2026-12-10", "STD1");
+  await day(db, U.emp5, "2026-12-10", "2026-12-10 07:55+07", "2026-12-10 17:05+07");
+  // OFF แดงเปลี่ยนเป็นกะทำงาน (ตารางกะติดธง OFF ให้) → ทำงานวันหยุดประจำสัปดาห์
+  await shift(db, U.emp5, "2026-12-12", "STD1", "OFF");
+  await day(db, U.emp5, "2026-12-12", "2026-12-12 07:55+07", "2026-12-12 17:05+07");
+  // OFF เหลือง (บริษัทให้พิเศษ) เปลี่ยนเป็นกะทำงาน = วันทำงานปกติ ไม่มีธง → เกินเลิกกะไม่ถึงเกณฑ์ = ไม่มี OT
+  await shift(db, U.emp5, "2026-12-14", "STD1");
+  await day(db, U.emp5, "2026-12-14", "2026-12-14 07:55+07", "2026-12-14 17:05+07");
+  // มาทำงานวัน OFF เหลือง โดยไม่ได้เปลี่ยนกะ → ไม่คิด OT
+  await shift(db, U.emp5, "2026-12-15", "OFFC");
+  await day(db, U.emp5, "2026-12-15", "2026-12-15 07:55+07", "2026-12-15 17:05+07");
+  // มาทำงานวัน OFF แดง โดยไม่ได้เปลี่ยนกะ → ทำงานวันหยุด (เหมือนเดิม)
+  await shift(db, U.emp5, "2026-12-16", "OFF");
+  await day(db, U.emp5, "2026-12-16", "2026-12-16 07:55+07", "2026-12-16 17:05+07");
+
+  const r = await ot(db, [U.emp5], "2026-12-10", "2026-12-16");
+  assert.deepEqual(r.map((x) => [x.d, x.day_type]), [["2026-12-10", "HOL"], ["2026-12-12", "OFF"], ["2026-12-16", "OFF"]]);
+  const hol = r.find((x) => x.d === "2026-12-10");
+  assert.deepEqual([hol.nh, hol.nr], [8, 1], "รายเดือน: ชั่วโมงปกติวันหยุดคิดอัตราทำงานวันหยุด");
+  // รหัส OFF เหลืองมีมาจาก migration และตั้ง no_ot
+  const offc = (await rows(db, `select label, extra->>'no_ot' as no_ot from public.dropdown_options where category = 'shift_type' and value = 'OFFC'`))[0];
+  assert.deepEqual(offc, { label: "OFF", no_ot: "true" });
+});
+
+test("ประเภทลาตามกฎหมายใหม่: ลาคลอด 120 วัน / ช่วยภรรยาคลอด 15 วัน / ดูแลบุตร 15 วัน · ขาดงานไม่ใช่ประเภทลา", async () => {
+  const db = await base();
+  const quota = async (d) => (await rows(db, `select public.setting('leave.quota', $1::date) as q`, [d]))[0].q;
+  assert.equal((await quota("2025-12-06")).maternity, 90, "ก่อนกฎหมายใหม่มีผล ใช้ค่าเดิม");
+  const q = await quota("2025-12-07");
+  assert.deepEqual([q.maternity, q.paternity, q.child_care, q.sick], [120, 15, 15, 30]);
+  const types = (await rows(db, `select value, is_active from public.dropdown_options where category = 'leave_type' and value in ('paternity', 'child_care', 'absent') order by value`));
+  assert.deepEqual(types.map((t) => [t.value, t.is_active]), [["child_care", true], ["paternity", true]]);
+  const att = (await rows(db, `select public.setting('leave.attachment_types', '2026-01-01') as a`))[0].a;
+  assert.ok(att.includes("child_care") && att.includes("sick"));
+});

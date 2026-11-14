@@ -18,10 +18,10 @@ export function cellLines(cell: Cell | undefined, def: ShiftDef | undefined): [s
   return [def?.label || cell.shift_code, ""];
 }
 
-/** ข้อความตอนคัดลอก (วางใน Excel ได้ และวางกลับเข้าแอปได้) */
+/** ข้อความตอนคัดลอก (วางใน Excel ได้ และวางกลับเข้าแอปได้) · วันหยุดใช้รหัส (OFF / OFFC / HOL) เพราะชื่อซ้ำกันได้ */
 export function cellCopyText(cell: Cell | undefined, def: ShiftDef | undefined): string {
   if (!cell) return "";
-  const base = def?.working && def.start !== null && def.end !== null ? `${fmtMinutes(def.start)}-${fmtMinutes(def.end)}` : def?.label || cell.shift_code;
+  const base = def?.working && def.start !== null && def.end !== null ? `${fmtMinutes(def.start)}-${fmtMinutes(def.end)}` : cell.shift_code;
   return cell.holiday_work ? `${base}${FLAG_TEXT[cell.holiday_work]}` : base;
 }
 
@@ -151,4 +151,36 @@ export function sortByMembers<T extends { id: string }>(list: T[], members: stri
 export function mergeMembers(members: string[], groupIds: string[]): string[] {
   const inGroup = new Set(groupIds);
   return [...groupIds, ...members.filter((id) => !inGroup.has(id))];
+}
+
+// ---------- ทำงานวันหยุด (ได้ OT) ----------
+// สีช่องที่ได้ OT จากการมาทำงานวันหยุด (ทั้งช่อง) · OFF แดง = วันหยุดประจำสัปดาห์ · ม่วง = วันหยุดประจำปี/นักขัตฤกษ์
+export const OT_DAY_COLOR = { OFF: { bg: "#dc2626", text: "#fff" }, HOL: { bg: "#7c3aed", text: "#fff" } } as const;
+export const WEEKLY_OFF = "OFF"; // รหัส OFF แดง (วันหยุดประจำสัปดาห์)
+export const HOLIDAY_CODE = "HOL";
+
+/** ช่องนี้เป็นการมาทำงานวันหยุดแบบไหน (ตรงกับการคิด OT ในฐานข้อมูล ot_rows_core): ธงในช่อง หรือ กะทำงานตรงวันหยุดประจำปี */
+export function otDayKind(cell: Pick<Cell, "holiday_work"> | undefined | null, def: ShiftDef | undefined, isHoliday: boolean): "OFF" | "HOL" | null {
+  if (!cell || !def?.working) return null;
+  if (cell.holiday_work) return cell.holiday_work;
+  return isHoliday ? "HOL" : null;
+}
+
+/**
+ * ติดธง "ทำงานวันหยุด" ให้เองเมื่อเปลี่ยนช่องเป็นกะทำงาน (ผู้ใช้ไม่ต้องติ๊ก ห / น):
+ * วันหยุดประจำปี → HOL · ช่องเดิมเป็น OFF แดง → OFF · ช่องเดิมเป็น HOL → HOL
+ * ช่องเดิมเป็นวันหยุดที่บริษัทให้พิเศษ (OFF เหลือง) → ไม่ติดธง (ไม่ได้ OT) · ช่องเดิมเป็นกะทำงานที่มีธง → คงธงเดิม
+ * ช่องที่ไม่ใช่กะทำงาน → ล้างธง
+ */
+export function autoHolidayWork(prev: Cell | undefined | null, next: Cell | null, defs: Map<string, ShiftDef>, isHoliday: boolean): Cell | null {
+  if (!next) return next;
+  if (!defs.get(next.shift_code)?.working) return next.holiday_work ? { ...next, holiday_work: null } : next;
+  if (next.holiday_work) return next;
+  if (isHoliday) return { ...next, holiday_work: "HOL" };
+  if (!prev) return next;
+  const pd = defs.get(prev.shift_code);
+  if (pd?.working) return prev.holiday_work ? { ...next, holiday_work: prev.holiday_work } : next;
+  if (prev.shift_code === HOLIDAY_CODE) return { ...next, holiday_work: "HOL" };
+  if (prev.shift_code === WEEKLY_OFF) return { ...next, holiday_work: "OFF" };
+  return next;
 }

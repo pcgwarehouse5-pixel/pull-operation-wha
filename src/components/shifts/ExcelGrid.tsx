@@ -9,7 +9,8 @@ import { empName, type Emp } from "./common";
 import { Icon } from "../Icon";
 import { THAI_DAYS_SHORT, keyOf, weekday, type Cell, type Change, type Grid, type ShiftDef } from "@/lib/shifts";
 import {
-  cellCopyText, cellLines, fillPlan, fromTsv, inRange, moveItem, moveTarget, norm, parseCellText, pastePlan, size, toTsv, type Pos, type Range,
+  OT_DAY_COLOR, autoHolidayWork, cellCopyText, cellLines, fillPlan, fromTsv, inRange, moveItem, moveTarget, norm, otDayKind, parseCellText, pastePlan, size, toTsv,
+  type Pos, type Range,
 } from "@/lib/shift-grid";
 
 export type Group = { position: string; emps: Emp[] };
@@ -36,7 +37,6 @@ type Props = {
 
 type Drag = { kind: "select" } | { kind: "fill"; to: Pos } | { kind: "move"; grab: Pos; to: Pos; copy: boolean } | null;
 type Rect = { left: number; top: number; width: number; height: number };
-const HW_MARK = { OFF: "ห", HOL: "น" } as const;
 const noGroup = "ไม่ระบุตำแหน่ง";
 
 export function ExcelGrid(p: Props) {
@@ -77,10 +77,17 @@ export function ExcelGrid(p: Props) {
   // ---------- เปลี่ยนค่าในช่อง ----------
   const commit = useCallback(
     (list: [number, number, Cell | null][]) => {
-      const changes: Change[] = list.filter(([r, c]) => rows[r] && dates[c]).map(([r, c, cell]) => ({ user_id: rows[r].id, work_date: dates[c], cell }));
+      // เปลี่ยนเป็นกะทำงานในวันหยุด (OFF แดง / วันหยุดประจำปี) → ติดธง "ทำงานวันหยุด" ให้เอง = ได้ OT
+      const changes: Change[] = list
+        .filter(([r, c]) => rows[r] && dates[c])
+        .map(([r, c, cell]) => ({
+          user_id: rows[r].id,
+          work_date: dates[c],
+          cell: autoHolidayWork(grid[rows[r].id]?.[dates[c]], cell, defs, holidayMap.has(dates[c])),
+        }));
       if (changes.length) p.onChanges(changes);
     },
-    [rows, dates, p],
+    [rows, dates, p, grid, defs, holidayMap],
   );
 
   const forRange = (g: Range, f: (r: number, c: number) => Cell | null): [number, number, Cell | null][] => {
@@ -553,12 +560,15 @@ export function ExcelGrid(p: Props) {
               const cell = row[d];
               const def = cell ? defs.get(cell.shift_code) : undefined;
               const lines = cellLines(cell, def);
+              const otDay = otDayKind(cell, def, holidayMap.has(d)); // มาทำงานวันหยุด = สีทั้งช่อง (แดง/ม่วง)
+              const color = otDay ? OT_DAY_COLOR[otDay] : { bg: def?.bg ?? "#94a3b8", text: def?.text ?? "#fff" };
               const changed = keyOf(e.id, d) in pending;
               return (
                 <td key={d} data-r={r} data-c={c} className="h-[42px] min-w-[52px] border-r border-b border-line/70 p-[2px]">
                   <div
                     className={`relative flex h-full w-full flex-col items-center justify-center rounded-[5px] text-[11px] leading-[1.15] font-semibold ${cell ? "" : "text-transparent"} ${changed ? "outline-2 -outline-offset-2 outline-ink outline-dashed" : ""}`}
-                    style={cell ? { background: def?.bg ?? "#94a3b8", color: def?.text ?? "#fff" } : undefined}
+                    style={cell ? { background: color.bg, color: color.text } : undefined}
+                    title={otDay === "HOL" ? `ทำงานวันหยุดประจำปี${holidayMap.get(d) ? ` (${holidayMap.get(d)})` : ""} · ได้ OT` : otDay === "OFF" ? "ทำงานวันหยุดประจำสัปดาห์ (OFF) · ได้ OT" : def?.noOt ? "วันหยุดที่บริษัทให้พิเศษ · มาทำงานไม่ได้ OT" : undefined}
                   >
                     {lines ? (
                       <>
@@ -567,11 +577,6 @@ export function ExcelGrid(p: Props) {
                       </>
                     ) : (
                       "·"
-                    )}
-                    {cell?.holiday_work && (
-                      <span className="absolute -top-1 -right-1 rounded-full bg-warn px-1 text-[9px] leading-tight text-ink" title={cell.holiday_work === "HOL" ? "ทำงานวันนักขัตฤกษ์" : "ทำงานวันหยุดประจำสัปดาห์"}>
-                        {HW_MARK[cell.holiday_work]}
-                      </span>
                     )}
                   </div>
                 </td>
@@ -584,7 +589,7 @@ export function ExcelGrid(p: Props) {
     }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- วาดใหม่เมื่อข้อมูล/กลุ่มเปลี่ยนเท่านั้น
-  }, [groups, collapsed, grid, pending, defs, dates, rows, dragGroup, empDrag, p.onReorderEmps]);
+  }, [groups, collapsed, grid, pending, defs, dates, rows, dragGroup, empDrag, p.onReorderEmps, holidayMap]);
 
   const allEmps = useMemo(() => groups.flatMap((g) => g.emps), [groups]);
   const S = boxes.sel;
@@ -621,10 +626,10 @@ export function ExcelGrid(p: Props) {
                       setFocus({ r: R - 1, c });
                       scroller.current?.focus({ preventScroll: true });
                     }}
-                    className={`sticky top-0 z-20 cursor-pointer border-b border-line px-0.5 py-1 text-center font-semibold ${on ? "!bg-sky text-brand" : ""} ${hol ? "bg-[#fdecee] text-bad" : wd === 0 || wd === 6 ? "bg-[#eef2fa]" : "bg-white"}`}
+                    className={`sticky top-0 z-20 cursor-pointer border-b border-line px-0.5 py-1 text-center font-semibold ${on ? "!bg-sky text-brand" : ""} ${hol ? "bg-[#7c3aed] text-white" : wd === 0 || wd === 6 ? "bg-[#eef2fa]" : "bg-white"}`}
                   >
                     <span className="block text-[14px] leading-tight">{Number(d.slice(8))}</span>
-                    <span className="block text-[11px] font-normal">{hol ? "หยุด" : THAI_DAYS_SHORT[wd]}</span>
+                    <span className="block text-[11px] font-normal">{hol ? "วันหยุด" : THAI_DAYS_SHORT[wd]}</span>
                   </th>
                 );
               })}

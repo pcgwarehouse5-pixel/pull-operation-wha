@@ -12,6 +12,7 @@ import { ShiftChip, empName, type Holiday } from "@/components/shifts/common";
 import { fetchAll, sb } from "@/lib/supabase";
 import { useOptions } from "@/lib/useOptions";
 import { addMonths, currentMonth, monthDates, shiftDef, shiftTimeText, todayIso, weekday, type ShiftDef } from "@/lib/shifts";
+import { OT_DAY_COLOR, otDayKind } from "@/lib/shift-grid";
 import { localizeError, useI18n, type Fmt, type T } from "@/i18n";
 
 type TeamRow = { user_id: string; first_name_th: string; nickname: string | null; position: string | null; work_date: string; shift_code: string; holiday_work: "OFF" | "HOL" | null };
@@ -106,6 +107,8 @@ export default function MyShiftsPage() {
                 const r = mine.get(d);
                 const def = r ? defs.get(r.shift_code) : undefined;
                 const hol = holidayMap.get(d);
+                const otDay = otDayKind(r, def, !!hol); // มาทำงานวันหยุด: แดง = OFF, ม่วง = วันหยุดประจำปี
+                const color = otDay ? OT_DAY_COLOR[otDay] : { bg: def?.bg ?? "#94a3b8", text: def?.text ?? "#fff" };
                 return (
                   <button
                     key={d}
@@ -113,11 +116,11 @@ export default function MyShiftsPage() {
                     onClick={() => setDay(d)}
                     aria-pressed={d === selected}
                     aria-label={`${fmt.day(d)} ${r ? r.shift_code : t("ms.noShift")}${hol ? ` ${hol}` : ""}`}
-                    className={`relative flex min-h-14 flex-col items-center justify-center rounded-[10px] text-[12px] transition ${d === selected ? "ring-[3px] ring-brand ring-offset-1" : ""} ${hol && !r ? "bg-[#fdecee]" : !r ? "bg-paper" : ""}`}
-                    style={r ? { background: def?.bg ?? "#94a3b8", color: def?.text ?? "#fff" } : undefined}
+                    className={`relative flex min-h-14 flex-col items-center justify-center rounded-[10px] text-[12px] transition ${d === selected ? "ring-[3px] ring-brand ring-offset-1" : ""} ${hol && !r ? "bg-[#ede4fe]" : !r ? "bg-paper" : ""}`}
+                    style={r ? { background: color.bg, color: color.text } : undefined}
                   >
-                    <span className={`num text-[15px] leading-none font-bold ${!r && hol ? "text-bad" : ""}`}>{Number(d.slice(8))}</span>
-                    <span className="mt-0.5 leading-none font-semibold">{r ? r.shift_code.slice(0, 5) : ""}</span>
+                    <span className={`num text-[15px] leading-none font-bold ${!r && hol ? "text-[#7c3aed]" : ""}`}>{Number(d.slice(8))}</span>
+                    <span className="mt-0.5 leading-none font-semibold">{r ? (def && !def.working ? def.label : r.shift_code).slice(0, 5) : ""}</span>
                     {d === today && <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-piping" aria-hidden="true" />}
                   </button>
                 );
@@ -154,7 +157,10 @@ function DayDetail({ day, rows, meId, defs, holiday, t, fmt }: { day: string; ro
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <ShiftChip code={mine.shift_code} def={defs.get(mine.shift_code)} />
             <span className="num text-xl font-bold">{shiftTimeText(defs.get(mine.shift_code)) || defs.get(mine.shift_code)?.label}</span>
-            {mine.holiday_work && <Badge tone="amber">{mine.holiday_work === "HOL" ? t("ms.holWork") : t("ms.offWork")}</Badge>}
+            {(() => {
+              const k = otDayKind(mine, defs.get(mine.shift_code), !!holiday);
+              return k && <Badge tone="amber">{k === "HOL" ? t("ms.holWork") : t("ms.offWork")}</Badge>;
+            })()}
           </div>
         ) : (
           <p className="mt-1 text-lg font-semibold">{t("ms.noShift")}</p>

@@ -6,7 +6,7 @@ import { PageHelper } from "@/components/Puinun";
 import { useApp } from "@/components/AuthProvider";
 import { Alert, Badge, Button, Card, Empty, Loading, Modal, inputCls } from "@/components/ui";
 import { Icon } from "@/components/Icon";
-import { EMP_COLS, empName, isLeadEmp, ShiftChip, type Emp, type Holiday } from "@/components/shifts/common";
+import { DayColorLegend, EMP_COLS, empName, isLeadEmp, ShiftChip, type Emp, type Holiday } from "@/components/shifts/common";
 import { ShiftTools, type ToolKey } from "@/components/shifts/ShiftTools";
 import { ExcelGrid, GridHelp, type Group } from "@/components/shifts/ExcelGrid";
 import { errText, fetchAll, sb } from "@/lib/supabase";
@@ -422,13 +422,15 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
                   onChange={(e) => setBrush({ ...brush, holiday_work: (e.target.value || null) as Cell["holiday_work"] })}
                   aria-label="ประเภทวันทำงาน"
                 >
-                  <option value="">วันทำงานปกติ</option>
+                  <option value="">อัตโนมัติ (ตามวันหยุด/OFF แดงที่ทับ)</option>
                   <option value="OFF">{HW_LABEL.OFF}</option>
                   <option value="HOL">{HW_LABEL.HOL}</option>
                 </select>
               )}
             </Card>
           )}
+
+          <DayColorLegend />
 
           {!emps ? (
             <Loading />
@@ -689,12 +691,6 @@ function Legend({ defs }: { defs: ShiftDef[] }) {
           <b className="text-ink">{d.code}</b> {shiftTimeText(d) || d.label}
         </span>
       ))}
-      <span className="inline-flex items-center gap-1.5">
-        <span className="rounded-full bg-warn px-1 text-[10px] text-ink">ห</span> {HW_LABEL.OFF}
-      </span>
-      <span className="inline-flex items-center gap-1.5">
-        <span className="rounded-full bg-warn px-1 text-[10px] text-ink">น</span> {HW_LABEL.HOL}
-      </span>
     </div>
   );
 }

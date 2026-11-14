@@ -35,7 +35,7 @@ export function ShiftChip({ def, code, selected, onClick, title, showLabel }: { 
   const cls = `inline-flex min-h-11 items-center gap-1.5 rounded-xl px-3 text-[15px] font-bold whitespace-nowrap ${selected ? "ring-4 ring-ink/70 ring-offset-2" : ""}`;
   const body = (
     <>
-      {code}
+      {def && !def.working ? def.label : code}
       {showLabel && def?.working && <span className="text-[12px] font-medium opacity-90">{def.label !== code ? def.label : ""}</span>}
     </>
   );
@@ -114,5 +114,25 @@ export function DayRange({ dates, from, to, onChange }: { dates: string[]; from:
         </select>
       </label>
     </div>
+  );
+}
+
+/** คำอธิบายสีช่องในตารางกะ: OFF 2 สี และการมาทำงานวันหยุด (ได้ OT) */
+export function DayColorLegend() {
+  const items: [string, string, string, string][] = [
+    ["#ff0000", "#fff", "OFF", "วันหยุดประจำสัปดาห์ · ถ้าให้มาทำงาน = ได้ OT"],
+    ["#facc15", "#16204a", "OFF", "วันหยุดที่บริษัทให้พิเศษ · เปลี่ยนเป็นวันทำงาน = ไม่ได้ OT"],
+    ["#dc2626", "#fff", "08:00", "แดงทั้งช่อง = มาทำงานวัน OFF แดง (ได้ OT)"],
+    ["#7c3aed", "#fff", "08:00", "ม่วง = วันหยุดประจำปี / มาทำงานวันหยุดประจำปี (ได้ OT อัตโนมัติ)"],
+  ];
+  return (
+    <ul className="mb-3 flex flex-wrap gap-x-4 gap-y-1.5 px-1 text-[13px] text-muted" aria-label="ความหมายของสี">
+      {items.map(([bg, fg, t, d]) => (
+        <li key={d} className="flex items-center gap-1.5">
+          <span className="num inline-flex h-6 min-w-11 items-center justify-center rounded-md px-1 text-[11px] font-bold" style={{ background: bg, color: fg }}>{t}</span>
+          {d}
+        </li>
+      ))}
+    </ul>
   );
 }
