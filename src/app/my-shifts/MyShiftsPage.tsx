@@ -8,10 +8,10 @@ import { Alert, Badge, Button, Card, Empty, Loading } from "@/components/ui";
 import { Icon } from "@/components/Icon";
 import { PageHelper } from "@/components/Puinun";
 import { MyPullBookings } from "@/components/pull/MyPullBookings";
-import { ShiftChip, empName, type Holiday } from "@/components/shifts/common";
+import { ShiftTimeChip, empName, type Holiday } from "@/components/shifts/common";
 import { fetchAll, sb } from "@/lib/supabase";
 import { useOptions } from "@/lib/useOptions";
-import { addMonths, currentMonth, monthDates, shiftDef, shiftTimeText, todayIso, weekday, type ShiftDef } from "@/lib/shifts";
+import { addMonths, currentMonth, fmtMinutes, monthDates, shiftDef, shiftTimeText, todayIso, weekday, type ShiftDef } from "@/lib/shifts";
 import { OT_DAY_COLOR, otDayKind } from "@/lib/shift-grid";
 import { localizeError, useI18n, type Fmt, type T } from "@/i18n";
 
@@ -115,12 +115,19 @@ export default function MyShiftsPage() {
                     type="button"
                     onClick={() => setDay(d)}
                     aria-pressed={d === selected}
-                    aria-label={`${fmt.day(d)} ${r ? r.shift_code : t("ms.noShift")}${hol ? ` ${hol}` : ""}`}
+                    aria-label={`${fmt.day(d)} ${r ? shiftTimeText(def) || def?.label || r.shift_code : t("ms.noShift")}${hol ? ` ${hol}` : ""}`}
                     className={`relative flex min-h-14 flex-col items-center justify-center rounded-[10px] text-[12px] transition ${d === selected ? "ring-[3px] ring-brand ring-offset-1" : ""} ${hol && !r ? "bg-[#ede4fe]" : !r ? "bg-paper" : ""}`}
                     style={r ? { background: color.bg, color: color.text } : undefined}
                   >
                     <span className={`num text-[15px] leading-none font-bold ${!r && hol ? "text-[#7c3aed]" : ""}`}>{Number(d.slice(8))}</span>
-                    <span className="mt-0.5 leading-none font-semibold">{r ? (def && !def.working ? def.label : r.shift_code).slice(0, 5) : ""}</span>
+                    {r && def?.working && def.start !== null && def.end !== null ? (
+                      <>
+                        <span className="num mt-0.5 text-[11px] leading-tight font-semibold">{fmtMinutes(def.start)}</span>
+                        <span className="num text-[11px] leading-tight opacity-90">{fmtMinutes(def.end)}</span>
+                      </>
+                    ) : (
+                      <span className="mt-0.5 max-w-full truncate px-0.5 leading-none font-semibold">{r ? def?.label || r.shift_code : ""}</span>
+                    )}
                     {d === today && <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-piping" aria-hidden="true" />}
                   </button>
                 );
@@ -155,8 +162,10 @@ function DayDetail({ day, rows, meId, defs, holiday, t, fmt }: { day: string; ro
         <p className="text-[15px] text-muted">{fmt.date(day)}{holiday ? ` · ${holiday}` : ""}</p>
         {mine ? (
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            <ShiftChip code={mine.shift_code} def={defs.get(mine.shift_code)} />
-            <span className="num text-xl font-bold">{shiftTimeText(defs.get(mine.shift_code)) || defs.get(mine.shift_code)?.label}</span>
+            <ShiftTimeChip big code={mine.shift_code} def={defs.get(mine.shift_code)} color={(() => {
+              const k = otDayKind(mine, defs.get(mine.shift_code), !!holiday);
+              return k ? OT_DAY_COLOR[k] : undefined;
+            })()} />
             {(() => {
               const k = otDayKind(mine, defs.get(mine.shift_code), !!holiday);
               return k && <Badge tone="amber">{k === "HOL" ? t("ms.holWork") : t("ms.offWork")}</Badge>;
@@ -174,8 +183,7 @@ function DayDetail({ day, rows, meId, defs, holiday, t, fmt }: { day: string; ro
           {order.map((code) => (
             <Card key={code} className="!p-3.5">
               <div className="mb-2 flex items-center gap-2">
-                <ShiftChip code={code} def={defs.get(code)} />
-                <span className="num text-[14px] text-muted">{shiftTimeText(defs.get(code))}</span>
+                <ShiftTimeChip code={code} def={defs.get(code)} />
                 <span className="ml-auto font-bold">{t("common.people", { n: groups.get(code)!.length })}</span>
               </div>
               <ul className="divide-y divide-line">

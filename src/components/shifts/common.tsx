@@ -3,7 +3,7 @@
 // ส่วนที่ใช้ร่วมกันในหน้าตารางกะ
 import { useMemo, useState } from "react";
 import { inputCls } from "../ui";
-import type { ShiftDef } from "@/lib/shifts";
+import { fmtMinutes, type ShiftDef } from "@/lib/shifts";
 
 export type Emp = {
   id: string;
@@ -134,5 +134,16 @@ export function DayColorLegend() {
         </li>
       ))}
     </ul>
+  );
+}
+
+/** ป้ายกะแบบเวลา สำหรับหน้าของพนักงาน: กะทำงาน = 08:00–17:00 · วันหยุด = ชื่อ (OFF) · ไม่แสดงรหัสกะ */
+export function ShiftTimeChip({ def, code, color, big }: { def?: ShiftDef; code: string; color?: { bg: string; text: string }; big?: boolean }) {
+  const c = color ?? (def ? { bg: def.bg, text: def.text } : { bg: "#94a3b8", text: "#fff" });
+  const text = def?.working && def.start !== null && def.end !== null ? `${fmtMinutes(def.start)}–${fmtMinutes(def.end)}` : def?.label || code;
+  return (
+    <span className={`num inline-flex items-center rounded-xl px-3 font-bold whitespace-nowrap ${big ? "min-h-12 text-[20px]" : "min-h-10 text-[16px]"}`} style={{ background: c.bg, color: c.text }}>
+      {text}
+    </span>
   );
 }

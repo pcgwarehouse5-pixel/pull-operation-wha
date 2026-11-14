@@ -14,11 +14,13 @@ import { isGlobal, isSupervisorUp, noTimekeeping } from "@/lib/types";
 import { todayIso } from "@/lib/shifts";
 import type { AttendanceRow } from "@/lib/attendance";
 import { useI18n } from "@/i18n";
+import { shiftText, useShiftDefs } from "@/lib/useShiftDefs";
 import type { MsgKey } from "@/i18n/th";
 
 export default function HomePage() {
   const { profile, warehouses, myWarehouseIds, demo } = useApp();
   const { t, fmt } = useI18n();
+  const shiftDefs = useShiftDefs();
   const today = todayIso();
   const [row, setRow] = useState<AttendanceRow | null | undefined>(undefined);
   const [pending, setPending] = useState<{ leave: number; fix: number }>({ leave: 0, fix: 0 });
@@ -70,10 +72,9 @@ export default function HomePage() {
               ) : row?.shift_code && row.shift_start ? (
                 <p className="num text-[22px] leading-tight font-bold text-ink">
                   {fmt.time(row.shift_start)}–{fmt.time(row.shift_end)}
-                  <span className="ml-2 text-[14px] font-semibold text-muted">{row.shift_code}</span>
                 </p>
               ) : (
-                <p className="text-[15px] font-semibold text-ink">{row?.shift_code ?? t("home.noShift")}</p>
+                <p className="text-[15px] font-semibold text-ink">{row?.shift_code ? shiftText(row.shift_code, shiftDefs) : t("home.noShift")}</p>
               )}
             </div>}
           </div>

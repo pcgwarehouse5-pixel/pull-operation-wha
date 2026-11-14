@@ -13,6 +13,7 @@ import { sb } from "@/lib/supabase";
 import { addMonths, currentMonth, monthDates, todayIso } from "@/lib/shifts";
 import { CORRECTION_STATUS, STATUS, distanceM, hhmm, type AttendanceRow, type Correction } from "@/lib/attendance";
 import { localizeError, useI18n, type T } from "@/i18n";
+import { shiftText, useShiftDefs } from "@/lib/useShiftDefs";
 import type { MsgKey } from "@/i18n/th";
 
 type Punch = { kind: "in" | "out"; punched_at: string; work_date: string };
@@ -45,6 +46,7 @@ function useClock() {
 export default function AttendancePage() {
   const { profile: me, warehouses, myWarehouseIds, demo } = useApp();
   const { t, fmt } = useI18n();
+  const shiftDefs = useShiftDefs();
   const clock = useClock();
   const [ym, setYm] = useState(currentMonth);
   const [rows, setRows] = useState<AttendanceRow[] | null>(null);
@@ -167,10 +169,11 @@ export default function AttendancePage() {
           </div>
           <div className="text-right">
             {todayRow && <Badge tone={STATUS[todayRow.status].tone}>{st(todayRow.status)}</Badge>}
-            <p className="mt-1.5 text-[15px] font-semibold text-ink">
-              {todayRow?.shift_code ? t("att.shift", { code: todayRow.shift_code }) : t("att.noShift")}
+            {/* กะวันนี้: แสดงเวลา (ไม่แสดงรหัสกะ ให้พนักงานอ่านง่าย) */}
+            <p className="mt-1.5 text-[13px] text-muted">{todayRow?.shift_code ? t("home.shiftToday") : ""}</p>
+            <p className="num text-[17px] font-bold text-ink">
+              {todayRow?.shift_start ? `${fmt.time(todayRow.shift_start)}–${fmt.time(todayRow.shift_end)}` : todayRow?.shift_code ? shiftText(todayRow.shift_code, shiftDefs) : t("att.noShift")}
             </p>
-            {todayRow?.shift_start && <p className="num text-[15px] text-muted">{fmt.time(todayRow.shift_start)}–{fmt.time(todayRow.shift_end)}</p>}
           </div>
         </div>
         <p className="px-4 pt-2 text-[15px] sm:px-5">
@@ -267,7 +270,7 @@ export default function AttendancePage() {
                 <div className="flex items-center gap-3">
                   <div className="w-[88px] shrink-0">
                     <p className="leading-tight font-semibold">{fmt.day(r.work_date)}</p>
-                    <p className="text-[13px] text-muted">{r.shift_code ?? "-"}</p>
+                    <p className="num text-[13px] text-muted">{r.shift_code ? shiftText(r.shift_code, shiftDefs) : "-"}</p>
                   </div>
                   <div className="num min-w-0 flex-1 text-[15px]">
                     {t("att.inOut", { in: fmt.time(r.first_in), out: fmt.time(r.last_out) })}
