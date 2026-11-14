@@ -27,7 +27,17 @@ export function useApp(): AppCtx {
   return v;
 }
 
-const PUBLIC_PATHS = ["/login"];
+const PUBLIC_PATHS = ["/login", "/logout"];
+
+/** ล้างการล็อกอินที่เก็บไว้ในเครื่องนี้ (คีย์ของ Supabase ขึ้นต้นด้วย sb-) */
+export function clearAuthStorage() {
+  try {
+    for (const k of Object.keys(localStorage)) if (k.startsWith("sb-")) localStorage.removeItem(k);
+  } catch {}
+  try {
+    for (const k of Object.keys(sessionStorage)) if (k.startsWith("sb-")) sessionStorage.removeItem(k);
+  } catch {}
+}
 const CHANGE_PASSWORD = "/change-password";
 
 type Loaded = { uid: string; profile: Profile | null; warehouses: Warehouse[]; myWarehouseIds: string[] };
@@ -113,9 +123,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // ลองยกเลิกการล็อกอินที่เซิร์ฟเวอร์ก่อน (รอไม่เกิน 3 วินาที) แล้วล้างการล็อกอินในเครื่องนี้ทุกครั้ง
   // จากนั้นโหลดหน้าล็อกอินใหม่ทั้งหน้า (ไม่ค้างข้อมูลของบัญชีเดิมในหน่วยความจำ)
   const signOut = useCallback(async () => {
+    const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
     const c = sb();
-    await Promise.race([c.auth.signOut().catch(() => null), new Promise((r) => setTimeout(r, 3000))]);
-    await c.auth.signOut({ scope: "local" }).catch(() => null);
+    await Promise.race([c.auth.signOut().catch(() => null), wait(3000)]);
+    await Promise.race([c.auth.signOut({ scope: "local" }).catch(() => null), wait(1000)]);
+    clearAuthStorage(); // ล้างเองอีกชั้น เผื่อไลบรารีค้าง
     window.location.replace("/login");
   }, []);
 
