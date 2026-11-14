@@ -77,7 +77,7 @@ export const th = {
   "nav.leave.desc": "ยื่นใบลา ดูวันลาคงเหลือ",
   "nav.my-shifts": "ตารางกะของฉัน",
   "nav.my-shifts.short": "กะของฉัน",
-  "nav.my-shifts.desc": "กะของฉันและเพื่อนร่วมคลัง",
+  "nav.my-shifts.desc": "กะของฉันรายเดือน",
   "nav.notifications": "แจ้งเตือน",
   "nav.notifications.desc": "ใบลา ตารางกะ ลืมลงเวลา",
   "nav.profile": "ข้อมูลของฉัน",
@@ -251,7 +251,7 @@ export const th = {
 
   // ---------- ตารางกะของฉัน ----------
   "ms.title": "ตารางกะของฉัน",
-  "ms.helper": "แตะวันที่เพื่อดูว่าวันนั้นใครเข้ากะไหนบ้าง",
+  "ms.helper": "แตะวันที่เพื่อดูกะของวันนั้น",
   "ms.mine": "กะของฉัน",
   "ms.workDays": "ทำงาน {n} วัน",
   "ms.notPublished": "ตารางกะ{month}ยังไม่ประกาศ รอหัวหน้างานประกาศก่อน",

@@ -8,7 +8,7 @@ import { Alert, Badge, Button, Card, Empty, Loading } from "@/components/ui";
 import { Icon } from "@/components/Icon";
 import { PageHelper } from "@/components/Puinun";
 import { MyPullBookings } from "@/components/pull/MyPullBookings";
-import { ShiftTimeChip, empName, type Holiday } from "@/components/shifts/common";
+import { ShiftTimeChip, type Holiday } from "@/components/shifts/common";
 import { fetchAll, sb } from "@/lib/supabase";
 import { useOptions } from "@/lib/useOptions";
 import { addMonths, currentMonth, fmtMinutes, monthDates, shiftDef, shiftTimeText, todayIso, weekday, type ShiftDef } from "@/lib/shifts";
@@ -43,7 +43,7 @@ export default function MyShiftsPage() {
     }
     try {
       const [team, hol, st] = await Promise.all([
-        fetchAll<TeamRow>((f, tt) => sb().rpc("team_schedule", { p_month: from }).range(f, tt)),
+        fetchAll<TeamRow>((f, tt) => sb().rpc("team_schedule", { p_month: from }).eq("user_id", me.id).range(f, tt)), // เฉพาะกะของฉัน
         sb().from("holidays").select("holiday_date, name").gte("holiday_date", from).lt("holiday_date", to).order("holiday_date"),
         // ประกาศแล้วหรือยัง: ดูตามตารางของฉัน (ปกติ หรือ หัวหน้าคลัง) · 1 เดือนมี 2 แถว (ตารางปกติ + ตารางหัวหน้าคลัง)
         me.warehouse_id ? sb().rpc("is_published_for", { p_user: me.id, p_date: from }) : Promise.resolve({ data: false }),
@@ -141,20 +141,9 @@ export default function MyShiftsPage() {
   );
 }
 
+// รายละเอียดวันที่เลือก: เฉพาะกะของฉัน (ไม่แสดงเพื่อนร่วมคลัง)
 function DayDetail({ day, rows, meId, defs, holiday, t, fmt }: { day: string; rows: TeamRow[]; meId: string; defs: Map<string, ShiftDef>; holiday?: string; t: T; fmt: Fmt }) {
-  const today = rows.filter((r) => r.work_date === day);
-  const mine = today.find((r) => r.user_id === meId);
-  const groups = new Map<string, TeamRow[]>();
-  for (const r of today) {
-    if (!groups.has(r.shift_code)) groups.set(r.shift_code, []);
-    groups.get(r.shift_code)!.push(r);
-  }
-  const order = [...groups.keys()].sort((a, b) => {
-    const da = defs.get(a);
-    const db = defs.get(b);
-    if (!!da?.working !== !!db?.working) return da?.working ? -1 : 1;
-    return (da?.start ?? 9999) - (db?.start ?? 9999) || a.localeCompare(b);
-  });
+  const mine = rows.find((r) => r.work_date === day && r.user_id === meId);
 
   return (
     <div>
@@ -175,29 +164,6 @@ function DayDetail({ day, rows, meId, defs, holiday, t, fmt }: { day: string; ro
           <p className="mt-1 text-lg font-semibold">{t("ms.noShift")}</p>
         )}
       </Card>
-      <h3 className="mb-2 px-1 font-bold text-brand">{t("ms.coworkers")}</h3>
-      {!today.length ? (
-        <Empty>{t("ms.noData")}</Empty>
-      ) : (
-        <div className="space-y-3">
-          {order.map((code) => (
-            <Card key={code} className="!p-3.5">
-              <div className="mb-2 flex items-center gap-2">
-                <ShiftTimeChip code={code} def={defs.get(code)} />
-                <span className="ml-auto font-bold">{t("common.people", { n: groups.get(code)!.length })}</span>
-              </div>
-              <ul className="divide-y divide-line">
-                {groups.get(code)!.map((r) => (
-                  <li key={r.user_id} className={`flex items-center gap-2 py-1.5 ${r.user_id === meId ? "font-bold text-brand" : ""}`}>
-                    <span className="min-w-0 flex-1 truncate">{empName(r)}{r.user_id === meId ? ` ${t("ms.me")}` : ""}</span>
-                    <span className="text-[13px] text-muted">{r.position ?? "-"}</span>
-                  </li>
-                ))}
-              </ul>
-            </Card>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
