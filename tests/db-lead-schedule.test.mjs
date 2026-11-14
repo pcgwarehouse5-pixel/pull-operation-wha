@@ -62,17 +62,17 @@ test("ประกาศแยกกัน และใครเห็นกะ�
   await apply(db, DM, [LEAD, DM]);
   // หัวหน้างาน/แอดมินของคลังเห็นทั้งหมดแม้ยังเป็นร่าง (ดูอย่างเดียว)
   assert.deepEqual(await seen(db, U.admin5), ["DM", "E5", "L1", "S5"]);
-  // ประกาศตารางปกติ: พนักงานเห็นเฉพาะตารางปกติ · หัวหน้าคลังยังไม่เห็นกะตัวเอง
+  // ประกาศตารางปกติ: พนักงานเห็นเฉพาะกะตัวเอง (ไม่เห็นเพื่อน) · หัวหน้าคลังยังไม่เห็นกะตัวเอง
   await status(db, U.sup5, "published", "staff");
-  assert.deepEqual(await seen(db, U.emp5), ["E5", "S5"]);
-  assert.deepEqual(await team(db, U.emp5), ["E5", "S5"]);
-  assert.deepEqual(await seen(db, LEAD), ["E5", "S5"]);
-  // ประกาศตารางหัวหน้าคลัง: หัวหน้าคลังเห็นของกลุ่มตัวเอง · พนักงานยังไม่เห็น
+  assert.deepEqual(await seen(db, U.emp5), ["E5"]);
+  assert.deepEqual(await team(db, U.emp5), ["E5"]);
+  assert.deepEqual(await seen(db, LEAD), []);
+  // ประกาศตารางหัวหน้าคลัง: หัวหน้าคลังเห็นกะตัวเอง · พนักงานยังเห็นเฉพาะของตัวเอง
   await status(db, DM, "published", "lead");
-  assert.deepEqual(await seen(db, LEAD), ["DM", "E5", "L1", "S5"]);
-  assert.deepEqual(await team(db, LEAD), ["DM", "E5", "L1", "S5"]);
-  assert.deepEqual(await seen(db, U.emp5), ["E5", "S5"]);
-  assert.deepEqual(await team(db, U.emp5), ["E5", "S5"]);
+  assert.deepEqual(await seen(db, LEAD), ["L1"]);
+  assert.deepEqual(await team(db, LEAD), ["L1"]);
+  assert.deepEqual(await seen(db, U.emp5), ["E5"]);
+  assert.deepEqual(await team(db, U.emp5), ["E5"]);
   // ตารางกะของฉัน (my_attendance) ของหัวหน้าคลัง ตามสถานะตารางหัวหน้าคลัง
   const mine = async () => (await as(db, LEAD, () => q1(db, `select shift_code from public.my_attendance('2026-12-01', '2026-12-01')`))).shift_code;
   assert.equal(await mine(), "STD1");

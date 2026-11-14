@@ -39,7 +39,7 @@ test("ตารางกะ: หัวหน้างาน/แอดมิน�
   assert.equal(del.affectedRows, 0);
 });
 
-test("ตารางกะ: พนักงานเห็นเฉพาะเดือนที่ประกาศแล้ว ของตัวเองและเพื่อนร่วมคลัง", async () => {
+test("ตารางกะ: พนักงานเห็นเฉพาะกะของตัวเองในเดือนที่ประกาศแล้ว (ไม่เห็นเพื่อนร่วมคลัง)", async () => {
   const db = await withCodes();
   await put(db, U.sup5, U.emp5, "2026-12-01", "STD1");
   await put(db, U.sup5, U.sup5, "2026-12-01", "GN_5");
@@ -51,13 +51,13 @@ test("ตารางกะ: พนักงานเห็นเฉพาะเ
 
   await as(db, U.sup5, () => db.query(`select public.set_schedule_status($1, '2026-12-15', 'published')`, [WH5]));
   const mine = await seen(db, U.emp5);
-  assert.deepEqual(mine.map((r) => r.user_id).sort(), [U.sup5, U.emp5].sort(), "เห็นของตัวเองและเพื่อนร่วมคลัง 5");
+  assert.deepEqual(mine.map((r) => r.user_id), [U.emp5], "เห็นเฉพาะของตัวเอง ไม่เห็นเพื่อนร่วมคลัง");
   assert.ok(!mine.some((r) => r.user_id === U.emp32), "ไม่เห็นคลังอื่น");
   assert.equal((await seen(db, U.emp32)).length, 0, "คลัง 32 ยังไม่ประกาศ พนักงานคลัง 32 ไม่เห็นแม้แต่ของตัวเอง");
 
-  // รายชื่อเพื่อนร่วมคลังผ่านคำสั่งเฉพาะ (ไม่เปิดข้อมูลส่วนตัวอื่น)
+  // team_schedule (หน้าตารางกะของฉัน) คืนเฉพาะกะของตัวเอง
   const team = await as(db, U.emp5, () => rows(db, `select first_name_th, shift_code from public.team_schedule('2026-12-01') order by first_name_th`));
-  assert.deepEqual(team, [{ first_name_th: "ชื่อ E5", shift_code: "STD1" }, { first_name_th: "ชื่อ S5", shift_code: "GN_5" }]);
+  assert.deepEqual(team, [{ first_name_th: "ชื่อ E5", shift_code: "STD1" }]);
   const cols = Object.keys((await as(db, U.emp5, () => rows(db, `select * from public.team_schedule('2026-12-01')`)))[0]);
   assert.ok(!cols.includes("phone") && !cols.includes("salary_code") && !cols.includes("employee_code"), "ไม่มีข้อมูลส่วนตัวอื่น");
   assert.equal((await as(db, U.emp32, () => rows(db, `select * from public.team_schedule('2026-12-01')`))).length, 0);
