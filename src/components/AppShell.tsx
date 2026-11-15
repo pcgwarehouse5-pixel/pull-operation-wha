@@ -7,6 +7,7 @@ import { useState, type ReactNode } from "react";
 import { useApp } from "./AuthProvider";
 import { Icon } from "./Icon";
 import { NotificationBell } from "./NotificationBell";
+import { AnnouncementPopup } from "./announcements/AnnouncementPopup";
 import { LanguageSwitch } from "./LanguageSwitch";
 import { LogoMark } from "./LogoMark";
 import { ROLE_RANK, fullName, type AppRole } from "@/lib/types";
@@ -255,6 +256,9 @@ export function AppShell({
           </div>
         </div>
       )}
+
+      {/* ประชาสัมพันธ์: เด้งเมื่อเปิดแอป (ครั้งเดียวต่อการเปิด) */}
+      <AnnouncementPopup />
     </div>
   );
 }

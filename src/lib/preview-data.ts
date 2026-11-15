@@ -93,6 +93,21 @@ export const PREVIEW_EMPLOYEE_SKILLS = [
   { user_id: "p4", skill_id: "s3" },
 ];
 
+// ประชาสัมพันธ์ตัวอย่าง (ใช้ภาพในแอป) · วันที่คำนวณจากวันนี้ ให้มีทั้งกำลังแสดง / รอแสดง / หมดเวลา
+export function previewAnnouncements(today: string): import("./announcements").AnnouncementView[] {
+  const day = (n: number) => {
+    const d = new Date(today + "T00:00:00Z");
+    d.setUTCDate(d.getUTCDate() + n);
+    return d.toISOString().slice(0, 10);
+  };
+  return [
+    { id: "an1", title: "ประกาศตัวอย่าง: กิจกรรมทำความสะอาดคลัง", image_path: "00000000-0000-0000-0000-000000000001.webp", image_url: "/mascot/scene-warehouse.jpg", link_type: "menu", link_url: null, link_menu: "/my-position", starts_on: day(-1), ends_on: day(5) },
+    { id: "an2", title: "ประกาศตัวอย่าง: แนะนำทีมงาน", image_path: "00000000-0000-0000-0000-000000000002.webp", image_url: "/mascot/team.jpg", link_type: "url", link_url: "https://example.com/", link_menu: null, starts_on: day(0), ends_on: day(2) },
+    { id: "an3", title: "ประกาศตัวอย่าง: รอแสดงสัปดาห์หน้า", image_path: "00000000-0000-0000-0000-000000000003.webp", image_url: "/mascot/hello.jpg", link_type: "none", link_url: null, link_menu: null, starts_on: day(7), ends_on: day(14) },
+    { id: "an4", title: "ประกาศตัวอย่าง: หมดเวลาแล้ว", image_path: "00000000-0000-0000-0000-000000000004.webp", image_url: "/mascot/wave.jpg", link_type: "none", link_url: null, link_menu: null, starts_on: day(-10), ends_on: day(-3) },
+  ];
+}
+
 export const PREVIEW_HOLIDAYS = [
   { id: "h0", holiday_date: "2026-11-20", name: "วันหยุดตัวอย่าง พ.ย." },
   { id: "h1", holiday_date: "2026-12-05", name: "วันหยุดตัวอย่าง 1" },

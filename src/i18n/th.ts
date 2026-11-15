@@ -121,6 +121,13 @@ export const th = {
   "nav.settings.desc": "ตัวเลือก กฎและอัตรา วันหยุด",
   "nav.holidays": "วันหยุดประจำปี",
   "nav.holidays.desc": "วันหยุดตามประกาศบริษัท แสดงในตารางกะ คิด OT ให้เอง",
+  "nav.announcements": "ประชาสัมพันธ์",
+  "nav.announcements.desc": "ป๊อปอัปภาพประกาศเมื่อเปิดแอป ตั้งช่วงวันที่ได้",
+  "ann.close": "ปิด",
+  "ann.next": "ถัดไป",
+  "ann.prev": "ก่อนหน้า",
+  "ann.tapHint": "แตะภาพเพื่อดูรายละเอียด",
+  "ann.of": "ประกาศที่ {a} จาก {b}",
   "nav.audit": "ประวัติการใช้งาน",
   "nav.audit.desc": "ใครทำอะไร เมื่อไร",
 
