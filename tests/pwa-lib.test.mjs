@@ -1,7 +1,7 @@
 // ทดสอบการแยกประเภทเครื่องสำหรับปุ่ม "ติดตั้งแอป" (UA ตัวอย่างของมือถือจริงหลายรุ่น)
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { detectPlatform, iosVersion, chromeVersion, tooOld, lineExternalUrl } from "../src/lib/pwa.ts";
+import { detectPlatform, iosVersion, chromeVersion, tooOld, lineExternalUrl, chromeIntentUrl } from "../src/lib/pwa.ts";
 
 const UA = {
   iphone15Safari: "Mozilla/5.0 (iPhone; CPU iPhone OS 15_8 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.6 Mobile/15E148 Safari/604.1",
@@ -13,6 +13,7 @@ const UA = {
   android7: "Mozilla/5.0 (Linux; Android 7.0; SM-J701F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.6045.163 Mobile Safari/537.36",
   android5: "Mozilla/5.0 (Linux; Android 5.1.1; SM-J200G) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/95.0.4638.74 Mobile Safari/537.36",
   androidFacebook: "Mozilla/5.0 (Linux; Android 12; SM-A125F) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/119.0 Mobile Safari/537.36 [FB_IAB/FB4A;FBAV/440.0.0.33.116;]",
+  samsungInternet: "Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/25.0 Chrome/121.0.0.0 Mobile Safari/537.36",
   windows: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
 };
 
@@ -26,6 +27,8 @@ test("แยกประเภทเครื่อง: iPhone Safari / iPhone C
   assert.equal(detectPlatform(UA.ipadOS, false, 0), "desktop", "Mac จริง");
   assert.equal(detectPlatform(UA.windows, false), "desktop");
   assert.equal(detectPlatform(UA.androidNew, true), "installed");
+  assert.equal(detectPlatform(UA.samsungInternet, false), "android-samsung", "Samsung Internet ติดตั้งไม่ค่อยสำเร็จ ให้ไป Chrome");
+  assert.equal(tooOld(UA.samsungInternet), false);
 });
 
 test("รุ่นเก่าเกินไป: iOS ต่ำกว่า 15.4 / Chrome บน Android ต่ำกว่า 99", () => {
@@ -36,6 +39,13 @@ test("รุ่นเก่าเกินไป: iOS ต่ำกว่า 15.4
   assert.equal(tooOld(UA.android7), false, "Android 7 ใช้ Chrome 119 ได้");
   assert.equal(tooOld(UA.android5), true, "Android 5 ค้างที่ Chrome 95");
   assert.equal(tooOld(UA.windows), false);
+});
+
+test("ลิงก์เปิดใน Chrome (Android) ไปหน้าเดิม ถ้าไม่มี Chrome ไป Play Store", () => {
+  assert.equal(
+    chromeIntentUrl("https://pull-operation-wha.vercel.app/login?a=1"),
+    "intent://pull-operation-wha.vercel.app/login?a=1#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=https%3A%2F%2Fplay.google.com%2Fstore%2Fapps%2Fdetails%3Fid%3Dcom.android.chrome;end",
+  );
 });
 
 test("ลิงก์ให้ LINE เปิดในเบราว์เซอร์", () => {

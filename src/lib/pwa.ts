@@ -7,6 +7,7 @@ export type Platform =
   | "inapp-other" // Facebook / Messenger / Instagram / TikTok ฯลฯ
   | "ios-safari" // iPhone / iPad ใน Safari: ปุ่มแชร์ → เพิ่มไปยังหน้าจอโฮม
   | "ios-other" // iPhone ใน Chrome ฯลฯ
+  | "android-samsung" // Samsung Internet: ติดตั้งมักขึ้น "ดาวน์โหลดล้มเหลว" → ให้ติดตั้งผ่าน Chrome
   | "android"
   | "desktop";
 
@@ -34,7 +35,7 @@ export function detectPlatform(ua: string, standalone: boolean, maxTouchPoints =
   if (/\bLine\//i.test(ua)) return "inapp-line";
   if (/FBAN|FBAV|FB_IAB|Instagram|MicroMessenger|musical_ly|TikTok|Messenger/i.test(ua)) return "inapp-other";
   if (isIOS(ua, maxTouchPoints)) return /CriOS|FxiOS|EdgiOS|OPiOS|GSA\//.test(ua) ? "ios-other" : "ios-safari";
-  if (/Android/i.test(ua)) return "android";
+  if (/Android/i.test(ua)) return /SamsungBrowser/i.test(ua) ? "android-samsung" : "android";
   return "desktop";
 }
 
@@ -49,6 +50,13 @@ export function tooOld(ua: string, maxTouchPoints = 0): boolean {
     return c !== null && c < MIN_CHROME;
   }
   return false;
+}
+
+/** ลิงก์เปิดหน้านี้ใน Chrome บน Android (ถ้าเครื่องไม่มี Chrome จะไปหน้า Chrome ใน Play Store) */
+export function chromeIntentUrl(href: string): string {
+  const u = new URL(href);
+  const fallback = "https://play.google.com/store/apps/details?id=com.android.chrome";
+  return `intent://${u.host}${u.pathname}${u.search}#Intent;scheme=${u.protocol.replace(":", "")};package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(fallback)};end`;
 }
 
 /** ลิงก์ให้ LINE เปิดหน้านี้ในเบราว์เซอร์ของเครื่อง (LINE รองรับพารามิเตอร์ openExternalBrowser=1) */

@@ -3,13 +3,14 @@
 // ปุ่ม/วิธี "ติดตั้งแอปบนมือถือ" ปรับตามเครื่องอัตโนมัติ
 //   Android (Chrome / Samsung): กดปุ่มติดตั้งได้ทันที (ถ้าเบราว์เซอร์ยังไม่พร้อม แสดงวิธีผ่านเมนู ⋮)
 //   iPhone / iPad (Safari): แสดง 3 ขั้นตอน ปุ่มแชร์ → เพิ่มไปยังหน้าจอโฮม
+//   Samsung Internet: ติดตั้งมักขึ้น "ดาวน์โหลดล้มเหลว" → ปุ่มเปิดใน Chrome (ปุ่มติดตั้งเดิมเป็นทางเลือกรอง)
 //   เปิดใน LINE / Facebook: ติดตั้งไม่ได้ → ปุ่มเปิดในเบราว์เซอร์ของเครื่อง
 // compact = แถบในหน้าล็อกอิน/หน้าหลัก (ปิดได้ จำไว้ 14 วัน) · ไม่ compact = การ์ดในหน้าข้อมูลของฉัน
 import { useEffect, useState } from "react";
 import { Icon } from "@/components/Icon";
 import { useI18n } from "@/i18n";
 import type { MsgKey } from "@/i18n/th";
-import { detectPlatform, lineExternalUrl, tooOld, type Platform } from "@/lib/pwa";
+import { chromeIntentUrl, detectPlatform, lineExternalUrl, tooOld, type Platform } from "@/lib/pwa";
 
 type PromptEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: "accepted" | "dismissed" }> };
 type PwaWindow = Window & { __whaInstall?: PromptEvent | null; __whaInstalled?: boolean };
@@ -103,6 +104,18 @@ export function InstallApp({ compact = false }: { compact?: boolean }) {
       </>
     ) : platform === "inapp-other" ? (
       <p className="mt-2 text-[15px] text-ink">{t("inst.inapp")}</p>
+    ) : platform === "android-samsung" ? (
+      <>
+        <p className="mt-2 text-[15px] text-ink">{t("inst.samsung")}</p>
+        <a href={chromeIntentUrl(location.href)} className="mt-3 flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-brand text-[17px] font-bold text-white">
+          <Icon name="link" size={20} /> {t("inst.openChrome")}
+        </a>
+        {prompt && (
+          <button type="button" onClick={install} className="mt-2 flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl bg-white font-semibold text-brand ring-1 ring-line">
+            <Icon name="download" size={18} /> {t("inst.tryHere")}
+          </button>
+        )}
+      </>
     ) : prompt ? (
       <button type="button" onClick={install} className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-brand text-[17px] font-bold text-white">
         <Icon name="download" size={22} /> {t("inst.install")}
