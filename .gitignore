@@ -56,3 +56,7 @@ backups/
 
 # slides/reports made for the user - keep out of git
 exports/
+
+# คู่มือฉบับพิมพ์แจก (มีรหัสผ่านเริ่มต้นจริง ห้ามขึ้น GitHub) และไฟล์ล็อกของ Office
+docs/*ฉบับพิมพ์*
+~$*
