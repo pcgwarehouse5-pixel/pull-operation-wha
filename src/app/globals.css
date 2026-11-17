@@ -112,3 +112,13 @@ html[lang="my"] :is(.leading-none, .leading-tight, .leading-snug) {
     padding: 3px 4px !important;
   }
 }
+
+/* ความสูงตามจอที่เห็นจริง (dvh มีตั้งแต่ Chrome 108 / Safari 15.4) · มือถือรุ่นเก่าใช้ vh แทน */
+.max-h-sheet {
+  max-height: 88vh;
+  max-height: 88dvh;
+}
+.max-h-popup-img {
+  max-height: 68vh;
+  max-height: 68dvh;
+}

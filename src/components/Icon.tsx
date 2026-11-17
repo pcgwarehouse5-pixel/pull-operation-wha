@@ -36,6 +36,10 @@ const PATHS = {
   link: "M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1",
   history: "M3 12a9 9 0 103-6.7M3 4v4h4M12 8v4l3 2",
   trash: "M4 7h16M9 7V4h6v3M6 7l1 14h10l1-14",
+  share: "M12 15V3M8 7l4-4 4 4M6 11H5a1 1 0 00-1 1v8a1 1 0 001 1h14a1 1 0 001-1v-8a1 1 0 00-1-1h-1",
+  download: "M12 3v12M7 10l5 5 5-5M5 21h14",
+  phone: "M8 2h8a2 2 0 012 2v16a2 2 0 01-2 2H8a2 2 0 01-2-2V4a2 2 0 012-2zM11 18h2",
+  dots: "M12 5h.01M12 12h.01M12 19h.01",
 } as const;
 
 export type IconName = keyof typeof PATHS;

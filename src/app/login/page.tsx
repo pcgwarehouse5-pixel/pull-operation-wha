@@ -8,6 +8,7 @@ import { Alert, Button, Field, inputCls } from "@/components/ui";
 import { Logo } from "@/components/AppShell";
 import { Puinun } from "@/components/Puinun";
 import { LanguageSwitch } from "@/components/LanguageSwitch";
+import { InstallApp } from "@/components/pwa/InstallApp";
 import { localizeError, useI18n } from "@/i18n";
 
 export default function LoginPage() {
@@ -98,6 +99,9 @@ export default function LoginPage() {
             </Button>
           </form>
           <p className="mt-6 text-center text-[14px] text-muted">{t("login.forgot")}</p>
+          <div className="mt-6">
+            <InstallApp compact />
+          </div>
         </main>
       </div>
     </div>

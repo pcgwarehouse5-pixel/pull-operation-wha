@@ -8,6 +8,7 @@ import { useApp } from "@/components/AuthProvider";
 import { Alert, Button, Card, Field, inputCls } from "@/components/ui";
 import { PageHelper } from "@/components/Puinun";
 import { LanguageSwitch } from "@/components/LanguageSwitch";
+import { InstallApp } from "@/components/pwa/InstallApp";
 import { sb } from "@/lib/supabase";
 import { fullName } from "@/lib/types";
 import { localizeError, useI18n } from "@/i18n";
@@ -79,6 +80,10 @@ export default function ProfilePage() {
           <LanguageSwitch />
         </div>
       </Card>
+
+      <div className="mb-4">
+        <InstallApp />
+      </div>
 
       <Card className="mb-4">
         <h2 className="mb-3 text-lg font-bold text-brand">{t("pf.contact")}</h2>

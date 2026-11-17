@@ -7,6 +7,7 @@ import { AppShell } from "@/components/AppShell";
 import { useApp } from "@/components/AuthProvider";
 import { Icon } from "@/components/Icon";
 import { Puinun } from "@/components/Puinun";
+import { InstallApp } from "@/components/pwa/InstallApp";
 import { MySummary } from "@/components/home/MySummary";
 import { navFor, type NavItem } from "@/lib/nav";
 import { sb } from "@/lib/supabase";
@@ -92,6 +93,9 @@ export default function HomePage() {
           {clockedIn && row?.first_in && <p className="mt-2 text-center text-[14px] font-semibold text-ok">{t("home.inAt", { t: fmt.time(row.first_in) })}</p>}
         </div>}
       </section>
+
+      {/* ติดตั้งแอปบนมือถือ (ปิดได้ ซ่อนเองเมื่อติดตั้งแล้ว) */}
+      <InstallApp compact />
 
       {/* สรุปของฉัน: ตำแหน่งวันนี้ OT วันลา (คนที่ลงเวลา) */}
       {timekeep && <MySummary />}

@@ -210,7 +210,7 @@ export function AppShell({
       {/* หน้ารวมเมนู (มือถือ) */}
       {menuOpen && (
         <div className="fixed inset-0 z-50 bg-[#0b1433]/55 lg:hidden" onClick={() => setMenuOpen(false)} role="dialog" aria-modal="true" aria-label={t("common.allMenu")}>
-          <div className="absolute inset-x-0 bottom-0 max-h-[88dvh] overflow-y-auto overscroll-contain rounded-t-[28px] bg-paper pb-[max(16px,env(safe-area-inset-bottom))]" onClick={(e) => e.stopPropagation()}>
+          <div className="absolute inset-x-0 bottom-0 max-h-sheet overflow-y-auto overscroll-contain rounded-t-[28px] bg-paper pb-[max(16px,env(safe-area-inset-bottom))]" onClick={(e) => e.stopPropagation()}>
             <div className="relative flex items-center gap-3 rounded-t-[28px] bg-brand px-5 pt-4 pb-5 text-white">
               <Mark size={44} />
               <div className="min-w-0 flex-1">

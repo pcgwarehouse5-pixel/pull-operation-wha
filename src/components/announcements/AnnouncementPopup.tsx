@@ -70,7 +70,7 @@ export function AnnouncementModal({ list, onClose, start = 0 }: { list: Announce
 
   const image = (
     // eslint-disable-next-line @next/next/no-img-element -- ภาพจากที่เก็บแบบปิด (ลิงก์ชั่วคราว) ไม่ผ่านตัวย่อภาพของ Next
-    <img src={a.image_url ?? ""} alt={a.title} className="block max-h-[68dvh] w-full bg-white object-contain" />
+    <img src={a.image_url ?? ""} alt={a.title} className="block max-h-popup-img w-full bg-white object-contain" />
   );
 
   return (
