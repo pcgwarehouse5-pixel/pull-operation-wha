@@ -2,6 +2,7 @@
 import { fetchAll, sb } from "./supabase";
 import { DEFAULT_MEETINGS, MEETING_KEYS, isHm, type Meetings } from "./pull";
 import type { Booking, NetRow, PoolPerson, PullConfig, PullShift, PullSkillRow, PullTask, ShiftHours, SkillCount, SkillReq, TaskRate, WorkloadType } from "./pull";
+import type { HistoryRow } from "./warehouse3d/placement";
 
 export type WorkloadRow = { warehouse_id: string; work_date: string; shift: PullShift; workload_type_id: string; volume: number };
 
@@ -82,10 +83,23 @@ export async function loadPool(wh: string, date: string, shift: PullShift): Prom
 }
 
 /** การจองเข้าคลังนี้ของวัน/กะ (เฉพาะที่ยังไม่ยกเลิก) */
+/** ตำแหน่งบนแผนที่ 3D ที่คลังนี้เคยวางไว้ล่าสุด (ใช้หาจุดของแต่ละตำแหน่ง) · 500 แถวล่าสุดพอสำหรับหลายรอบ */
+export async function loadMapHistory(wh: string): Promise<HistoryRow[]> {
+  const { data, error } = await sb()
+    .from("pull_bookings")
+    .select("skill_name, work_date, shift, map_x, map_y, map_at")
+    .eq("to_warehouse_id", wh)
+    .not("map_x", "is", null)
+    .order("map_at", { ascending: false })
+    .limit(500);
+  if (error) throw error;
+  return (data ?? []) as HistoryRow[];
+}
+
 export async function loadBookings(wh: string, date: string, shift: PullShift): Promise<Booking[]> {
   const { data, error } = await sb()
     .from("pull_bookings")
-    .select("id, work_date, shift, user_id, from_warehouse_id, to_warehouse_id, skill_name, status, break_time, booked_at")
+    .select("id, work_date, shift, user_id, from_warehouse_id, to_warehouse_id, skill_name, status, break_time, booked_at, map_x, map_y")
     .eq("to_warehouse_id", wh)
     .eq("work_date", date)
     .eq("shift", shift)

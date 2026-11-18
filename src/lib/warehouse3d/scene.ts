@@ -9,10 +9,22 @@ import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { WAREHOUSE_MAPS } from "./maps";
 import type { ViewMode, WhMap } from "./types";
 
+/** กล่องพนักงานบนแผนที่ (หน้าผังตำแหน่ง) · x/y = พิกัดผัง */
+export type PersonObj = { id: string; x: number; y: number; color: string; label: string; group: string; groupLabel: string };
+export type Move = { id: string; x: number; y: number };
+
 export type Warehouse3D = {
   show(key: string): void;
   view(mode?: ViewMode): void;
   lock(on: boolean): boolean;
+  /** วางกล่องพนักงาน (แทนชุดเดิมทั้งหมด) */
+  setPeople(list: PersonObj[]): void;
+  /** โหมดจัดตำแหน่ง: ลากกล่อง/ป้ายชื่อ/ป้ายกลุ่มได้ */
+  setEditing(on: boolean): void;
+  /** ลากวางเสร็จ → ตำแหน่งใหม่ของคนที่ย้าย */
+  onMove: ((moves: Move[]) => void) | null;
+  /** แตะป้ายชื่อ (ไม่ได้ลาก) */
+  onTap: ((id: string) => void) | null;
   dispose(): void;
 };
 
@@ -33,6 +45,7 @@ export function createWarehouse3D(el: HTMLElement, opt: { mobile: boolean; font?
   const MAPS = WAREHOUSE_MAPS;
   const FONT = opt.font || "'IBM Plex Sans Thai Looped', sans-serif";
   let LOCKED = true;
+  let EDIT = false;
   let cur: string | null = null;
   let VMODE: ViewMode = "3d";
   let needs = true;
@@ -97,7 +110,8 @@ export function createWarehouse3D(el: HTMLElement, opt: { mobile: boolean; font?
   const applyLock = () => {
     controls.enabled = !LOCKED;
     /* ล็อกอยู่ = ปล่อยให้เลื่อนหน้าเว็บผ่านแผนที่ได้ (มือถือ) */
-    canvas.style.touchAction = LOCKED ? "pan-y" : "none";
+    /* โหมดจัดตำแหน่ง = แผนที่รับนิ้วเองทั้งหมด (ลากกล่องบนมือถือได้) */
+    canvas.style.touchAction = LOCKED && !EDIT ? "pan-y" : "none";
   };
   applyLock();
   controls.addEventListener("change", () => {
@@ -148,10 +162,10 @@ export function createWarehouse3D(el: HTMLElement, opt: { mobile: boolean; font?
     if (!onScreen || document.hidden) return;
     if (controls.update() || needs) {
       renderer.render(scene, camera);
+      placeLabels();
       needs = false;
     }
   }
-  loop();
 
   /* ---------- ชิ้นส่วนพื้นฐาน ---------- */
   const box = (w: number, h: number, d: number, c: number, o: MatOpts = {}) => {
@@ -743,19 +757,228 @@ export function createWarehouse3D(el: HTMLElement, opt: { mobile: boolean; font?
       if (k < 8) d *= Math.max((b - a) / (X1 - X0), (e - c) / (Y1 - Y0));
     }
     controls.target.copy(tgt); camera.position.copy(tgt).addScaledVector(dir, d);
-    controls.maxDistance = d * 2.2; controls.minDistance = Math.max(W, D) * 0.06;
+    controls.maxDistance = d * 2.2; controls.minDistance = Math.max(W, D) * 0.035;
     /* หมุนรอบได้ ±40° จากมุมเริ่ม (มุมบน = ไม่จำกัด) */
     const az = Math.atan2(dir.x, dir.z);
     controls.minAzimuthAngle = top ? -Infinity : az - 0.7; controls.maxAzimuthAngle = top ? Infinity : az + 0.7;
     camera.lookAt(controls.target); controls.update(); needs = true;
   }
 
-  return {
-    show(key) { sizeToEl(); if (key !== cur) build(key); },
+  /* ---------- กล่องพนักงาน + ป้ายชื่อ + ลากวาง ---------- */
+  const layer = document.createElement("div");
+  layer.style.cssText = "position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:1";
+  el.appendChild(layer);
+  const peopleRoot = new THREE.Group();
+  scene.add(peopleRoot);
+  const personGeo = new THREE.BoxGeometry(1, 1, 1);
+  const ray = new THREE.Raycaster(), v2 = new THREE.Vector2();
+  type Obj = { p: PersonObj; mesh: THREE.Mesh; tag: HTMLButtonElement };
+  type Grp = { key: string; tag: HTMLButtonElement; ids: string[] };
+  let OBJS = new Map<string, Obj>();
+  let GRPS = new Map<string, Grp>();
+  let drag: { ids: string[]; start: THREE.Vector3; orig: Map<string, { x: number; y: number }>; tap?: string; sx: number; sy: number; moved: boolean; pid: number } | null = null;
+  const unit = () => (cur ? MAPS[cur].pxm : 6.6);
+  const boxH = () => unit() * 3.2;
+  const personMat = (color: string) => stdMat({ color: new THREE.Color(color).getHex(), roughness: 0.55, metalness: 0.05 });
+
+  const chip = (bg: string, fg: string, border: string, size: number) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.style.cssText = `position:absolute;left:0;top:0;pointer-events:auto;white-space:nowrap;font:700 ${size}px/1.25 ${FONT};color:${fg};background:${bg};border:2px solid ${border};border-radius:10px;padding:2px 7px;box-shadow:0 2px 8px rgba(11,42,74,.22);user-select:none;-webkit-user-select:none`;
+    return b;
+  };
+  const styleEdit = (b: HTMLElement) => {
+    b.style.cursor = EDIT ? "grab" : "pointer";
+    b.style.touchAction = EDIT ? "none" : "auto";
+  };
+
+  function setPeople(list: PersonObj[]) {
+    const keep = new Set(list.map((p) => p.id));
+    for (const [id, o] of OBJS) if (!keep.has(id)) { peopleRoot.remove(o.mesh); o.tag.remove(); OBJS.delete(id); }
+    const s = unit();
+    for (const p of list) {
+      let o = OBJS.get(p.id);
+      if (!o) {
+        const mesh = new THREE.Mesh(personGeo, personMat(p.color));
+        mesh.castShadow = true;
+        mesh.userData.person = p.id;
+        peopleRoot.add(mesh);
+        const tag = chip("#ffffff", "#16204a", p.color, 12);
+        tag.addEventListener("pointerdown", (e) => startDrag(e, [p.id], p.id));
+        layer.appendChild(tag);
+        o = { p, mesh, tag };
+        OBJS.set(p.id, o);
+      } else if (o.p.color !== p.color) {
+        o.mesh.material = personMat(p.color);
+        o.tag.style.borderColor = p.color;
+      }
+      /* กำลังลากคนนี้อยู่ = คงตำแหน่งบนจอไว้ก่อน */
+      o.p = drag?.ids.includes(p.id) ? { ...p, x: o.p.x, y: o.p.y } : p;
+      o.tag.textContent = p.label;
+      o.tag.title = `${p.label} · ${p.groupLabel}`;
+      styleEdit(o.tag);
+      o.mesh.scale.set(s * 2.2, boxH(), s * 2.2);
+      o.mesh.position.set(o.p.x, boxH() / 2, o.p.y);
+    }
+    /* ป้ายหัวกลุ่มตำแหน่ง: ลากป้ายนี้ = ย้ายทั้งกลุ่ม */
+    const groups = new Map<string, { ids: string[]; label: string; color: string }>();
+    for (const p of list) {
+      const g = groups.get(p.group);
+      if (g) g.ids.push(p.id);
+      else groups.set(p.group, { ids: [p.id], label: p.groupLabel, color: p.color });
+    }
+    for (const [k, g] of GRPS) if (!groups.has(k)) { g.tag.remove(); GRPS.delete(k); }
+    for (const [key, g] of groups) {
+      let t = GRPS.get(key);
+      if (!t) {
+        const tag = chip(g.color, "#ffffff", "#ffffff", 13);
+        tag.addEventListener("pointerdown", (e) => { const now = GRPS.get(key); if (now) startDrag(e, now.ids); });
+        layer.appendChild(tag);
+        t = { key, tag, ids: g.ids };
+        GRPS.set(key, t);
+      }
+      t.ids = g.ids;
+      t.tag.style.background = g.color;
+      t.tag.dataset.full = `${g.label} · ${g.ids.length} คน`;
+      t.tag.dataset.short = String(g.ids.length);
+      t.tag.textContent = t.tag.dataset.full;
+      t.tag.title = `${g.label} · ${g.ids.length} คน${EDIT ? " · ลากป้ายนี้เพื่อย้ายทั้งกลุ่ม" : ""}`;
+      styleEdit(t.tag);
+    }
+    needs = true;
+  }
+
+  const prj = new THREE.Vector3();
+  const toPx = (x: number, y: number, z: number) => {
+    prj.set(x, y, z).project(camera);
+    return { sx: ((prj.x + 1) / 2) * el.clientWidth, sy: ((1 - prj.y) / 2) * el.clientHeight, ok: prj.z < 1 && Math.abs(prj.x) < 1.1 && Math.abs(prj.y) < 1.1, z: prj.z };
+  };
+  /* ป้ายชื่อรายคนแสดงเมื่อซูมใกล้พอ (กล่องห่างกันบนจอ ≥ 22px) ไม่อย่างนั้นทับกันอ่านไม่ออก · ป้ายกลุ่มแสดงตลอด */
+  function placeLabels() {
+    if (!OBJS.size) return;
+    const first = OBJS.values().next().value!;
+    const a = toPx(first.p.x, 0, first.p.y), b = toPx(first.p.x + unit() * 5, 0, first.p.y);
+    const names = Math.hypot(b.sx - a.sx, b.sy - a.sy) >= 22;
+    for (const o of OBJS.values()) {
+      const q = toPx(o.p.x, boxH() + unit() * 0.6, o.p.y), show = q.ok && (names || !!drag?.ids.includes(o.p.id));
+      o.tag.style.display = show ? "" : "none";
+      if (show) { o.tag.style.transform = `translate(${q.sx}px, ${q.sy}px) translate(-50%, -100%)`; o.tag.style.zIndex = String(1000 - Math.round(q.z * 900)); }
+    }
+    /* ป้ายกลุ่ม: ถ้าชนป้ายที่วางไปแล้ว ย่อเหลือจำนวนคน (ชื่อเต็มอยู่ในคำอธิบายเมื่อชี้ และในแถบตัวกรอง) */
+    const taken: [number, number, number, number][] = [];
+    const hits = (r: [number, number, number, number]) => taken.some((t) => r[0] < t[2] && r[2] > t[0] && r[1] < t[3] && r[3] > t[1]);
+    const order = [...GRPS.values()].sort((a, b) => b.ids.length - a.ids.length);
+    for (const g of order) {
+      const pts = g.ids.map((id) => OBJS.get(id)?.p).filter((p): p is PersonObj => !!p);
+      if (!pts.length) { g.tag.style.display = "none"; continue; }
+      const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length, minY = Math.min(...pts.map((p) => p.y));
+      const q = toPx(cx, boxH() + unit() * (names ? 5 : 1.5), minY - unit() * (names ? 1 : 0));
+      g.tag.style.display = q.ok ? "" : "none";
+      if (!q.ok) continue;
+      const rect = () => { const w = g.tag.offsetWidth, h = g.tag.offsetHeight; return [q.sx - w / 2, q.sy - h, q.sx + w / 2, q.sy] as [number, number, number, number]; };
+      g.tag.textContent = g.tag.dataset.full ?? "";
+      let r = rect();
+      if (hits(r)) { g.tag.textContent = g.tag.dataset.short ?? ""; r = rect(); }
+      taken.push(r);
+      g.tag.style.transform = `translate(${q.sx}px, ${q.sy}px) translate(-50%, -100%)`;
+      g.tag.style.zIndex = "1001";
+    }
+  }
+
+  const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  const aim = (cx: number, cy: number) => {
+    const r = canvas.getBoundingClientRect();
+    v2.set(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1);
+    ray.setFromCamera(v2, camera);
+  };
+  const groundAt = (cx: number, cy: number) => { aim(cx, cy); return ray.ray.intersectPlane(plane, new THREE.Vector3()); };
+  function startDrag(e: PointerEvent, ids: string[], tap?: string) {
+    if (drag || (e.pointerType === "mouse" && e.button !== 0)) return;
+    const g = groundAt(e.clientX, e.clientY);
+    if (!g) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const orig = new Map<string, { x: number; y: number }>();
+    for (const id of ids) { const o = OBJS.get(id); if (o) orig.set(id, { x: o.p.x, y: o.p.y }); }
+    drag = { ids, start: g, orig, tap, sx: e.clientX, sy: e.clientY, moved: false, pid: e.pointerId };
+    controls.enabled = false;
+    window.addEventListener("pointermove", onDragMove);
+    window.addEventListener("pointerup", endDrag);
+    window.addEventListener("pointercancel", endDrag);
+  }
+  function onDragMove(e: PointerEvent) {
+    if (!drag || e.pointerId !== drag.pid || !EDIT || !cur) return;
+    if (!drag.moved && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 5) return;
+    const g = groundAt(e.clientX, e.clientY);
+    if (!g) return;
+    drag.moved = true;
+    const [x0, y0, x1, y1] = MAPS[cur].view || MAPS[cur].bounds, dx = g.x - drag.start.x, dz = g.z - drag.start.z;
+    for (const [id, s0] of drag.orig) {
+      const o = OBJS.get(id);
+      if (!o) continue;
+      o.p = { ...o.p, x: Math.min(Math.max(s0.x + dx, x0), x1), y: Math.min(Math.max(s0.y + dz, y0), y1) };
+      o.mesh.position.set(o.p.x, boxH() / 2, o.p.y);
+    }
+    needs = true;
+  }
+  function endDrag(e: PointerEvent) {
+    if (!drag || e.pointerId !== drag.pid) return;
+    const d = drag;
+    drag = null;
+    window.removeEventListener("pointermove", onDragMove);
+    window.removeEventListener("pointerup", endDrag);
+    window.removeEventListener("pointercancel", endDrag);
+    controls.enabled = !LOCKED;
+    needs = true;
+    if (d.moved && e.type === "pointerup") {
+      const r1 = (v: number) => Math.round(v * 10) / 10;
+      const moves: Move[] = [];
+      for (const id of d.orig.keys()) { const o = OBJS.get(id); if (o) moves.push({ id, x: r1(o.p.x), y: r1(o.p.y) }); }
+      api.onMove?.(moves);
+    } else if (d.moved) {
+      /* ถูกยกเลิกกลางทาง (เช่น มีสายเรียกเข้า) → กลับที่เดิม */
+      for (const [id, s0] of d.orig) { const o = OBJS.get(id); if (o) { o.p = { ...o.p, ...s0 }; o.mesh.position.set(s0.x, boxH() / 2, s0.y); } }
+    } else if (d.tap) api.onTap?.(d.tap);
+  }
+  /* ลากที่ตัวกล่องในฉาก · ดักก่อนถึงตัวควบคุมกล้อง (capture) */
+  const onCanvasDown = (e: PointerEvent) => {
+    if (!EDIT || !OBJS.size || e.target !== canvas) return;
+    aim(e.clientX, e.clientY);
+    const id = ray.intersectObjects(peopleRoot.children, false)[0]?.object.userData.person as string | undefined;
+    if (id) startDrag(e, [id], id);
+  };
+  el.addEventListener("pointerdown", onCanvasDown, { capture: true });
+
+  /* เริ่มวาดหลังเตรียมทุกส่วนเสร็จ */
+  loop();
+
+  const api: Warehouse3D = {
+    show(key) {
+      sizeToEl();
+      if (key !== cur) { setPeople([]); build(key); }
+    },
     view,
     lock(on) { LOCKED = !!on; applyLock(); if (LOCKED) view(); return LOCKED; },
+    setPeople,
+    setEditing(on) {
+      EDIT = !!on;
+      applyLock();
+      for (const o of OBJS.values()) styleEdit(o.tag);
+      for (const g of GRPS.values()) styleEdit(g.tag);
+    },
+    onMove: null,
+    onTap: null,
     dispose() {
       cancelAnimationFrame(raf);
+      el.removeEventListener("pointerdown", onCanvasDown, { capture: true });
+      window.removeEventListener("pointermove", onDragMove);
+      window.removeEventListener("pointerup", endDrag);
+      window.removeEventListener("pointercancel", endDrag);
+      layer.remove();
+      OBJS = new Map();
+      GRPS = new Map();
+      scene.remove(peopleRoot);
+      personGeo.dispose();
       ro.disconnect(); io?.disconnect();
       controls.dispose();
       if (root) { scene.remove(root); disposeTree(root); root = null; }
@@ -765,4 +988,5 @@ export function createWarehouse3D(el: HTMLElement, opt: { mobile: boolean; font?
       canvas.remove();
     },
   };
+  return api;
 }

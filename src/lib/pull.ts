@@ -292,7 +292,7 @@ export type PoolPerson = {
   booked_to_code: string | null;
   booked_skill: string | null;
 };
-export type Booking = { id: string; work_date: string; shift: PullShift; user_id: string; from_warehouse_id: string | null; to_warehouse_id: string; skill_name: string; status: "booked" | "cancelled"; break_time: string | null; booked_at: string };
+export type Booking = { id: string; work_date: string; shift: PullShift; user_id: string; from_warehouse_id: string | null; to_warehouse_id: string; skill_name: string; status: "booked" | "cancelled"; break_time: string | null; booked_at: string; map_x?: number | null; map_y?: number | null };
 
 export const STATUS_LABEL: Record<PoolStatus, string> = { ready: "พร้อม", booked_here: "จองแล้ว", busy: "ติดภารกิจ", unavailable: "ไม่พร้อม" };
 

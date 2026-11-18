@@ -185,7 +185,7 @@ const PEOPLE: Person[] = [
 ];
 
 // ---------- ที่เก็บของแท็บนี้ ----------
-type Store = { workloads: WorkloadRow[]; bookings: Booking[]; seq: number };
+type Store = { workloads: WorkloadRow[]; bookings: (Booking & { map_at?: string | null })[]; seq: number };
 let mem: Store | null = null;
 
 function todayBkk(): string {
@@ -329,6 +329,25 @@ export function previewCancelPull(id: string) {
   const s = store();
   s.bookings = s.bookings.map((b) => (b.id === id ? { ...b, status: "cancelled" as const } : b));
   save();
+}
+
+/** ลากวางบนแผนที่ 3D (โหมดตัวอย่าง) · x/y = null คือล้างตำแหน่ง */
+export function previewSetPullPositions(items: { id: string; x: number | null; y: number | null }[]) {
+  const s = store();
+  const at = new Date().toISOString();
+  const by = new Map(items.map((i) => [i.id, i]));
+  s.bookings = s.bookings.map((b) => {
+    const i = by.get(b.id);
+    return i ? { ...b, map_x: i.x, map_y: i.y, map_at: i.x === null ? null : at } : b;
+  });
+  save();
+}
+
+/** ตำแหน่งที่คลังนี้เคยวางไว้ (โหมดตัวอย่าง) */
+export function previewPullMapHistory(wh: string) {
+  return store()
+    .bookings.filter((b) => b.to_warehouse_id === wh && b.map_x != null && b.map_y != null)
+    .map((b) => ({ skill_name: b.skill_name, work_date: b.work_date, shift: b.shift, map_x: b.map_x ?? null, map_y: b.map_y ?? null, map_at: b.map_at ?? null }));
 }
 
 export function previewSetPullBreak(id: string, time: string | null) {

@@ -2,7 +2,8 @@
 
 // ผังตำแหน่งพนักงาน (Warehouse Team Layout) สำหรับประชุมก่อนเริ่มงาน (ไฟล์ "Pull-Operation Operation & Dashboard" หน้า 3)
 // การ์ดชื่อ + ตัวย่อแทนรูป แยกตามทักษะ พร้อมเวลาพัก · ด้านบนมีแผนที่คลัง 3D ของคลังที่เลือก (ถ้ามีผัง: WH5 / WH32)
-import { useMemo, useState } from "react";
+// บนแผนที่: คนที่จองแล้วเป็นกล่องสีตามตำแหน่ง กรองตามคลังต้นทาง/ตำแหน่งได้ · หัวหน้าลากวางแล้วบันทึกลงระบบ (set_pull_positions)
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
 import { useApp } from "@/components/AuthProvider";
@@ -16,9 +17,11 @@ import { useOptions } from "@/lib/useOptions";
 import { todayIso } from "@/lib/shifts";
 import { shortDay } from "@/lib/format";
 import { isGlobal } from "@/lib/types";
-import { addDays } from "@/lib/pull-data";
+import { addDays, loadMapHistory } from "@/lib/pull-data";
 import { SHIFT_LABEL, hhmm, skillGroup, skillStyle, type Booking, type PoolPerson } from "@/lib/pull";
-import { warehouseMapKey } from "@/lib/warehouse3d/maps";
+import { WAREHOUSE_MAPS, warehouseMapKey } from "@/lib/warehouse3d/maps";
+import { placePeople, skillAnchors, type HistoryRow } from "@/lib/warehouse3d/placement";
+import type { Move, PersonObj } from "@/lib/warehouse3d/scene";
 import { Warehouse3D } from "@/components/pull/Warehouse3D";
 
 const BREAK_COLORS = ["#facc15", "#fb923c", "#ef4444", "#38bdf8", "#a78bfa", "#34d399"];
@@ -38,17 +41,60 @@ export default function LayoutPage() {
     return isGlobal(profile.role) ? act : act.filter((w) => myWarehouseIds.includes(w.id));
   }, [warehouses, myWarehouseIds, profile.role]);
   const sel = usePullSelection(whs, profile.warehouse_id);
-  const { data, err, reload, at } = usePullBoard(sel.wh, sel.date, sel.shift);
+  const { data, setData, err, reload, at } = usePullBoard(sel.wh, sel.date, sel.shift);
   const opts = useOptions(["pull_break_time"]);
   const [group, setGroup] = useState("ทั้งหมด");
   const [editing, setEditing] = useState<Placed | null>(null);
   const [msg, setMsg] = useState<{ tone: "success" | "error"; text: string } | null>(null);
+  /* ตัวกรองบนแผนที่: คลังต้นทางของพนักงาน · ตำแหน่งที่ซ่อน */
+  const [mapSrc, setMapSrc] = useState("ทั้งหมด");
+  const [mapOff, setMapOff] = useState<string[]>([]);
+  const [hist, setHist] = useState<HistoryRow[]>([]);
 
   const breaks = (opts.pull_break_time ?? []).filter((o) => o.is_active).map((o) => o.value);
   const breakColor = (t: string | null) => (t ? BREAK_COLORS[Math.max(0, breaks.indexOf(t)) % BREAK_COLORS.length] : null);
   const whCode = whs.find((w) => w.id === sel.wh)?.code ?? "";
   const canEdit = sel.date >= today;
   const mapKey = warehouseMapKey(whCode);
+
+  /* จุดที่แต่ละตำแหน่งเคยวางล่าสุดในคลังนี้ (ใช้วางคนที่ยังไม่ได้ลาก) */
+  useEffect(() => {
+    if (!sel.wh || !mapKey) return;
+    let live = true;
+    (async () => {
+      try {
+        const h = demo ? demo.previewPullMapHistory(sel.wh) : await loadMapHistory(sel.wh);
+        if (live) setHist(h);
+      } catch {
+        if (live) setHist([]);
+      }
+    })();
+    return () => {
+      live = false;
+    };
+  }, [demo, sel.wh, mapKey, at]);
+
+  /* ตำแหน่งบนแผนที่ของทุกคน (คิดจากทุกคน ไม่ขึ้นกับตัวกรอง → กล่องไม่กระโดดเวลาเปลี่ยนตัวกรอง) */
+  const mapPos = useMemo(() => {
+    if (!data || !mapKey) return {};
+    return placePeople(
+      data.bookings.map((b) => ({ id: b.id, skill: b.skill_name, x: b.map_x ?? null, y: b.map_y ?? null })),
+      skillAnchors(hist),
+      WAREHOUSE_MAPS[mapKey],
+    );
+  }, [data, mapKey, hist]);
+
+  const mapPeople = useMemo<PersonObj[]>(() => {
+    if (!data) return [];
+    const who = new Map(data.pool.map((p) => [p.user_id, p]));
+    return data.bookings
+      .filter((b) => mapPos[b.id] && !mapOff.includes(b.skill_name))
+      .filter((b) => mapSrc === "ทั้งหมด" || who.get(b.user_id)?.warehouse_code === mapSrc)
+      .map((b) => {
+        const p = who.get(b.user_id);
+        return { id: b.id, x: mapPos[b.id].x, y: mapPos[b.id].y, color: skillStyle(b.skill_name).color, label: p?.nickname || p?.name.split(" ")[0] || "พนักงาน", group: b.skill_name, groupLabel: b.skill_name };
+      });
+  }, [data, mapPos, mapSrc, mapOff]);
 
   const bar = (
     <BoardBar
@@ -88,12 +134,84 @@ export default function LayoutPage() {
     }
   }
 
+  /* บันทึกตำแหน่งบนแผนที่ · คนตำแหน่งเดียวกันที่ยังวางอัตโนมัติอยู่ ถูกบันทึกตามที่เห็นไปด้วย (จะได้ไม่ขยับตามคนที่ถูกลาก) */
+  async function savePositions(moves: { id: string; x: number | null; y: number | null }[], note: string) {
+    if (!data || !canEdit) return;
+    const ids = new Set(moves.map((m) => m.id));
+    const skillsMoved = new Set(data.bookings.filter((b) => ids.has(b.id)).map((b) => b.skill_name));
+    const r1 = (v: number) => Math.round(v * 10) / 10;
+    const extra = moves.some((m) => m.x !== null)
+      ? data.bookings.filter((b) => !ids.has(b.id) && skillsMoved.has(b.skill_name) && b.map_x == null && mapPos[b.id]).map((b) => ({ id: b.id, x: r1(mapPos[b.id].x), y: r1(mapPos[b.id].y) }))
+      : [];
+    const items = [...moves, ...extra];
+    const at2 = new Map(items.map((i) => [i.id, i]));
+    setData((d) => (d ? { ...d, bookings: d.bookings.map((b) => (at2.has(b.id) ? { ...b, map_x: at2.get(b.id)!.x, map_y: at2.get(b.id)!.y } : b)) } : d));
+    try {
+      if (demo) demo.previewSetPullPositions(items);
+      else {
+        const { error } = await sb().rpc("set_pull_positions", { p_items: items });
+        if (error) throw error;
+      }
+      setMsg({ tone: "success", text: `${note}${demo ? " · โหมดตัวอย่าง" : ""}` });
+    } catch (e) {
+      setMsg({ tone: "error", text: `บันทึกตำแหน่งไม่สำเร็จ: ${errText(e)}` });
+      reload();
+    }
+  }
+  const onMapMove = (moves: Move[]) => {
+    const b = data.bookings.find((x) => x.id === moves[0]?.id);
+    const who = b ? byId.get(b.user_id) : undefined;
+    void savePositions(moves, moves.length > 1 ? `ย้ายกลุ่ม ${b?.skill_name ?? ""} (${moves.length} คน) แล้ว` : `ย้าย ${who?.nickname || who?.name || "พนักงาน"} แล้ว`);
+  };
+  const resetMap = () => {
+    if (!mapPeople.length || !window.confirm(`จัดเรียง ${mapPeople.length} คนที่แสดงบนแผนที่ใหม่อัตโนมัติ (ตำแหน่งที่ลากไว้ของรอบนี้จะถูกล้าง)?`)) return;
+    void savePositions(mapPeople.map((p) => ({ id: p.id, x: null, y: null })), `จัดเรียงใหม่อัตโนมัติ ${mapPeople.length} คนแล้ว`);
+  };
+  const srcCodes = [...new Set(placed.map((p) => p.person?.warehouse_code).filter((c): c is string => !!c))].sort((a, b) => a.localeCompare(b, "th", { numeric: true }));
+  const mapSkills = [...new Set(placed.map((p) => p.booking.skill_name))];
+  const chip = (on: boolean) => `min-h-10 shrink-0 rounded-full px-3 text-[14px] font-semibold ring-1 ${on ? "bg-sky text-ink ring-brand" : "bg-white text-muted ring-line"}`;
+
   return (
     <AppShell title="ผังตำแหน่ง" minRole="supervisor" wide>
       {bar}
       {err && <div className="mb-4"><Alert tone="error">{err}</Alert></div>}
       {msg && <div className="mb-4"><Alert tone={msg.tone}>{msg.text}</Alert></div>}
-      {mapKey && <Warehouse3D mapKey={mapKey} />}
+      {mapKey && (
+        <Warehouse3D mapKey={mapKey} people={mapPeople} editable={canEdit} onMove={onMapMove} onTap={(id) => { const p = placed.find((x) => x.booking.id === id); if (p && canEdit) setEditing(p); }}>
+          {placed.length === 0 ? (
+            <p className="text-[14px] text-muted">ยังไม่มีคนที่จองเข้าคลังนี้ในวัน/กะนี้ · จองแล้วจะขึ้นเป็นกล่องบนแผนที่ตามตำแหน่งงาน</p>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                <span className="shrink-0 text-[14px] font-semibold text-ink">พนักงานจากคลัง</span>
+                {["ทั้งหมด", ...srcCodes].map((c) => (
+                  <button key={c} type="button" aria-pressed={mapSrc === c} className={chip(mapSrc === c)} onClick={() => setMapSrc(c)}>{c}</button>
+                ))}
+              </div>
+              <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                <span className="shrink-0 text-[14px] font-semibold text-ink">ตำแหน่ง</span>
+                <button type="button" aria-pressed={mapOff.length === 0} className={chip(mapOff.length === 0)} onClick={() => setMapOff(mapOff.length ? [] : mapSkills)}>
+                  {mapOff.length ? "ทุกตำแหน่ง" : "ซ่อนทั้งหมด"}
+                </button>
+                {mapSkills.map((s) => {
+                  const on = !mapOff.includes(s);
+                  return (
+                    <button key={s} type="button" aria-pressed={on} className={`${chip(on)} flex items-center gap-1.5`} onClick={() => setMapOff(on ? [...mapOff, s] : mapOff.filter((x) => x !== s))}>
+                      <span className="h-3 w-3 rounded-sm" style={{ background: on ? skillStyle(s).color : "#c8ced8" }} /> {s}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="flex flex-wrap items-center gap-x-3 text-[13px] text-muted">
+                แสดงบนแผนที่ {mapPeople.length} จาก {placed.length} คน
+                {canEdit && mapPeople.length > 0 && (
+                  <button type="button" onClick={resetMap} className="min-h-10 font-semibold text-brand underline">↺ จัดเรียงใหม่อัตโนมัติ</button>
+                )}
+              </p>
+            </div>
+          )}
+        </Warehouse3D>
+      )}
 
       <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-4 lg:grid-cols-[16rem_minmax(0,1fr)]">
         <div className="space-y-4">
