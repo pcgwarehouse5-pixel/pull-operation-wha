@@ -12,11 +12,11 @@ import { ExcelGrid, GridHelp, type Group } from "@/components/shifts/ExcelGrid";
 import { errText, fetchAll, sb } from "@/lib/supabase";
 import { mergeMembers, sortByMembers } from "@/lib/shift-grid";
 import { useOptions } from "@/lib/useOptions";
-import { thaiDateTime } from "@/lib/format";
+import { shortDay, thaiDateTime } from "@/lib/format";
 import { isGlobal, isManagerRole } from "@/lib/types";
 import {
   THAI_DAYS_SHORT, addMonths, cellOf, currentMonth, mergeGrid, monthDates, shiftDef, shiftTimeText, stage, thaiMonthLabel,
-  toRows, todayIso, weekday, type Cell, type Change, type Grid, type ShiftDef,
+  keyOf, toRows, todayIso, weekday, type Cell, type Change, type Grid, type ShiftDef,
 } from "@/lib/shifts";
 
 type Row = { user_id: string; work_date: string; shift_code: string; holiday_work: Cell["holiday_work"]; is_volunteer: boolean };
@@ -69,6 +69,10 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [source, setSource] = useState("manual"); // ที่มาของการแก้ล่าสุด (บันทึกในประวัติ)
   const [leadPositions, setLeadPositions] = useState<string[]>(["Supervisor"]);
+  // ขาดงาน: วันที่มีกะทำงาน ไม่ลงเวลาเข้า-ออก และไม่ได้ลา (นับตั้งแต่ "วันเริ่มใช้ลงเวลาในแอป" ในหน้าตั้งค่า)
+  const [absent, setAbsent] = useState<Set<string>>(new Set());
+  const [liveDate, setLiveDate] = useState<string | null>(null);
+  const absReq = useRef(0);
 
   const defs = useMemo(() => new Map((opts.shift_type ?? []).map((o) => [o.value, shiftDef(o)])), [opts.shift_type]);
   const activeDefs = useMemo(() => (opts.shift_type ?? []).filter((o) => o.is_active).map(shiftDef), [opts.shift_type]);
@@ -85,6 +89,41 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
     setMsg(null);
     const from = dates[0];
     const to = addMonths(ym, 1) + "-01";
+    const today = todayIso();
+    setAbsent(new Set());
+    const req = ++absReq.current;
+    // วันขาดงานโหลดแยก: ถ้าโหลดไม่ได้ ตารางกะยังใช้ได้ตามปกติ
+    (async () => {
+      try {
+        let rows: { user_id: string; work_date: string }[] = [];
+        let live: string | null = null;
+        if (demo) {
+          live = "2026-11-01";
+          rows = demo.previewAbsent(dates, today);
+        } else {
+          const s = await sb().from("app_settings").select("value").eq("key", "attendance.go_live_date").lte("effective_from", today).order("effective_from", { ascending: false }).limit(1).maybeSingle();
+          const v = (s.data as { value?: unknown } | null)?.value;
+          live = typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null;
+          const last = dates[dates.length - 1] < today ? dates[dates.length - 1] : today;
+          if (live && live <= last && from <= last) {
+            rows = await fetchAll<{ user_id: string; work_date: string }>((f, t) =>
+              sb()
+                .rpc("warehouse_attendance", { p_wh: wh, p_from: live! > from ? live! : from, p_to: last })
+                .select("user_id, work_date")
+                .eq("status", "absent")
+                .order("user_id")
+                .order("work_date")
+                .range(f, t),
+            );
+          }
+        }
+        if (req !== absReq.current) return;
+        setLiveDate(live);
+        setAbsent(new Set(rows.map((r) => keyOf(r.user_id, r.work_date))));
+      } catch {
+        if (req === absReq.current) setAbsent(new Set());
+      }
+    })();
     try {
       let people: Emp[];
       let rows: Row[];
@@ -172,6 +211,13 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
       (e) => (!pos || e.position === pos) && (!t || `${e.employee_code} ${e.first_name_th} ${e.last_name_th ?? ""} ${e.nickname ?? ""}`.toLowerCase().includes(t)),
     );
   }, [roster, pos, q]);
+
+  const absentInView = useMemo(() => {
+    const ids = new Set(shown.map((e) => e.id));
+    let n = 0;
+    for (const k of absent) if (ids.has(k.slice(0, k.indexOf("|")))) n++;
+    return n;
+  }, [absent, shown]);
 
   function changeScope(next: () => void) {
     if (nChanges && !confirm(`ยังไม่ได้บันทึก ${nChanges} ช่อง ต้องการทิ้งการแก้ไขหรือไม่?`)) return;
@@ -431,6 +477,13 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
           )}
 
           <DayColorLegend />
+          {liveDate && (
+            <p className="-mt-1 mb-3 flex flex-wrap items-center gap-1.5 px-1 text-[13px] text-muted">
+              <span className="inline-flex h-6 items-center rounded-md bg-[#d92d20] px-1.5 text-[11px] font-bold text-white">ขาด</span>
+              ขาดงาน = มีกะทำงาน แต่ไม่ลงเวลาเข้า-ออก และไม่ได้ลา (นับตั้งแต่ {shortDay(liveDate)} {Number(liveDate.slice(0, 4)) + 543})
+              {absentInView > 0 && <b className="text-bad">· เดือนนี้ {absentInView} คน-วัน</b>}
+            </p>
+          )}
 
           {!emps ? (
             <Loading />
@@ -461,11 +514,12 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
                 onRedo={redo}
                 onOpenCell={(emp, date) => canEdit && setCellEdit({ emp, date })}
                 onMessage={(tone, text) => setMsg({ tone, text })}
+                absent={absent}
               />
               <GridHelp />
             </>
           ) : (
-            <DayView emps={shown} dates={dates} day={dayInMonth} setDay={setDay} grid={grid} defs={defs} holidayMap={holidayMap} />
+            <DayView emps={shown} dates={dates} day={dayInMonth} setDay={setDay} grid={grid} defs={defs} holidayMap={holidayMap} absent={absent} />
           )}
 
           <Legend defs={activeDefs} />
@@ -538,7 +592,7 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
 
 // ---------- มุมมองรายวัน (เหมาะกับมือถือ) ----------
 function DayView({
-  emps, dates, day, setDay, grid, defs, holidayMap,
+  emps, dates, day, setDay, grid, defs, holidayMap, absent,
 }: {
   emps: Emp[];
   dates: string[];
@@ -547,6 +601,7 @@ function DayView({
   grid: Grid;
   defs: Map<string, ShiftDef>;
   holidayMap: Map<string, string>;
+  absent: Set<string>;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -567,6 +622,7 @@ function DayView({
     return (da?.start ?? 9999) - (db?.start ?? 9999) || a.localeCompare(b);
   });
   const workingCount = emps.filter((e) => defs.get(grid[e.id]?.[day]?.shift_code ?? "")?.working).length;
+  const absentCount = emps.filter((e) => absent.has(keyOf(e.id, day))).length;
 
   return (
     <div>
@@ -593,6 +649,7 @@ function DayView({
       </div>
       <p className="mb-2 px-1 font-semibold text-brand">
         ทำงาน {workingCount} คน{holidayMap.get(day) ? ` · ${holidayMap.get(day)}` : ""}
+        {absentCount > 0 && <span className="text-bad"> · ขาดงาน {absentCount} คน</span>}
       </p>
       <div className="grid gap-3 sm:grid-cols-2">
         {order.map((code) => {
@@ -609,6 +666,7 @@ function DayView({
                 {list.map((e) => (
                   <li key={e.id} className="flex items-center gap-2 py-1.5">
                     <span className="min-w-0 flex-1 truncate">{empName(e)}</span>
+                    {absent.has(keyOf(e.id, day)) && <Badge tone="red">ขาดงาน</Badge>}
                     {grid[e.id]?.[day]?.holiday_work && <Badge tone="amber">{HW_LABEL[grid[e.id][day].holiday_work!]}</Badge>}
                     <span className="text-[13px] text-muted">{e.position ?? "-"}</span>
                   </li>

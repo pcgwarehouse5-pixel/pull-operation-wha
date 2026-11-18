@@ -33,6 +33,8 @@ type Props = {
   onRedo: () => void;
   onOpenCell: (e: Emp, date: string) => void;
   onMessage: (tone: "error" | "warning" | "success", text: string) => void;
+  /** วันที่ขาดงาน (มีกะทำงาน ไม่ลงเวลาเข้า-ออก และไม่ได้ลา) · key = keyOf(user_id, date) */
+  absent?: Set<string>;
 };
 
 type Drag = { kind: "select" } | { kind: "fill"; to: Pos } | { kind: "move"; grab: Pos; to: Pos; copy: boolean } | null;
@@ -563,17 +565,23 @@ export function ExcelGrid(p: Props) {
               const otDay = otDayKind(cell, def, holidayMap.has(d)); // มาทำงานวันหยุด = สีทั้งช่อง (แดง/ม่วง)
               const color = otDay ? OT_DAY_COLOR[otDay] : { bg: def?.bg ?? "#94a3b8", text: def?.text ?? "#fff" };
               const changed = keyOf(e.id, d) in pending;
+              const abs = !!cell && !changed && !!p.absent?.has(keyOf(e.id, d));
+              const tip = otDay === "HOL" ? `ทำงานวันหยุดประจำปี${holidayMap.get(d) ? ` (${holidayMap.get(d)})` : ""} · ได้ OT` : otDay === "OFF" ? "ทำงานวันหยุดประจำสัปดาห์ (OFF) · ได้ OT" : def?.noOt ? "วันหยุดที่บริษัทให้พิเศษ · มาทำงานไม่ได้ OT" : undefined;
               return (
                 <td key={d} data-r={r} data-c={c} className="h-[42px] min-w-[52px] border-r border-b border-line/70 p-[2px]">
                   <div
-                    className={`relative flex h-full w-full flex-col items-center justify-center rounded-[5px] text-[11px] leading-[1.15] font-semibold ${cell ? "" : "text-transparent"} ${changed ? "outline-2 -outline-offset-2 outline-ink outline-dashed" : ""}`}
+                    className={`relative flex h-full w-full flex-col items-center justify-center rounded-[5px] text-[11px] leading-[1.15] font-semibold ${cell ? "" : "text-transparent"} ${changed ? "outline-2 -outline-offset-2 outline-ink outline-dashed" : ""} ${abs ? "outline-[3px] -outline-offset-[3px] outline-[#d92d20]" : ""}`}
                     style={cell ? { background: color.bg, color: color.text } : undefined}
-                    title={otDay === "HOL" ? `ทำงานวันหยุดประจำปี${holidayMap.get(d) ? ` (${holidayMap.get(d)})` : ""} · ได้ OT` : otDay === "OFF" ? "ทำงานวันหยุดประจำสัปดาห์ (OFF) · ได้ OT" : def?.noOt ? "วันหยุดที่บริษัทให้พิเศษ · มาทำงานไม่ได้ OT" : undefined}
+                    title={abs ? `ขาดงาน: ไม่ลงเวลาเข้า-ออก และไม่ได้ลา${tip ? ` · ${tip}` : ""}` : tip}
                   >
                     {lines ? (
                       <>
                         <span className="num">{lines[0]}</span>
-                        {lines[1] && <span className="num opacity-90">{lines[1]}</span>}
+                        {abs ? (
+                          <span className="mt-[1px] rounded-[4px] bg-[#d92d20] px-[4px] text-[10px] leading-[14px] font-bold text-white" aria-label="ขาดงาน">ขาด</span>
+                        ) : (
+                          lines[1] && <span className="num opacity-90">{lines[1]}</span>
+                        )}
                       </>
                     ) : (
                       "·"
@@ -589,7 +597,7 @@ export function ExcelGrid(p: Props) {
     }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- วาดใหม่เมื่อข้อมูล/กลุ่มเปลี่ยนเท่านั้น
-  }, [groups, collapsed, grid, pending, defs, dates, rows, dragGroup, empDrag, p.onReorderEmps, holidayMap]);
+  }, [groups, collapsed, grid, pending, defs, dates, rows, dragGroup, empDrag, p.onReorderEmps, holidayMap, p.absent]);
 
   const allEmps = useMemo(() => groups.flatMap((g) => g.emps), [groups]);
   const S = boxes.sel;

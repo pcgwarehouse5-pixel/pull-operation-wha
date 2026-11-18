@@ -127,6 +127,13 @@ export function previewShifts(dates: string[]) {
   );
 }
 
+// วันที่ขาดงานสมมติ (ตารางกะ): คนที่ 2 ไม่ลงเวลาบางวันที่มีกะทำงานและผ่านไปแล้ว
+export function previewAbsent(dates: string[], today: string) {
+  return previewShifts(dates)
+    .filter((r, i) => r.user_id === "p2" && r.work_date < today && !r.shift_code.startsWith("OFF") && i % 3 === 0)
+    .map((r) => ({ user_id: r.user_id, work_date: r.work_date }));
+}
+
 // พนักงานในตารางกะของโหมดดูดีไซน์ (รวมผู้ใช้เดโม)
 export function previewRoster(wh: string) {
   const list = previewEmployees().filter((e) => e.warehouse_id === wh);
