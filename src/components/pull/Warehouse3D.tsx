@@ -7,7 +7,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Icon } from "@/components/Icon";
 import { WAREHOUSE_MAPS } from "@/lib/warehouse3d/maps";
 import type { ViewMode } from "@/lib/warehouse3d/types";
-import type { Warehouse3D as Engine, Move, PersonObj } from "@/lib/warehouse3d/scene";
+import type { Warehouse3D as Engine, Move, PersonObj, Shot } from "@/lib/warehouse3d/scene";
 
 const HIDE_KEY = "wha-map3d-hidden";
 const VIEWS: [ViewMode, string][] = [["3d", "มุม 3D"], ["front", "มุมหน้า"], ["top", "มุมบน"]];
@@ -28,11 +28,16 @@ type Props = {
   editable?: boolean;
   onMove?: (moves: Move[]) => void;
   onTap?: (id: string) => void;
+  /** ซูมพอดีคนที่แสดงอยู่ (ตอนกรองตำแหน่ง) · focusKey เปลี่ยน = ซูมใหม่ */
+  focus?: boolean;
+  focusKey?: string;
+  /** หัวภาพและชื่อไฟล์ของปุ่ม "บันทึกภาพ" */
+  shot?: Shot & { file: string };
   /** ตัวกรองหรือปุ่มเพิ่มเติม แสดงเหนือแผนที่ */
   children?: ReactNode;
 };
 
-export function Warehouse3D({ mapKey, people = [], editable = false, onMove, onTap, children }: Props) {
+export function Warehouse3D({ mapKey, people = [], editable = false, onMove, onTap, focus = false, focusKey = "", shot, children }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const eng = useRef<Engine | null>(null);
   const cb = useRef({ onMove, onTap });
@@ -42,6 +47,7 @@ export function Warehouse3D({ mapKey, people = [], editable = false, onMove, onT
   const [locked, setLocked] = useState(true);
   const [editing, setEditing] = useState(false);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
+  const [saving, setSaving] = useState(false);
   const [touch] = useState(() => typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches);
   const name = WAREHOUSE_MAPS[mapKey]?.name ?? mapKey;
   const editOn = editing && editable;
@@ -95,6 +101,31 @@ export function Warehouse3D({ mapKey, people = [], editable = false, onMove, onT
     if (state === "ready") eng.current?.setEditing(editOn);
   }, [state, editOn]);
 
+  /* กรองตำแหน่ง → กล้องซูมเข้าหาคนกลุ่มนั้น (ป้ายใหญ่ ไม่ทับกัน พร้อมแคป) · ยกเลิกกรอง → กลับทั้งคลัง
+     ไม่ซูมใหม่ตอนลากวาง (focusKey ไม่เปลี่ยน) */
+  useEffect(() => {
+    if (state === "ready") eng.current?.focus(focus);
+  }, [state, mapKey, focus, focusKey]);
+
+  async function saveImage() {
+    if (!eng.current || !shot || saving) return;
+    setSaving(true);
+    try {
+      const blob = await eng.current.snapshot(shot);
+      if (!blob) return;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = shot.file;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   function toggleHidden() {
     const next = !hidden;
     if (!next) setState("loading");
@@ -112,7 +143,7 @@ export function Warehouse3D({ mapKey, people = [], editable = false, onMove, onT
       ? "จัดตำแหน่ง: ใช้นิ้วลากกล่องหรือป้ายชื่อ = ย้ายรายคน · ลากป้ายสี = ย้ายทั้งกลุ่ม · ระบบบันทึกให้ทันที"
       : "จัดตำแหน่ง: ลากกล่องหรือป้ายชื่อ = ย้ายรายคน · ลากป้ายสี = ย้ายทั้งกลุ่ม · ระบบบันทึกให้ทันที"
     : locked
-      ? "มุมกล้องล็อกอยู่ · กด “หมุน/ซูมได้” เพื่อขยับแผนที่ · ซูมใกล้แล้วจะเห็นชื่อรายคน"
+      ? "มุมกล้องล็อกอยู่ · กด “หมุน/ซูมได้” เพื่อขยับแผนที่ · เลือกตำแหน่งแล้วจะเห็นชื่อ+เวลาพักรายคน"
       : touch
         ? "นิ้วเดียวลาก = เลื่อน · สองนิ้ว = หมุน/ซูม"
         : "ลากซ้าย = เลื่อน · ลากขวา = หมุน · ล้อเมาส์ = ซูม";
@@ -150,6 +181,11 @@ export function Warehouse3D({ mapKey, people = [], editable = false, onMove, onT
             {editable && people.length > 0 && (
               <button type="button" aria-pressed={editOn} className={`${btn(editOn)} ${editOn ? "" : "!bg-[#fff4d6] !ring-[#f3c623]"}`} onClick={() => setEditing(!editing)}>
                 {editOn ? "✓ จัดเสร็จแล้ว" : "✋ จัดตำแหน่ง"}
+              </button>
+            )}
+            {shot && people.length > 0 && state === "ready" && (
+              <button type="button" className={`${btn(false)} !bg-[#e8f6ee] !ring-[#1e8e5a]`} onClick={saveImage} disabled={saving}>
+                {saving ? "กำลังบันทึก…" : "📷 บันทึกภาพ"}
               </button>
             )}
           </div>

@@ -48,7 +48,8 @@ export default function LayoutPage() {
   const [msg, setMsg] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   /* ตัวกรองบนแผนที่: คลังต้นทางของพนักงาน · ตำแหน่งที่ซ่อน */
   const [mapSrc, setMapSrc] = useState("ทั้งหมด");
-  const [mapOff, setMapOff] = useState<string[]>([]);
+  /* ตำแหน่งที่เลือกแสดง (ว่าง = ทุกตำแหน่ง) · แตะตำแหน่งแรก = แสดงเฉพาะตำแหน่งนั้น แตะเพิ่ม = เพิ่มเข้าไป */
+  const [mapOn, setMapOn] = useState<string[]>([]);
   const [hist, setHist] = useState<HistoryRow[]>([]);
 
   const breaks = (opts.pull_break_time ?? []).filter((o) => o.is_active).map((o) => o.value);
@@ -87,14 +88,22 @@ export default function LayoutPage() {
   const mapPeople = useMemo<PersonObj[]>(() => {
     if (!data) return [];
     const who = new Map(data.pool.map((p) => [p.user_id, p]));
+    const brk = (opts.pull_break_time ?? []).filter((o) => o.is_active).map((o) => o.value);
     return data.bookings
-      .filter((b) => mapPos[b.id] && !mapOff.includes(b.skill_name))
+      .filter((b) => mapPos[b.id] && (mapOn.length === 0 || mapOn.includes(b.skill_name)))
       .filter((b) => mapSrc === "ทั้งหมด" || who.get(b.user_id)?.warehouse_code === mapSrc)
       .map((b) => {
-        const p = who.get(b.user_id);
-        return { id: b.id, x: mapPos[b.id].x, y: mapPos[b.id].y, color: skillStyle(b.skill_name).color, label: p?.nickname || p?.name.split(" ")[0] || "พนักงาน", group: b.skill_name, groupLabel: b.skill_name };
+        const p = who.get(b.user_id), t = hm(b.break_time);
+        /* ป้ายบนแผนที่: ชื่อเล่น + เวลาพัก (สีเดียวกับการ์ด) */
+        return {
+          id: b.id, x: mapPos[b.id].x, y: mapPos[b.id].y, color: skillStyle(b.skill_name).color,
+          label: p?.nickname || p?.name.split(" ")[0] || "พนักงาน", group: b.skill_name, groupLabel: b.skill_name,
+          sub: t ? `พัก ${t}` : "ยังไม่ตั้งเวลาพัก",
+          subBg: t ? BREAK_COLORS[Math.max(0, brk.indexOf(t)) % BREAK_COLORS.length] : "#eef1f6",
+          subFg: t ? "#16204a" : "#5a6482",
+        };
       });
-  }, [data, mapPos, mapSrc, mapOff]);
+  }, [data, mapPos, mapSrc, mapOn, opts.pull_break_time]);
 
   const bar = (
     <BoardBar
@@ -170,6 +179,14 @@ export default function LayoutPage() {
   const srcCodes = [...new Set(placed.map((p) => p.person?.warehouse_code).filter((c): c is string => !!c))].sort((a, b) => a.localeCompare(b, "th", { numeric: true }));
   const mapSkills = [...new Set(placed.map((p) => p.booking.skill_name))];
   const chip = (on: boolean) => `min-h-10 shrink-0 rounded-full px-3 text-[14px] font-semibold ring-1 ${on ? "bg-sky text-ink ring-brand" : "bg-white text-muted ring-line"}`;
+  /* กรองอยู่ = ซูมเข้าหาคนกลุ่มนั้น · หัวภาพที่บันทึก = คลัง วันที่ กะ + ตำแหน่งที่แสดง (จำนวนคน) */
+  const filtered = mapSrc !== "ทั้งหมด" || mapOn.length > 0;
+  const shownSkills = mapSkills.filter((s) => mapPeople.some((p) => p.group === s));
+  const shot = {
+    title: `ผังตำแหน่ง ${whCode} · ${shortDay(sel.date)} · ${sel.shiftLabel(sel.shift)}${mapSrc !== "ทั้งหมด" ? ` · พนักงานจาก ${mapSrc}` : ""}`,
+    legend: shownSkills.map((s) => ({ label: `${s} ${mapPeople.filter((p) => p.group === s).length} คน`, color: skillStyle(s).color })),
+    file: `ผังตำแหน่ง-${whCode}-${sel.date}-${sel.shift === "morning" ? "กะเช้า" : "กะดึก"}${mapOn.length ? "-" + mapOn.join("+") : ""}.png`.replace(/[\\/:*?"<>|()\s]+/g, "_"),
+  };
 
   return (
     <AppShell title="ผังตำแหน่ง" minRole="supervisor" wide>
@@ -177,7 +194,11 @@ export default function LayoutPage() {
       {err && <div className="mb-4"><Alert tone="error">{err}</Alert></div>}
       {msg && <div className="mb-4"><Alert tone={msg.tone}>{msg.text}</Alert></div>}
       {mapKey && (
-        <Warehouse3D mapKey={mapKey} people={mapPeople} editable={canEdit} onMove={onMapMove} onTap={(id) => { const p = placed.find((x) => x.booking.id === id); if (p && canEdit) setEditing(p); }}>
+        <Warehouse3D
+          mapKey={mapKey} people={mapPeople} editable={canEdit} onMove={onMapMove}
+          onTap={(id) => { const p = placed.find((x) => x.booking.id === id); if (p && canEdit) setEditing(p); }}
+          focus={filtered} focusKey={`${mapSrc}|${mapOn.join(",")}`} shot={shot}
+        >
           {placed.length === 0 ? (
             <p className="text-[14px] text-muted">ยังไม่มีคนที่จองเข้าคลังนี้ในวัน/กะนี้ · จองแล้วจะขึ้นเป็นกล่องบนแผนที่ตามตำแหน่งงาน</p>
           ) : (
@@ -190,20 +211,21 @@ export default function LayoutPage() {
               </div>
               <div className="flex items-center gap-2 overflow-x-auto pb-1">
                 <span className="shrink-0 text-[14px] font-semibold text-ink">ตำแหน่ง</span>
-                <button type="button" aria-pressed={mapOff.length === 0} className={chip(mapOff.length === 0)} onClick={() => setMapOff(mapOff.length ? [] : mapSkills)}>
-                  {mapOff.length ? "ทุกตำแหน่ง" : "ซ่อนทั้งหมด"}
+                <button type="button" aria-pressed={mapOn.length === 0} className={chip(mapOn.length === 0)} onClick={() => setMapOn([])}>
+                  ทุกตำแหน่ง
                 </button>
                 {mapSkills.map((s) => {
-                  const on = !mapOff.includes(s);
+                  const on = mapOn.includes(s);
                   return (
-                    <button key={s} type="button" aria-pressed={on} className={`${chip(on)} flex items-center gap-1.5`} onClick={() => setMapOff(on ? [...mapOff, s] : mapOff.filter((x) => x !== s))}>
-                      <span className="h-3 w-3 rounded-sm" style={{ background: on ? skillStyle(s).color : "#c8ced8" }} /> {s}
+                    <button key={s} type="button" aria-pressed={on} className={`${chip(on)} flex items-center gap-1.5`} onClick={() => setMapOn(on ? mapOn.filter((x) => x !== s) : [...mapOn, s])}>
+                      <span className="h-3 w-3 rounded-sm" style={{ background: skillStyle(s).color }} /> {s}
+                      <span className="text-[12px] text-muted">{placed.filter((p) => p.booking.skill_name === s).length}</span>
                     </button>
                   );
                 })}
               </div>
               <p className="flex flex-wrap items-center gap-x-3 text-[13px] text-muted">
-                แสดงบนแผนที่ {mapPeople.length} จาก {placed.length} คน
+                แสดงบนแผนที่ {mapPeople.length} จาก {placed.length} คน{filtered ? " · ซูมเข้าหาตำแหน่งที่เลือกให้แล้ว" : " · แตะตำแหน่งเพื่อแสดงเฉพาะตำแหน่งนั้น (แตะเพิ่มได้)"}
                 {canEdit && mapPeople.length > 0 && (
                   <button type="button" onClick={resetMap} className="min-h-10 font-semibold text-brand underline">↺ จัดเรียงใหม่อัตโนมัติ</button>
                 )}

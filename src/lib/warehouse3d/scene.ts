@@ -10,7 +10,21 @@ import { WAREHOUSE_MAPS } from "./maps";
 import type { ViewMode, WhMap } from "./types";
 
 /** กล่องพนักงานบนแผนที่ (หน้าผังตำแหน่ง) · x/y = พิกัดผัง */
-export type PersonObj = { id: string; x: number; y: number; color: string; label: string; group: string; groupLabel: string };
+export type PersonObj = {
+  id: string;
+  x: number;
+  y: number;
+  color: string;
+  label: string;
+  group: string;
+  groupLabel: string;
+  /** บรรทัดที่ 2 ของป้าย เช่น "พัก 12:00" · สีพื้น/สีตัวอักษรของแถบนั้น */
+  sub?: string;
+  subBg?: string;
+  subFg?: string;
+};
+/** หัวภาพที่บันทึก: ชื่อผัง + รายการตำแหน่ง (สี) */
+export type Shot = { title: string; legend: { label: string; color: string }[] };
 export type Move = { id: string; x: number; y: number };
 
 export type Warehouse3D = {
@@ -25,6 +39,10 @@ export type Warehouse3D = {
   onMove: ((moves: Move[]) => void) | null;
   /** แตะป้ายชื่อ (ไม่ได้ลาก) */
   onTap: ((id: string) => void) | null;
+  /** ซูมกล้องพอดีกล่องที่แสดงอยู่ (true) หรือกลับทั้งคลัง (false) */
+  focus(on: boolean): void;
+  /** ภาพแผนที่ความละเอียดสูง + ป้ายชื่อ + หัวกระดาษ (PNG) */
+  snapshot(shot: Shot): Promise<Blob | null>;
   dispose(): void;
 };
 
@@ -46,6 +64,8 @@ export function createWarehouse3D(el: HTMLElement, opt: { mobile: boolean; font?
   const FONT = opt.font || "'IBM Plex Sans Thai Looped', sans-serif";
   let LOCKED = true;
   let EDIT = false;
+  /* โฟกัส = กล้องซูมพอดีกล่องพนักงานที่แสดงอยู่ (ใช้ตอนกรองทีละตำแหน่ง) */
+  let FOCUS = false;
   let cur: string | null = null;
   let VMODE: ViewMode = "3d";
   let needs = true;
@@ -739,10 +759,12 @@ export function createWarehouse3D(el: HTMLElement, opt: { mobile: boolean; font?
     sizeToEl();
     const M = cur ? MAPS[cur] : null;
     if (!M) return;
-    const [x0, y0, x1, y1] = M.view || M.bounds, W = x1 - x0, D = y1 - y0, cx = (x0 + x1) / 2, cz = (y0 + y1) / 2;
+    const full = M.view || M.bounds, focus = FOCUS && OBJS.size > 0;
+    const [x0, y0, x1, y1] = focus ? peopleArea(full) : full, W = x1 - x0, D = y1 - y0, cx = (x0 + x1) / 2, cz = (y0 + y1) / 2;
     const top = VMODE === "top", front = VMODE === "front";
     const dir = top ? new THREE.Vector3(0, 1, 0.001) : front ? new THREE.Vector3(0, 0.4, 0.92).normalize() : camera.aspect < 1 ? new THREE.Vector3(0, 0.86, 0.5).normalize() : new THREE.Vector3(0, 0.62, 0.78).normalize();
-    const hh = (M.rackH || 70) * 1.15, pts: THREE.Vector3[] = [];
+    /* โฟกัส: เผื่อความสูงให้ป้ายชื่อ+เวลาพักเหนือกล่อง */
+    const hh = focus ? boxH() + unit() * 9 : (M.rackH || 70) * 1.15, pts: THREE.Vector3[] = [];
     for (const x of [x0, x1]) for (const z of [y0, y1]) for (const y of [0, hh]) pts.push(new THREE.Vector3(x, y, z));
     const tgt = new THREE.Vector3(cx, 0, cz);
     let d = Math.max(W, D) * 1.2;
@@ -757,7 +779,8 @@ export function createWarehouse3D(el: HTMLElement, opt: { mobile: boolean; font?
       if (k < 8) d *= Math.max((b - a) / (X1 - X0), (e - c) / (Y1 - Y0));
     }
     controls.target.copy(tgt); camera.position.copy(tgt).addScaledVector(dir, d);
-    controls.maxDistance = d * 2.2; controls.minDistance = Math.max(W, D) * 0.035;
+    const FW = full[2] - full[0], FD = full[3] - full[1];
+    controls.maxDistance = focus ? Math.max(FW, FD) * 2.6 : d * 2.2; controls.minDistance = Math.max(FW, FD) * 0.035;
     /* หมุนรอบได้ ±40° จากมุมเริ่ม (มุมบน = ไม่จำกัด) */
     const az = Math.atan2(dir.x, dir.z);
     controls.minAzimuthAngle = top ? -Infinity : az - 0.7; controls.maxAzimuthAngle = top ? Infinity : az + 0.7;
@@ -772,8 +795,9 @@ export function createWarehouse3D(el: HTMLElement, opt: { mobile: boolean; font?
   scene.add(peopleRoot);
   const personGeo = new THREE.BoxGeometry(1, 1, 1);
   const ray = new THREE.Raycaster(), v2 = new THREE.Vector2();
-  type Obj = { p: PersonObj; mesh: THREE.Mesh; tag: HTMLButtonElement };
-  type Grp = { key: string; tag: HTMLButtonElement; ids: string[] };
+  type Box = { x: number; y: number; w: number; h: number } | null;
+  type Obj = { p: PersonObj; mesh: THREE.Mesh; tag: HTMLButtonElement; nm: HTMLSpanElement; sb: HTMLSpanElement; box: Box };
+  type Grp = { key: string; tag: HTMLButtonElement; ids: string[]; color: string; box: Box };
   let OBJS = new Map<string, Obj>();
   let GRPS = new Map<string, Grp>();
   let drag: { ids: string[]; start: THREE.Vector3; orig: Map<string, { x: number; y: number }>; tap?: string; sx: number; sy: number; moved: boolean; pid: number } | null = null;
@@ -787,6 +811,29 @@ export function createWarehouse3D(el: HTMLElement, opt: { mobile: boolean; font?
     b.style.cssText = `position:absolute;left:0;top:0;pointer-events:auto;white-space:nowrap;font:700 ${size}px/1.25 ${FONT};color:${fg};background:${bg};border:2px solid ${border};border-radius:10px;padding:2px 7px;box-shadow:0 2px 8px rgba(11,42,74,.22);user-select:none;-webkit-user-select:none`;
     return b;
   };
+  /* ป้ายรายคน 2 บรรทัด: ชื่อ · แถบเวลาพัก (สีตามเวลาพัก) · ขนาดตายตัวให้ภาพที่บันทึกตรงกับบนจอ */
+  const NAME_PX = 14, SUB_PX = 12;
+  const personChip = (border: string) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.style.cssText = `position:absolute;left:0;top:0;pointer-events:auto;white-space:nowrap;display:flex;flex-direction:column;align-items:center;gap:2px;padding:3px 6px 4px;background:#fff;border:2px solid ${border};border-radius:10px;box-shadow:0 2px 8px rgba(11,42,74,.22);user-select:none;-webkit-user-select:none;font-family:${FONT}`;
+    const nm = document.createElement("span");
+    nm.style.cssText = `font:700 ${NAME_PX}px/18px ${FONT};color:#16204a`;
+    const sb = document.createElement("span");
+    sb.style.cssText = `font:700 ${SUB_PX}px/16px ${FONT};padding:0 6px;border-radius:6px`;
+    b.append(nm, sb);
+    return { b, nm, sb };
+  };
+  /* พื้นที่ที่ครอบกล่องที่แสดงอยู่ (เผื่อขอบ · อย่างน้อย ~30 ม. ไม่ให้ซูมใกล้เกิน) */
+  function peopleArea(full: number[]): [number, number, number, number] {
+    const xs = [...OBJS.values()].map((o) => o.p.x), ys = [...OBJS.values()].map((o) => o.p.y);
+    let a = Math.min(...xs), b = Math.max(...xs), c = Math.min(...ys), d = Math.max(...ys);
+    const pad = Math.max(unit() * 9, Math.max(b - a, d - c) * 0.14), minS = unit() * 30;
+    a -= pad; b += pad; c -= pad; d += pad;
+    if (b - a < minS) { const m = (a + b) / 2; a = m - minS / 2; b = m + minS / 2; }
+    if (d - c < minS * 0.6) { const m = (c + d) / 2; c = m - minS * 0.3; d = m + minS * 0.3; }
+    return [Math.max(a, full[0]), Math.max(c, full[1]), Math.min(b, full[2]), Math.min(d, full[3])];
+  }
   const styleEdit = (b: HTMLElement) => {
     b.style.cursor = EDIT ? "grab" : "pointer";
     b.style.touchAction = EDIT ? "none" : "auto";
@@ -803,10 +850,10 @@ export function createWarehouse3D(el: HTMLElement, opt: { mobile: boolean; font?
         mesh.castShadow = true;
         mesh.userData.person = p.id;
         peopleRoot.add(mesh);
-        const tag = chip("#ffffff", "#16204a", p.color, 12);
+        const { b: tag, nm, sb } = personChip(p.color);
         tag.addEventListener("pointerdown", (e) => startDrag(e, [p.id], p.id));
         layer.appendChild(tag);
-        o = { p, mesh, tag };
+        o = { p, mesh, tag, nm, sb, box: null };
         OBJS.set(p.id, o);
       } else if (o.p.color !== p.color) {
         o.mesh.material = personMat(p.color);
@@ -814,8 +861,12 @@ export function createWarehouse3D(el: HTMLElement, opt: { mobile: boolean; font?
       }
       /* กำลังลากคนนี้อยู่ = คงตำแหน่งบนจอไว้ก่อน */
       o.p = drag?.ids.includes(p.id) ? { ...p, x: o.p.x, y: o.p.y } : p;
-      o.tag.textContent = p.label;
-      o.tag.title = `${p.label} · ${p.groupLabel}`;
+      o.nm.textContent = p.label;
+      o.sb.textContent = p.sub ?? "";
+      o.sb.style.display = p.sub ? "" : "none";
+      o.sb.style.background = p.subBg ?? "#eef1f6";
+      o.sb.style.color = p.subFg ?? "#16204a";
+      o.tag.title = `${p.label}${p.sub ? ` · ${p.sub}` : ""} · ${p.groupLabel}`;
       styleEdit(o.tag);
       o.mesh.scale.set(s * 2.2, boxH(), s * 2.2);
       o.mesh.position.set(o.p.x, boxH() / 2, o.p.y);
@@ -834,10 +885,11 @@ export function createWarehouse3D(el: HTMLElement, opt: { mobile: boolean; font?
         const tag = chip(g.color, "#ffffff", "#ffffff", 13);
         tag.addEventListener("pointerdown", (e) => { const now = GRPS.get(key); if (now) startDrag(e, now.ids); });
         layer.appendChild(tag);
-        t = { key, tag, ids: g.ids };
+        t = { key, tag, ids: g.ids, color: g.color, box: null };
         GRPS.set(key, t);
       }
       t.ids = g.ids;
+      t.color = g.color;
       t.tag.style.background = g.color;
       t.tag.dataset.full = `${g.label} · ${g.ids.length} คน`;
       t.tag.dataset.short = String(g.ids.length);
@@ -853,34 +905,52 @@ export function createWarehouse3D(el: HTMLElement, opt: { mobile: boolean; font?
     prj.set(x, y, z).project(camera);
     return { sx: ((prj.x + 1) / 2) * el.clientWidth, sy: ((1 - prj.y) / 2) * el.clientHeight, ok: prj.z < 1 && Math.abs(prj.x) < 1.1 && Math.abs(prj.y) < 1.1, z: prj.z };
   };
-  /* ป้ายชื่อรายคนแสดงเมื่อซูมใกล้พอ (กล่องห่างกันบนจอ ≥ 22px) ไม่อย่างนั้นทับกันอ่านไม่ออก · ป้ายกลุ่มแสดงตลอด */
+  /* ป้ายชื่อ+เวลาพักรายคน: แสดงเมื่อคนบนแผนที่ไม่เกิน 16 คน (กรองแล้ว) หรือซูมใกล้พอ (กล่องห่างกันบนจอ ≥ 22px)
+     ป้ายชนกัน → เลื่อนป้ายหลังขึ้นไปจนพ้น (ไม่ทับกันในภาพที่แคป) · ป้ายกลุ่มแสดงตลอด */
+  /* ป้ายไม่ล้นขอบซ้าย/ขวาของแผนที่ (ภาพที่แคปเห็นครบ) */
+  const clampX = (x: number, w: number) => Math.max(4, Math.min(x, el.clientWidth - w - 4));
   function placeLabels() {
     if (!OBJS.size) return;
     const first = OBJS.values().next().value!;
     const a = toPx(first.p.x, 0, first.p.y), b = toPx(first.p.x + unit() * 5, 0, first.p.y);
-    const names = Math.hypot(b.sx - a.sx, b.sy - a.sy) >= 22;
-    for (const o of OBJS.values()) {
-      const q = toPx(o.p.x, boxH() + unit() * 0.6, o.p.y), show = q.ok && (names || !!drag?.ids.includes(o.p.id));
-      o.tag.style.display = show ? "" : "none";
-      if (show) { o.tag.style.transform = `translate(${q.sx}px, ${q.sy}px) translate(-50%, -100%)`; o.tag.style.zIndex = String(1000 - Math.round(q.z * 900)); }
+    const names = OBJS.size <= 16 || Math.hypot(b.sx - a.sx, b.sy - a.sy) >= 22;
+    type R = [number, number, number, number];
+    const taken: R[] = [];
+    const hits = (r: R) => taken.some((t) => r[0] < t[2] && r[2] > t[0] && r[1] < t[3] && r[3] > t[1]);
+    /* วางป้ายคนที่อยู่ใกล้กล้อง (ล่างจอ) ก่อน */
+    const list = [...OBJS.values()].map((o) => ({ o, q: toPx(o.p.x, boxH() + unit() * 0.6, o.p.y) })).sort((m, n) => n.q.sy - m.q.sy);
+    for (const { o, q } of list) {
+      const show = q.ok && (names || !!drag?.ids.includes(o.p.id));
+      o.tag.style.display = show ? "flex" : "none";
+      o.box = null;
+      if (!show) continue;
+      const w = o.tag.offsetWidth, h = o.tag.offsetHeight, x = clampX(q.sx - w / 2, w);
+      let y = q.sy - h;
+      for (let k = 0; k < 8 && hits([x, y, x + w, y + h]); k++) y -= h * 0.55;
+      taken.push([x, y, x + w, y + h]);
+      o.box = { x, y, w, h };
+      o.tag.style.transform = `translate(${x}px, ${y}px)`;
+      o.tag.style.zIndex = String(1000 - Math.round(q.z * 900));
     }
     /* ป้ายกลุ่ม: ถ้าชนป้ายที่วางไปแล้ว ย่อเหลือจำนวนคน (ชื่อเต็มอยู่ในคำอธิบายเมื่อชี้ และในแถบตัวกรอง) */
-    const taken: [number, number, number, number][] = [];
-    const hits = (r: [number, number, number, number]) => taken.some((t) => r[0] < t[2] && r[2] > t[0] && r[1] < t[3] && r[3] > t[1]);
     const order = [...GRPS.values()].sort((a, b) => b.ids.length - a.ids.length);
     for (const g of order) {
       const pts = g.ids.map((id) => OBJS.get(id)?.p).filter((p): p is PersonObj => !!p);
+      g.box = null;
       if (!pts.length) { g.tag.style.display = "none"; continue; }
       const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length, minY = Math.min(...pts.map((p) => p.y));
       const q = toPx(cx, boxH() + unit() * (names ? 5 : 1.5), minY - unit() * (names ? 1 : 0));
       g.tag.style.display = q.ok ? "" : "none";
       if (!q.ok) continue;
-      const rect = () => { const w = g.tag.offsetWidth, h = g.tag.offsetHeight; return [q.sx - w / 2, q.sy - h, q.sx + w / 2, q.sy] as [number, number, number, number]; };
+      /* ป้ายกลุ่มอยู่เหนือป้ายชื่อของกลุ่มเสมอ */
+      const top = Math.min(q.sy, ...g.ids.map((id) => OBJS.get(id)?.box?.y ?? Infinity)) - 4;
+      const rect = (): R => { const w = g.tag.offsetWidth, h = g.tag.offsetHeight, x = clampX(q.sx - w / 2, w); return [x, top - h, x + w, top]; };
       g.tag.textContent = g.tag.dataset.full ?? "";
       let r = rect();
       if (hits(r)) { g.tag.textContent = g.tag.dataset.short ?? ""; r = rect(); }
       taken.push(r);
-      g.tag.style.transform = `translate(${q.sx}px, ${q.sy}px) translate(-50%, -100%)`;
+      g.box = { x: r[0], y: r[1], w: r[2] - r[0], h: r[3] - r[1] };
+      g.tag.style.transform = `translate(${r[0]}px, ${r[1]}px)`;
       g.tag.style.zIndex = "1001";
     }
   }
@@ -949,6 +1019,115 @@ export function createWarehouse3D(el: HTMLElement, opt: { mobile: boolean; font?
   };
   el.addEventListener("pointerdown", onCanvasDown, { capture: true });
 
+  /* ---------- บันทึกภาพ (ใช้แคปไปประชุม): หัวกระดาษ + แผนที่ความละเอียดสูง + ป้ายชื่อ/เวลาพัก ---------- */
+  const rr = (x: CanvasRenderingContext2D, X: number, Y: number, W: number, H: number, r: number) => {
+    x.beginPath();
+    if (typeof x.roundRect === "function") x.roundRect(X, Y, W, H, r);
+    else { x.moveTo(X + r, Y); x.arcTo(X + W, Y, X + W, Y + H, r); x.arcTo(X + W, Y + H, X, Y + H, r); x.arcTo(X, Y + H, X, Y, r); x.arcTo(X, Y, X + W, Y, r); x.closePath(); }
+  };
+  async function snapshot(shot: Shot): Promise<Blob | null> {
+    const W = el.clientWidth, H = el.clientHeight;
+    if (!W || !H) return null;
+    placeLabels();
+    const scale = Math.min(4, Math.max(2, 1800 / W));
+    const out = document.createElement("canvas"), m = out.getContext("2d")!;
+    /* จัดรายการตำแหน่งเป็นแถว (ตัดบรรทัดตามความกว้าง) */
+    m.font = `600 15px ${FONT}`;
+    const rows: { label: string; color: string; x: number }[][] = [[]];
+    let cx = 14;
+    for (const it of shot.legend) {
+      const w = 20 + m.measureText(it.label).width + 18;
+      if (cx + w > W - 14 && rows.at(-1)!.length) { rows.push([]); cx = 14; }
+      rows.at(-1)!.push({ ...it, x: cx });
+      cx += w;
+    }
+    const headH = 14 + 26 + (shot.legend.length ? rows.length * 24 : 0) + 8, footH = 26;
+    out.width = Math.round(W * scale);
+    out.height = Math.round((headH + H + footH) * scale);
+    m.scale(scale, scale);
+    m.fillStyle = "#ffffff";
+    m.fillRect(0, 0, W, headH + H + footH);
+    m.textBaseline = "middle";
+    m.fillStyle = "#1b2a5c";
+    m.font = `700 20px ${FONT}`;
+    m.fillText(shot.title, 14, 14 + 12);
+    m.font = `600 15px ${FONT}`;
+    rows.forEach((row, i) => {
+      const y = 14 + 26 + i * 24 + 10;
+      for (const it of row) {
+        m.fillStyle = it.color;
+        rr(m, it.x, y - 7, 14, 14, 3);
+        m.fill();
+        m.fillStyle = "#16204a";
+        m.fillText(it.label, it.x + 20, y);
+      }
+    });
+    /* แผนที่: วาดใหม่ที่ความละเอียดสูงชั่วคราว แล้วคืนค่าเดิม */
+    const prev = renderer.getPixelRatio();
+    renderer.setPixelRatio(scale);
+    renderer.setSize(W, H, false);
+    renderer.render(scene, camera);
+    m.drawImage(canvas, 0, headH, W, H);
+    renderer.setPixelRatio(prev);
+    renderer.setSize(W, H, false);
+    needs = true;
+    /* ป้าย (ตำแหน่งเดียวกับบนจอ) */
+    m.save();
+    m.beginPath();
+    m.rect(0, headH, W, H);
+    m.clip();
+    m.translate(0, headH);
+    const shadow = (on: boolean) => { m.shadowColor = on ? "rgba(11,42,74,.22)" : "transparent"; m.shadowBlur = on ? 8 : 0; m.shadowOffsetY = on ? 2 : 0; };
+    const people = [...OBJS.values()].filter((o) => o.box && o.tag.style.display !== "none").sort((a, b) => b.box!.y - a.box!.y);
+    for (const o of people) {
+      const b = o.box!, mid = b.x + b.w / 2;
+      shadow(true);
+      rr(m, b.x + 1, b.y + 1, b.w - 2, b.h - 2, 10);
+      m.fillStyle = "#ffffff";
+      m.fill();
+      shadow(false);
+      m.lineWidth = 2;
+      m.strokeStyle = o.p.color;
+      m.stroke();
+      m.textAlign = "center";
+      m.font = `700 ${NAME_PX}px ${FONT}`;
+      m.fillStyle = "#16204a";
+      m.fillText(o.p.label, mid, b.y + 2 + 3 + 9);
+      if (o.p.sub) {
+        m.font = `700 ${SUB_PX}px ${FONT}`;
+        const tw = m.measureText(o.p.sub).width + 12, ty = b.y + 2 + 3 + 18 + 2;
+        rr(m, mid - tw / 2, ty, tw, 16, 6);
+        m.fillStyle = o.p.subBg ?? "#eef1f6";
+        m.fill();
+        m.fillStyle = o.p.subFg ?? "#16204a";
+        m.fillText(o.p.sub, mid, ty + 8);
+      }
+    }
+    for (const g of GRPS.values()) {
+      if (!g.box || g.tag.style.display === "none") continue;
+      const b = g.box;
+      shadow(true);
+      rr(m, b.x + 1, b.y + 1, b.w - 2, b.h - 2, 10);
+      m.fillStyle = g.color;
+      m.fill();
+      shadow(false);
+      m.lineWidth = 2;
+      m.strokeStyle = "#ffffff";
+      m.stroke();
+      m.textAlign = "center";
+      m.font = `700 13px ${FONT}`;
+      m.fillStyle = "#ffffff";
+      m.fillText(g.tag.textContent ?? "", b.x + b.w / 2, b.y + b.h / 2);
+    }
+    m.restore();
+    m.textAlign = "left";
+    m.font = `500 12px ${FONT}`;
+    m.fillStyle = "#5a6482";
+    const when = new Date().toLocaleString("th-TH", { timeZone: "Asia/Bangkok", dateStyle: "medium", timeStyle: "short" });
+    m.fillText(`WHA Workforce · บันทึกภาพเมื่อ ${when} น. · ผังโดยประมาณจากแบบ Layout คลัง`, 14, headH + H + footH / 2);
+    return new Promise((res) => out.toBlob(res, "image/png"));
+  }
+
   /* เริ่มวาดหลังเตรียมทุกส่วนเสร็จ */
   loop();
 
@@ -968,6 +1147,11 @@ export function createWarehouse3D(el: HTMLElement, opt: { mobile: boolean; font?
     },
     onMove: null,
     onTap: null,
+    focus(on) {
+      FOCUS = !!on;
+      view();
+    },
+    snapshot,
     dispose() {
       cancelAnimationFrame(raf);
       el.removeEventListener("pointerdown", onCanvasDown, { capture: true });
