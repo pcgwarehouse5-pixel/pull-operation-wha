@@ -40,7 +40,7 @@ export default function PullSkillPage({ skill }: { skill: string }) {
     return isGlobal(profile.role) ? act : act.filter((w) => myWarehouseIds.includes(w.id));
   }, [warehouses, myWarehouseIds, profile.role]);
   const sel = usePullSelection(whs, profile.warehouse_id);
-  const { data, setData, err, reload, at } = usePullBoard(sel.wh, sel.date, sel.shift);
+  const { data, err, reload, at } = usePullBoard(sel.wh, sel.date, sel.shift);
   const opts = useOptions(["pull_cancel_reason"]);
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -98,15 +98,8 @@ export default function PullSkillPage({ skill }: { skill: string }) {
     try {
       let res: { booked: number; conflicts: Conflict[] };
       if (demo) {
-        const ids = new Set(pending);
-        setData((d) =>
-          d && {
-            ...d,
-            pool: d.pool.map((p) => (ids.has(p.user_id) ? { ...p, status: "booked_here" as const, reason: "จองเข้าคลังนี้แล้ว", booked_skill: skill, booked_to: sel.wh } : p)),
-            bookings: [...d.bookings, ...pending.map((u) => ({ id: `demo-${u}`, work_date: sel.date, shift: sel.shift, user_id: u, from_warehouse_id: byId.get(u)?.warehouse_id ?? null, to_warehouse_id: sel.wh, skill_name: skill, status: "booked" as const, break_time: null, booked_at: new Date().toISOString() }))],
-          },
-        );
-        res = { booked: pending.length, conflicts: [] };
+        res = demo.previewBookPull(sel.wh, sel.date, sel.shift, pending, skill);
+        reload();
       } else {
         const { data: r, error } = await sb().rpc("book_pull", { p_to_wh: sel.wh, p_date: sel.date, p_shift: sel.shift, p_items: pending.map((u) => ({ user_id: u, skill })) });
         if (error) throw error;
@@ -126,7 +119,8 @@ export default function PullSkillPage({ skill }: { skill: string }) {
   async function cancelBooking(b: Booking, reason: string) {
     try {
       if (demo) {
-        setData((d) => d && { ...d, bookings: d.bookings.filter((x) => x.id !== b.id), pool: d.pool.map((p) => (p.user_id === b.user_id ? { ...p, status: "ready" as const, reason: null, booked_skill: null, booked_to: null } : p)) });
+        demo.previewCancelPull(b.id);
+        reload();
       } else {
         const { error } = await sb().rpc("cancel_pull_booking", { p_id: b.id, p_reason: reason });
         if (error) throw error;
@@ -231,8 +225,8 @@ export default function PullSkillPage({ skill }: { skill: string }) {
                         {p.employee_code} · {p.warehouse_code} · {p.shift_code ? `${p.shift_code} ${hhmm(p.start_min)}` : "ไม่มีกะ"}
                       </span>
                     </span>
-                    <span className="flex shrink-0 flex-col items-end gap-1">
-                      <span className={`rounded-lg px-2.5 py-1 text-[13px] font-bold ${TONE[p.status]}`}>{p.status === "booked_here" && p.booked_skill !== skill ? `จองเป็น ${p.booked_skill}` : STATUS_LABEL[p.status]}</span>
+                    <span className="flex max-w-[45%] shrink-0 flex-col items-end gap-1">
+                      <span className={`rounded-lg px-2.5 py-1 text-right text-[13px] leading-snug font-bold break-words ${TONE[p.status]}`}>{p.status === "booked_here" && p.booked_skill !== skill ? `จองเป็น ${p.booked_skill}` : STATUS_LABEL[p.status]}</span>
                       {p.status !== "ready" && p.status !== "booked_here" && <span className="max-w-32 truncate text-[12px] text-muted">{p.reason}</span>}
                       {!hasSkill && <span className="text-[12px] text-muted">ไม่มีทักษะนี้</span>}
                     </span>

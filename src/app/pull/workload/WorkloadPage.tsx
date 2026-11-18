@@ -60,7 +60,7 @@ export default function WorkloadPage() {
     let live = true;
     (async () => {
       try {
-        const rows = demo ? demo.previewPullWorkloads(today).filter((r) => r.warehouse_id === wh) : await loadWorkloads(wh, from, to);
+        const rows = demo ? demo.previewPullWorkloads().filter((r) => r.warehouse_id === wh) : await loadWorkloads(wh, from, to);
         if (live) {
           setLoads(rows);
           setVersion((v) => v + 1);
@@ -83,10 +83,8 @@ export default function WorkloadPage() {
     const items = Object.entries(values).map(([type_id, volume]) => ({ type_id, volume }));
     try {
       if (demo) {
-        setLoads((rows) => [
-          ...rows.filter((r) => !(r.work_date === date && r.shift === shift)),
-          ...items.filter((i) => i.volume !== null).map((i) => ({ warehouse_id: wh, work_date: date, shift, workload_type_id: i.type_id, volume: i.volume! })),
-        ]);
+        demo.previewSavePullWorkloads(wh, date, shift, items);
+        setLoads(demo.previewPullWorkloads().filter((r) => r.warehouse_id === wh));
       } else {
         const { error } = await sb().rpc("save_pull_workloads", { p_wh: wh, p_date: date, p_shift: shift, p_items: items });
         if (error) throw error;

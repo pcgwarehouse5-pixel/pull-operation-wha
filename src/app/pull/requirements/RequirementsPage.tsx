@@ -43,7 +43,7 @@ export default function RequirementsPage() {
         let h: Record<PullShift, number | null>;
         if (demo) {
           const cfg = demo.previewPullConfig();
-          const rows = requirementRows(cfg, wh, date, shift, volumesFor(demo.previewPullWorkloads(today), date, shift));
+          const rows = requirementRows(cfg, wh, date, shift, volumesFor(demo.previewPullWorkloads(), date, shift));
           r = { rows, reqs: skillRequirements(cfg, wh, rows) };
           h = { morning: hoursOf(cfg, wh, "morning", date)?.hours ?? null, night: hoursOf(cfg, wh, "night", date)?.hours ?? null };
         } else {

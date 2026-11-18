@@ -4,7 +4,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useApp } from "@/components/AuthProvider";
 import { errText } from "@/lib/supabase";
-import { todayIso } from "@/lib/shifts";
 import { loadBookings, loadPool, loadRequirements, volumesFor } from "@/lib/pull-data";
 import { requirementRows, skillRequirements, type Booking, type PoolPerson, type PullShift, type SkillReq } from "@/lib/pull";
 
@@ -25,8 +24,8 @@ export function usePullBoard(wh: string, date: string, shift: PullShift) {
         let d: BoardData;
         if (demo) {
           const cfg = demo.previewPullConfig();
-          const reqs = skillRequirements(cfg, wh, requirementRows(cfg, wh, date, shift, volumesFor(demo.previewPullWorkloads(todayIso()), date, shift)));
-          d = { reqs, pool: demo.previewPullPool(wh, shift), bookings: demo.previewPullBookings(wh, date, shift) };
+          const reqs = skillRequirements(cfg, wh, requirementRows(cfg, wh, date, shift, volumesFor(demo.previewPullWorkloads(), date, shift)));
+          d = { reqs, pool: demo.previewPullPool(wh, date, shift), bookings: demo.previewPullBookings(wh, date, shift) };
         } else {
           const [reqs, pool, bookings] = await Promise.all([loadRequirements(wh, date, shift), loadPool(wh, date, shift), loadBookings(wh, date, shift)]);
           d = { reqs, pool, bookings };

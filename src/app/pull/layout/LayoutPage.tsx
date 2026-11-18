@@ -36,7 +36,7 @@ export default function LayoutPage() {
     return isGlobal(profile.role) ? act : act.filter((w) => myWarehouseIds.includes(w.id));
   }, [warehouses, myWarehouseIds, profile.role]);
   const sel = usePullSelection(whs, profile.warehouse_id);
-  const { data, setData, err, reload, at } = usePullBoard(sel.wh, sel.date, sel.shift);
+  const { data, err, reload, at } = usePullBoard(sel.wh, sel.date, sel.shift);
   const opts = useOptions(["pull_break_time"]);
   const [group, setGroup] = useState("ทั้งหมด");
   const [editing, setEditing] = useState<Placed | null>(null);
@@ -70,7 +70,8 @@ export default function LayoutPage() {
   async function setBreak(p: Placed, time: string | null) {
     try {
       if (demo) {
-        setData((d) => d && { ...d, bookings: d.bookings.map((b) => (b.id === p.booking.id ? { ...b, break_time: time ? `${time}:00` : null } : b)) });
+        demo.previewSetPullBreak(p.booking.id, time);
+        reload();
       } else {
         const { error } = await sb().rpc("set_pull_break", { p_id: p.booking.id, p_time: time });
         if (error) throw error;
