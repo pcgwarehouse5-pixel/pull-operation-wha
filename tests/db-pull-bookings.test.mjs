@@ -76,6 +76,16 @@ test("จองข้ามคลัง: จองได้ทันที แ�
   await db.query(`update public.shift_schedules set shift_code = 'N20' where user_id = $1`, [U.emp32]);
   const night = await book(db, U.sup5, WH5, d, [{ user_id: U.emp32, skill: "RT รับ" }], "night");
   assert.equal(night.booked, 0);
+  assert.equal(night.conflicts[0].reason, "จองกะเช้าแล้ว · WH5");
+  // ดูอีกกะ: คนที่จองไว้กะเช้า = ไม่พร้อม (ไม่นับเป็นจองแล้ว/ติดภารกิจของกะดึก)
+  for (const [uid, wh] of [[U.sup5, WH5], [U.admin32, WH32]]) {
+    const n = (await pool(db, uid, wh, d, "night")).E32;
+    assert.equal(n.status, "unavailable");
+    assert.equal(n.reason, "จองกะเช้าแล้ว · WH5");
+  }
+  // กะที่จองไว้ยังเห็นเหมือนเดิม
+  assert.equal((await pool(db, U.sup5, WH5, d)).E32.status, "booked_here");
+  assert.equal((await pool(db, U.admin32, WH32, d)).E32.status, "busy");
 });
 
 test("จอง: ตรวจทักษะ สถานะ และบันทึกบางคนได้แม้บางคนจองไม่ได้", async () => {

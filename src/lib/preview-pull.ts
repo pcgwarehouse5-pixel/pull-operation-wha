@@ -284,11 +284,14 @@ export function previewPullPool(wh: string, date: string, shift: PullShift): Poo
   const booked = new Map(store().bookings.filter((b) => b.work_date === date && b.status === "booked").map((b) => [b.user_id, b]));
   return PEOPLE.map((x) => {
     const b = booked.get(x.id);
-    const status: PoolStatus = b ? (b.to_warehouse_id === wh ? "booked_here" : "busy") : x.away || x.shift !== shift ? "unavailable" : "ready";
+    const same = b?.shift === shift;
+    const status: PoolStatus = b ? (!same ? "unavailable" : b.to_warehouse_id === wh ? "booked_here" : "busy") : x.away || x.shift !== shift ? "unavailable" : "ready";
     const reason = b
-      ? b.to_warehouse_id === wh
-        ? "จองเข้าคลังนี้แล้ว"
-        : `ถูกจองโดย ${CODE[b.to_warehouse_id]}`
+      ? !same
+        ? `จอง${b.shift === "morning" ? "กะเช้า" : "กะดึก"}แล้ว · ${CODE[b.to_warehouse_id]}`
+        : b.to_warehouse_id === wh
+          ? "จองเข้าคลังนี้แล้ว"
+          : `ถูกจองโดย ${CODE[b.to_warehouse_id]}`
       : x.away ?? (x.shift !== shift ? (shift === "morning" ? "เข้ากะดึก" : "เข้ากะเช้า") : null);
     return {
       user_id: x.id, employee_code: x.code, name: x.name, nickname: x.nick, emp_position: x.pos,
