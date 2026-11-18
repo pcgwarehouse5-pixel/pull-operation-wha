@@ -18,7 +18,7 @@ import { todayIso } from "@/lib/shifts";
 import { shortDay } from "@/lib/format";
 import { isGlobal } from "@/lib/types";
 import { addDays } from "@/lib/pull-data";
-import { SHIFT_LABEL, STATUS_LABEL, hhmm, type Booking, type PoolPerson, type PoolStatus } from "@/lib/pull";
+import { STATUS_LABEL, hhmm, type Booking, type PoolPerson, type PoolStatus } from "@/lib/pull";
 
 type Conflict = { user_id: string; name?: string; reason: string };
 const ORDER: Record<PoolStatus, number> = { ready: 0, booked_here: 1, busy: 2, unavailable: 3 };
@@ -63,9 +63,9 @@ export default function PullSkillPage({ skill }: { skill: string }) {
   const bar = (
     <BoardBar
       title="ดึงกำลังคนทีละตำแหน่ง"
-      sub={`${whs.find((w) => w.id === sel.wh)?.code ?? ""} · ${shortDay(sel.date)} · ${SHIFT_LABEL[sel.shift]}`}
+      sub={`${whs.find((w) => w.id === sel.wh)?.code ?? ""} · ${shortDay(sel.date)} · ${sel.shiftLabel(sel.shift)}`}
       whs={whs} wh={sel.wh} setWh={(v) => changeSel(() => sel.setWh(v))} date={sel.date} setDate={(v) => changeSel(() => sel.setDate(v))}
-      shift={sel.shift} setShift={(v) => changeSel(() => sel.setShift(v))} max={addDays(today, 60)} onRefresh={reload} at={at}
+      shift={sel.shift} setShift={(v) => changeSel(() => sel.setShift(v))} max={addDays(today, 60)} onRefresh={reload} at={at} meetings={sel.meetings}
     />
   );
   if (!sel.wh) return <AppShell title={skill} back="/pull" minRole="supervisor" wide>{bar}<Alert tone="warning">คุณยังไม่มีคลังที่ดูแล</Alert></AppShell>;

@@ -14,7 +14,7 @@ import { isGlobal, isManager } from "@/lib/types";
 import { todayIso } from "@/lib/shifts";
 
 type Setting = { key: string; effective_from: string; value: unknown; note: string | null; created_at: string };
-type Kind = "number" | "quota" | "types" | "rates" | "steps" | "dilrules" | "date";
+type Kind = "number" | "quota" | "types" | "rates" | "steps" | "dilrules" | "date" | "time";
 type Opt = { value: string; label: string };
 type Meta = { key: string; label: string; unit?: string; hint: string; kind: Kind; min?: number; max?: number; source?: "leave" | "employment" | "position"; group: string };
 type Rates = Record<string, { workday?: number; holiday_normal?: number; holiday_ot?: number }>;
@@ -44,6 +44,8 @@ const META: Meta[] = [
   { group: "เบี้ยขยัน/ค่าเดินทาง", key: "diligence.employment_types", label: "ประเภทพนักงานที่ได้เบี้ยขยัน", hint: "ไม่เลือกเลย = ทุกประเภท", kind: "types", source: "employment" },
   { group: "เบี้ยขยัน/ค่าเดินทาง", key: "travel.rate_per_day", label: "ค่าเดินทางต่อวันที่มาทำงาน", unit: "บาท", hint: "เฉพาะพนักงานที่ติ๊ก \"ได้ค่าเดินทาง\" ในทะเบียน", kind: "number", min: 0, max: 5000 },
   { group: "ตารางกะ", key: "shifts.lead_positions", label: "ตำแหน่งที่อยู่ในตารางกะหัวหน้าคลัง", hint: "คนตำแหน่งนี้ (และผู้จัดการแผนก) แยกไปอยู่ตารางกะหัวหน้าคลัง ซึ่งแก้ได้เฉพาะผู้จัดการ", kind: "types", source: "position" },
+  { group: "Pull Operation", key: "pull.morning_meeting", label: "เวลาประชุมเริ่มงาน รอบเช้า", unit: "น.", hint: "หัวหน้าคลังจองคนก่อนประชุม · เปิดหน้า Pull ก่อนเวลานี้ ระบบเลือกกะเช้าวันนี้ให้ · แจ้งเตือนการจองบอกเวลานี้กับพนักงาน", kind: "time" },
+  { group: "Pull Operation", key: "pull.night_meeting", label: "เวลาประชุมเริ่มงาน รอบดึก", unit: "น.", hint: "ตั้งแต่ประชุมเช้าถึงก่อนเวลานี้ ระบบเลือกกะดึกวันนี้ให้ · ตั้งแต่เวลานี้ เลือกกะเช้าพรุ่งนี้", kind: "time" },
   { group: "Pull Operation", key: "pull.morning_from_hour", label: "กะเช้า: เวลาเข้างานตั้งแต่", unit: "นาฬิกา", hint: "รหัสกะที่เริ่มงานตั้งแต่เวลานี้ ถึงเวลาด้านล่าง นับเป็นกะเช้า (ใช้แยกคนในคลังกลางตามกะ)", kind: "number", min: 0, max: 23 },
   { group: "Pull Operation", key: "pull.morning_to_hour", label: "กะเช้า: เวลาเข้างานถึง (รวมทั้งชั่วโมงนั้น)", unit: "นาฬิกา", hint: "เช่น 13 = เข้างานถึง 13:59 ยังเป็นกะเช้า หลังจากนั้นเป็นกะดึก", kind: "number", min: 0, max: 23 },
   { group: "แจ้งเตือน", key: "notify.missing_in_minutes", label: "กะเริ่มแล้วกี่นาทียังไม่ลงเวลา จึงแจ้งเตือนพนักงาน", unit: "นาที", hint: "", kind: "number", min: 5, max: 240 },
@@ -94,6 +96,8 @@ export function RulesManager() {
     const list = optsOf(m);
     switch (m.kind) {
       case "number":
+        return `${v} ${m.unit ?? ""}`;
+      case "time":
         return `${v} ${m.unit ?? ""}`;
       case "date":
         return typeof v === "string" ? thaiDate(`${v}T12:00:00+07:00`) : "ยังไม่ตั้ง";
@@ -190,7 +194,7 @@ export function RulesManager() {
 
 function EditSetting({ meta, current, options, leaveTypes, onClose, onSaved }: { meta: Meta; current: unknown; options: Opt[]; leaveTypes: Opt[]; onClose: () => void; onSaved: () => void }) {
   const { demo } = useApp();
-  const [num, setNum] = useState(String(meta.kind === "number" || meta.kind === "date" ? (current ?? "") : ""));
+  const [num, setNum] = useState(String(meta.kind === "number" || meta.kind === "date" || meta.kind === "time" ? (current ?? "") : ""));
   const [quota, setQuota] = useState<Record<string, string>>(() =>
     Object.fromEntries(options.map((t) => [t.value, String((current as Record<string, number> | undefined)?.[t.value] ?? "")])),
   );
@@ -231,7 +235,9 @@ function EditSetting({ meta, current, options, leaveTypes, onClose, onSaved }: {
       case "types":
         return sel;
       case "date":
-        return /^d{4}-d{2}-d{2}$/.test(num) ? num : null;
+        return /^\d{4}-\d{2}-\d{2}$/.test(num) ? num : null;
+      case "time":
+        return /^([01]\d|2[0-3]):[0-5]\d$/.test(num) ? num : "ใส่เวลาแบบ ชั่วโมง:นาที เช่น 08:00";
       case "steps": {
         const list = steps.split(/[,\s]+/).filter(Boolean).map(Number);
         if (!list.length || list.some((n) => !Number.isFinite(n) || n < 0 || n > 100000)) return "ใส่จำนวนเงินคั่นด้วยจุลภาค เช่น 300, 400, 500";
@@ -285,6 +291,11 @@ function EditSetting({ meta, current, options, leaveTypes, onClose, onSaved }: {
         {meta.kind === "number" && (
           <Field label={`ค่าใหม่${meta.unit ? ` (${meta.unit})` : ""}`}>
             <input type="number" inputMode="numeric" min={meta.min} max={meta.max} className={inputCls} value={num} onChange={(e) => setNum(e.target.value)} />
+          </Field>
+        )}
+        {meta.kind === "time" && (
+          <Field label="เวลาใหม่ (24 ชั่วโมง)">
+            <input type="time" className={inputCls} value={num} onChange={(e) => setNum(e.target.value)} />
           </Field>
         )}
         {meta.kind === "date" && (

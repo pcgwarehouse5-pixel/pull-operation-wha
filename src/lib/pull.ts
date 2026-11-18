@@ -3,6 +3,38 @@
 export type PullShift = "morning" | "night";
 export const SHIFT_LABEL: Record<PullShift, string> = { morning: "กะเช้า", night: "กะดึก" };
 
+// ---------- เวลาประชุมเริ่มงาน (หัวหน้าคลังจองคนก่อนประชุมประมาณ 1 ชั่วโมง) ----------
+/** เวลาประชุมของแต่ละกะ "HH:MM" ตั้งได้ที่หน้ากฎและอัตรา (pull.morning_meeting / pull.night_meeting) */
+export type Meetings = Record<PullShift, string>;
+export const MEETING_KEYS: Record<PullShift, string> = { morning: "pull.morning_meeting", night: "pull.night_meeting" };
+/** ค่าเริ่มต้นเดียวกับ migration 0025 · ใช้เฉพาะตอนยังโหลดค่าที่ตั้งไม่ได้ หรือโหมดตัวอย่าง */
+export const DEFAULT_MEETINGS: Meetings = { morning: "08:00", night: "20:00" };
+export const isHm = (v: unknown): v is string => typeof v === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(v);
+const hmToMin = (hm: string) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));
+
+/** นาทีของเวลาตอนนี้ตามเวลาไทย (0–1439) */
+export function bangkokNowMin(now = new Date()): number {
+  const p = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Bangkok", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(now);
+  return Number(p.find((x) => x.type === "hour")?.value ?? 0) * 60 + Number(p.find((x) => x.type === "minute")?.value ?? 0);
+}
+
+/**
+ * รอบที่หัวหน้าคลังจะจองต่อไป (เปิดหน้า Pull แล้วเลือกให้อัตโนมัติ)
+ * ก่อนประชุมเช้า = กะเช้าวันนี้ · ตั้งแต่ประชุมเช้าถึงก่อนประชุมดึก = กะดึกวันนี้ · ตั้งแต่ประชุมดึก = กะเช้าพรุ่งนี้
+ */
+export function nextRound(today: string, nowMin: number, m: Meetings): { date: string; shift: PullShift } {
+  if (nowMin < hmToMin(m.morning)) return { date: today, shift: "morning" };
+  if (nowMin < hmToMin(m.night)) return { date: today, shift: "night" };
+  const d = new Date(`${today}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return { date: d.toISOString().slice(0, 10), shift: "morning" };
+}
+
+/** "กะเช้า · ประชุม 08:00 น." */
+export function shiftWithMeeting(shift: PullShift, m: Meetings): string {
+  return `${SHIFT_LABEL[shift]} · ประชุม ${m[shift]} น.`;
+}
+
 export type PullSkillRow = { warehouse_id: string; skill_name: string; sort_order: number };
 export type WorkloadType = { id: string; warehouse_id: string; name: string; unit: string; sort_order: number; is_active: boolean };
 export type PullTask = { id: string; warehouse_id: string; workload_type_id: string; skill_name: string; is_active: boolean };

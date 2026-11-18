@@ -1,5 +1,6 @@
 // โหลดข้อมูล Pull Operation จาก Supabase (ใช้ร่วมกันทุกหน้าของ Pull)
 import { fetchAll, sb } from "./supabase";
+import { DEFAULT_MEETINGS, MEETING_KEYS, isHm, type Meetings } from "./pull";
 import type { Booking, NetRow, PoolPerson, PullConfig, PullShift, PullSkillRow, PullTask, ShiftHours, SkillCount, SkillReq, TaskRate, WorkloadType } from "./pull";
 
 export type WorkloadRow = { warehouse_id: string; work_date: string; shift: PullShift; workload_type_id: string; volume: number };
@@ -27,6 +28,22 @@ export async function loadPullConfig(): Promise<PullConfig> {
     hours: hours.map((h) => ({ ...h, hours: Number(h.hours) })),
     counts: ((counts.data ?? []) as SkillCount[]).map((c) => ({ ...c, people: Number(c.people) })),
   };
+}
+
+/** เวลาประชุมเริ่มงานของแต่ละกะ ณ วันที่ (ค่าล่าสุดที่เริ่มใช้ไม่เกินวันนั้น · ตั้งผิดรูปแบบใช้ค่าเริ่มต้น) */
+export async function loadMeetings(date: string): Promise<Meetings> {
+  const { data, error } = await sb()
+    .from("app_settings")
+    .select("key, value")
+    .in("key", Object.values(MEETING_KEYS))
+    .lte("effective_from", date)
+    .order("effective_from", { ascending: false });
+  if (error) throw error;
+  const pick = (k: string, d: string) => {
+    const v = (data ?? []).find((r) => r.key === k)?.value;
+    return isHm(v) ? v : d;
+  };
+  return { morning: pick(MEETING_KEYS.morning, DEFAULT_MEETINGS.morning), night: pick(MEETING_KEYS.night, DEFAULT_MEETINGS.night) };
 }
 
 /** ยอดงานของคลังในช่วงวันที่ (ดึงทีละหน้าจนครบ) */

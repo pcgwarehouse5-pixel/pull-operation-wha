@@ -50,9 +50,9 @@ export default function LayoutPage() {
   const bar = (
     <BoardBar
       title="ผังตำแหน่งพนักงาน"
-      sub={`Warehouse Team Layout · ${whCode} · ${shortDay(sel.date)} · ${SHIFT_LABEL[sel.shift]}`}
+      sub={`Warehouse Team Layout · ${whCode} · ${shortDay(sel.date)} · ${sel.shiftLabel(sel.shift)}`}
       whs={whs} wh={sel.wh} setWh={sel.setWh} date={sel.date} setDate={sel.setDate} shift={sel.shift} setShift={sel.setShift}
-      max={addDays(today, 60)} onRefresh={reload} at={at}
+      max={addDays(today, 60)} onRefresh={reload} at={at} meetings={sel.meetings}
     />
   );
   if (!sel.wh) return <AppShell title="ผังตำแหน่ง" minRole="supervisor" wide>{bar}<Alert tone="warning">คุณยังไม่มีคลังที่ดูแล</Alert></AppShell>;

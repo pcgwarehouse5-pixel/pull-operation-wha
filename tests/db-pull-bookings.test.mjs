@@ -139,3 +139,21 @@ test("เห็นรายการจอง: ตัวพนักงาน �
   assert.equal(await n(U.exec), 1);
   assert.equal(await n(U.emp5), 0);
 });
+
+test("แจ้งเตือนการจอง บอกเวลาประชุมเริ่มงานของรอบนั้น (ตั้งได้ในหน้ากฎและอัตรา)", async () => {
+  const { db, d } = await world();
+  await book(db, U.sup5, WH5, d, [{ user_id: U.emp32, skill: "RT รับ" }]);
+  const n = await q1(db, `select body from public.notifications where kind = 'pull_booked' and user_id = $1`, [U.emp32]);
+  assert.match(n.body, /กะเช้า · ประชุมเริ่มงาน 08:00 น\. · คลัง WH5 · RT รับ/);
+  // เปลี่ยนเวลาประชุมรอบเช้าเป็น 07:30 ตั้งแต่วันนี้ → ยกเลิกแล้วแจ้งด้วยเวลาใหม่
+  await db.query(`insert into public.app_settings (key, effective_from, value) values ('pull.morning_meeting', public.pull_today(), '"07:30"')`);
+  const id = (await q1(db, `select id from public.pull_bookings where user_id = $1`, [U.emp32])).id;
+  await as(db, U.sup5, () => db.query(`select public.cancel_pull_booking($1, 'งานลดลง')`, [id]));
+  const c = await q1(db, `select body from public.notifications where kind = 'pull_cancelled' and user_id = $1`, [U.emp32]);
+  assert.match(c.body, /กะเช้า · ประชุมเริ่มงาน 07:30 น\./);
+  // ค่าที่ตั้งผิดรูปแบบ ใช้ค่าเริ่มต้น · กะดึกค่าเริ่มต้น 20:00
+  await db.query(`insert into public.app_settings (key, effective_from, value) values ('pull.night_meeting', public.pull_today(), '"25:99"')`);
+  assert.equal((await q1(db, `select public.pull_meeting_at('night', public.pull_today()) as t`)).t, "20:00");
+  // ตัวช่วยเรียกจากหน้าเว็บไม่ได้
+  await assert.rejects(as(db, U.sup5, () => db.query(`select public.pull_round_th(public.pull_today(), 'morning')`)), /permission denied/);
+});

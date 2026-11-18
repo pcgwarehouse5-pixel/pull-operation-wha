@@ -31,7 +31,7 @@ export default function WorkloadPage() {
     const act = warehouses.filter((w) => w.is_active).sort((a, b) => a.code.localeCompare(b.code, "th", { numeric: true }));
     return isGlobal(profile.role) ? act : act.filter((w) => myWarehouseIds.includes(w.id));
   }, [warehouses, myWarehouseIds, profile.role]);
-  const { wh, date, shift, setWh, setDate, setShift } = usePullSelection(whs, profile.warehouse_id);
+  const { wh, date, shift, meetings, setWh, setDate, setShift } = usePullSelection(whs, profile.warehouse_id);
 
   const [cfg, setCfg] = useState<PullConfig | null>(null);
   const [loads, setLoads] = useState<WorkloadRow[]>([]);
@@ -115,8 +115,8 @@ export default function WorkloadPage() {
       </BarSelect>
       <BarDate value={date} onChange={setDate} max={maxDate} />
       <BarSelect label="กะ" value={shift} onChange={(v) => setShift(v as PullShift)}>
-        <option value="morning">{SHIFT_LABEL.morning}{cfg && wh ? ` · ${num(hoursOf(cfg, wh, "morning", date)?.hours)} ชม.` : ""}</option>
-        <option value="night">{SHIFT_LABEL.night}{cfg && wh ? ` · ${num(hoursOf(cfg, wh, "night", date)?.hours)} ชม.` : ""}</option>
+        <option value="morning">{SHIFT_LABEL.morning} · ประชุม {meetings.morning}{cfg && wh ? ` · ${num(hoursOf(cfg, wh, "morning", date)?.hours)} ชม.` : ""}</option>
+        <option value="night">{SHIFT_LABEL.night} · ประชุม {meetings.night}{cfg && wh ? ` · ${num(hoursOf(cfg, wh, "night", date)?.hours)} ชม.` : ""}</option>
       </BarSelect>
     </PullBar>
   );

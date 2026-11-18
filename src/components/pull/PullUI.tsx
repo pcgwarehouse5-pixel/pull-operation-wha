@@ -100,10 +100,12 @@ export function BarDate({ value, onChange, min, max }: { value: string; onChange
 
 /** แถบหัวของหน้ากระดานดึงคน: คลังปลายทาง วันที่ กะ และปุ่มรีเฟรช */
 export function BoardBar({
-  title, sub, whs, wh, setWh, date, setDate, shift, setShift, max, onRefresh, at,
+  title, sub, whs, wh, setWh, date, setDate, shift, setShift, max, onRefresh, at, meetings,
 }: {
   title: string; sub?: string; whs: { id: string; code: string }[]; wh: string; setWh: (v: string) => void; date: string; setDate: (v: string) => void;
   shift: "morning" | "night"; setShift: (v: "morning" | "night") => void; max?: string; onRefresh?: () => void; at?: Date | null;
+  /** เวลาประชุมเริ่มงานของแต่ละกะ แสดงต่อท้ายชื่อกะ */
+  meetings?: { morning: string; night: string };
 }) {
   return (
     <PullBar title={title} sub={sub}>
@@ -114,8 +116,8 @@ export function BoardBar({
       </BarSelect>
       <BarDate value={date} onChange={setDate} max={max} />
       <BarSelect label="กะ" value={shift} onChange={(v) => setShift(v as "morning" | "night")}>
-        <option value="morning">☀ กะเช้า</option>
-        <option value="night">☾ กะดึก</option>
+        <option value="morning">☀ กะเช้า{meetings ? ` · ประชุม ${meetings.morning}` : ""}</option>
+        <option value="night">☾ กะดึก{meetings ? ` · ประชุม ${meetings.night}` : ""}</option>
       </BarSelect>
       {onRefresh && (
         <button type="button" onClick={onRefresh} className="flex min-h-11 items-center gap-1.5 rounded-xl bg-white/15 px-3 font-semibold text-white hover:bg-white/25" aria-label="รีเฟรชข้อมูล">

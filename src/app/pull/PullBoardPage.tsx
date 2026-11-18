@@ -31,9 +31,9 @@ export default function PullBoardPage() {
   const bar = (
     <BoardBar
       title="Pull Operation · สรุปกำลังพลที่ต้องการ"
-      sub={`${whCode} · ${shortDay(sel.date)} · ${SHIFT_LABEL[sel.shift]} · กดการ์ดตำแหน่งเพื่อดึงคน`}
+      sub={`${whCode} · ${shortDay(sel.date)} · ${sel.shiftLabel(sel.shift)} · กดการ์ดตำแหน่งเพื่อดึงคน`}
       whs={whs} wh={sel.wh} setWh={sel.setWh} date={sel.date} setDate={sel.setDate} shift={sel.shift} setShift={sel.setShift}
-      max={addDays(today, 60)} onRefresh={reload} at={at}
+      max={addDays(today, 60)} onRefresh={reload} at={at} meetings={sel.meetings}
     />
   );
   if (!sel.wh) return <AppShell title="สรุปกำลังพล" minRole="supervisor" wide>{bar}<Alert tone="warning">คุณยังไม่มีคลังที่ดูแล</Alert></AppShell>;
