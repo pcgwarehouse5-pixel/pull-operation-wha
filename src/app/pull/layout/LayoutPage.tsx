@@ -1,7 +1,7 @@
 "use client";
 
 // ผังตำแหน่งพนักงาน (Warehouse Team Layout) สำหรับประชุมก่อนเริ่มงาน (ไฟล์ "Pull-Operation Operation & Dashboard" หน้า 3)
-// รุ่นแรก: การ์ดชื่อ + ตัวย่อแทนรูป แยกตามทักษะ พร้อมเวลาพัก (รูปถ่ายและแผนผังคลังจะเพิ่มภายหลัง)
+// การ์ดชื่อ + ตัวย่อแทนรูป แยกตามทักษะ พร้อมเวลาพัก · ด้านบนมีแผนที่คลัง 3D ของคลังที่เลือก (ถ้ามีผัง: WH5 / WH32)
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
@@ -18,6 +18,8 @@ import { shortDay } from "@/lib/format";
 import { isGlobal } from "@/lib/types";
 import { addDays } from "@/lib/pull-data";
 import { SHIFT_LABEL, hhmm, skillGroup, skillStyle, type Booking, type PoolPerson } from "@/lib/pull";
+import { warehouseMapKey } from "@/lib/warehouse3d/maps";
+import { Warehouse3D } from "@/components/pull/Warehouse3D";
 
 const BREAK_COLORS = ["#facc15", "#fb923c", "#ef4444", "#38bdf8", "#a78bfa", "#34d399"];
 const GROUP_ICON: Record<string, IconName> = { RT: "forklift", Checker: "clipboard", OP: "trolley", Picker: "cart", CT: "box", โหลดสินค้า: "truck", อื่นๆ: "users" };
@@ -46,6 +48,7 @@ export default function LayoutPage() {
   const breakColor = (t: string | null) => (t ? BREAK_COLORS[Math.max(0, breaks.indexOf(t)) % BREAK_COLORS.length] : null);
   const whCode = whs.find((w) => w.id === sel.wh)?.code ?? "";
   const canEdit = sel.date >= today;
+  const mapKey = warehouseMapKey(whCode);
 
   const bar = (
     <BoardBar
@@ -90,6 +93,7 @@ export default function LayoutPage() {
       {bar}
       {err && <div className="mb-4"><Alert tone="error">{err}</Alert></div>}
       {msg && <div className="mb-4"><Alert tone={msg.tone}>{msg.text}</Alert></div>}
+      {mapKey && <Warehouse3D mapKey={mapKey} />}
 
       <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-4 lg:grid-cols-[16rem_minmax(0,1fr)]">
         <div className="space-y-4">
