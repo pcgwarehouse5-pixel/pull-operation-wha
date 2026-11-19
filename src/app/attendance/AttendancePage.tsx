@@ -9,6 +9,8 @@ import { Icon } from "@/components/Icon";
 import { PageHelper, type Pose } from "@/components/Puinun";
 import { CorrectionModal } from "@/components/attendance/CorrectionModal";
 import { MyOt } from "@/components/attendance/MyOt";
+import { FirstTimeLocation, LocationHelp } from "@/components/attendance/LocationHelp";
+import { problemFromCode, type GeoProblem } from "@/lib/geo-help";
 import { sb } from "@/lib/supabase";
 import { addMonths, currentMonth, monthDates, todayIso } from "@/lib/shifts";
 import { CORRECTION_STATUS, STATUS, distanceM, hhmm, type AttendanceRow, type Correction } from "@/lib/attendance";
@@ -20,12 +22,17 @@ type Punch = { kind: "in" | "out"; punched_at: string; work_date: string };
 type Geo = { lat: number; lng: number; acc: number };
 type Msg = { tone: "success" | "error" | "warning" | "info"; text: string };
 
+type PermState = "granted" | "prompt" | "denied";
+/** เครื่องนี้เคยหาตำแหน่งสำเร็จแล้ว (ไม่ต้องแสดงการ์ด "ครั้งแรก") */
+const GEO_OK_KEY = "wha-geo-ok";
+
+/** หาตำแหน่ง ถ้าไม่สำเร็จ error.code = 1 ไม่อนุญาต / 2 หาไม่ได้ (GPS ปิด) / 3 หมดเวลา / 0 เครื่องไม่รองรับ */
 function locate(t: T): Promise<Geo> {
   return new Promise((resolve, reject) => {
-    if (!navigator.geolocation) return reject(new Error(t("att.geoNone")));
+    if (!navigator.geolocation) return reject(Object.assign(new Error(t("att.geoNone")), { code: 0 }));
     navigator.geolocation.getCurrentPosition(
       (p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy }),
-      (e) => reject(new Error(e.code === e.PERMISSION_DENIED ? t("att.geoDenied") : e.code === e.TIMEOUT ? t("att.geoTimeout") : t("att.geoFail"))),
+      (e) => reject(Object.assign(new Error(e.code === e.PERMISSION_DENIED ? t("att.geoDenied") : e.code === e.TIMEOUT ? t("att.geoTimeout") : t("att.geoFail")), { code: e.code })),
       { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 },
     );
   });
@@ -56,6 +63,9 @@ export default function AttendancePage() {
   const [phase, setPhase] = useState<"idle" | "locating" | "saving">("idle");
   const [msg, setMsg] = useState<Msg | null>(null);
   const [fix, setFix] = useState<string | null>(null);
+  const [geoProblem, setGeoProblem] = useState<GeoProblem | null>(null);
+  const [perm, setPerm] = useState<PermState | null>(null);
+  const [geoOkBefore, setGeoOkBefore] = useState(true);
   const [loadedAt, setLoadedAt] = useState(0);
   const today = todayIso();
 
@@ -105,6 +115,37 @@ export default function AttendancePage() {
     load();
   }, [load]);
 
+  // สถานะสิทธิ์ตำแหน่ง: ถ้าเคยกด "ไม่อนุญาต" ไว้ แสดงวิธีแก้ทันทีที่เปิดหน้า (ไม่ต้องรอกดเข้างานก่อน)
+  useEffect(() => {
+    try {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- อ่านค่าจากเครื่องหลัง mount
+      setGeoOkBefore(localStorage.getItem(GEO_OK_KEY) === "1");
+    } catch {}
+    let status: PermissionStatus | null = null;
+    let alive = true;
+    const onChange = () => {
+      if (!status) return;
+      setPerm(status.state as PermState);
+      if (status.state === "granted") setGeoProblem((p) => (p === "denied" ? null : p));
+    };
+    navigator.permissions
+      ?.query({ name: "geolocation" as PermissionName })
+      .then((s) => {
+        if (!alive) return;
+        status = s;
+        setPerm(s.state as PermState);
+        // กลับมาที่หน้านี้หลังไปเปิดสิทธิ์ในการตั้งค่าแล้ว: ซ่อนวิธีแก้เอง
+        if (s.state === "denied") setGeoProblem("denied");
+        else if (s.state === "granted") setGeoProblem((p) => (p === "denied" ? null : p));
+        s.addEventListener("change", onChange);
+      })
+      .catch(() => {}); // เบราว์เซอร์เก่าไม่รองรับ: รู้ผลตอนกดปุ่มแทน
+    return () => {
+      alive = false;
+      status?.removeEventListener("change", onChange);
+    };
+  }, []);
+
   // ปุ่มที่ควรกดต่อ: กดเข้าล่าสุดภายใน 20 ชม. = ควรกดออก
   const last = punches[0];
   const openIn = last && last.kind === "in" && loadedAt - new Date(last.punched_at).getTime() < 20 * 3600 * 1000 ? last : null;
@@ -117,9 +158,15 @@ export default function AttendancePage() {
     try {
       const g = demo && myWh[0]?.latitude ? { lat: myWh[0].latitude!, lng: myWh[0].longitude!, acc: 12 } : await locate(t);
       setGeo(g);
+      setGeoProblem(null);
+      setGeoOkBefore(true);
+      try {
+        localStorage.setItem(GEO_OK_KEY, "1");
+      } catch {}
       return g;
     } catch (e) {
-      setMsg({ tone: "error", text: (e as Error).message });
+      // แสดงวิธีแก้ตามเครื่องแทนข้อความสั้นๆ
+      setGeoProblem(problemFromCode((e as { code?: number }).code));
       return null;
     } finally {
       setPhase("idle");
@@ -212,7 +259,7 @@ export default function AttendancePage() {
             ) : geo ? (
               <span className="text-bad">{t("att.noCoords")}</span>
             ) : (
-              <span className="text-muted">{t("att.askLocation")}</span>
+              <span className="text-muted">{t(perm === "prompt" ? "geo.askLocation" : "att.askLocation")}</span>
             )}
             {geo && <span className="block text-[12px] text-muted">{t("att.accuracy", { m: Math.round(geo.acc) })}</span>}
           </span>
@@ -220,7 +267,18 @@ export default function AttendancePage() {
             {t("att.checkLocation")}
           </button>
         </div>
+        {!geoProblem && (
+          <button type="button" onClick={() => setGeoProblem(perm === "granted" ? "timeout" : "denied")} className="block w-full border-t border-line px-4 py-2.5 text-left text-[14px] font-semibold text-brand hover:bg-brand/5 sm:px-5">
+            {t("geo.helpLink")}
+          </button>
+        )}
       </Card>
+
+      {geoProblem ? (
+        <LocationHelp problem={geoProblem} busy={busy} onRetry={check} onClose={() => setGeoProblem(null)} />
+      ) : perm === "prompt" && !geoOkBefore && !geo ? (
+        <FirstTimeLocation busy={busy} onAllow={check} />
+      ) : null}
 
       {msg && <div className="mb-3"><Alert tone={msg.tone === "info" ? "info" : msg.tone}>{msg.text}</Alert></div>}
 
