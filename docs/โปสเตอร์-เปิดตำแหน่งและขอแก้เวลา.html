@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>โปสเตอร์ลงเวลา</title>
+<!-- โปสเตอร์ A4 ติดหน้าคลัง: วิธีอนุญาตตำแหน่ง + ขอแก้เวลา (หน้า 1 ภาษาไทย / หน้า 2 ภาษาพม่า)
+     พิมพ์: เปิดไฟล์ใน Chrome/Edge → Ctrl+P → A4 แนวตั้ง, ขอบ "ไม่มี", ติ๊ก "กราฟิกพื้นหลัง" -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai+Looped:wght@400;600;700&family=Noto+Sans+Myanmar:wght@400;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<style>
+  :root {
+    --brand: #1b2a5c; --brand-deep: #111c41; --red: #d72638; --ok: #1e8e5a; --sky: #e8effb;
+    --paper: #f5f7fb; --line: #dde3ee; --muted: #5a6482; --ink: #16204a; --yellow: #f5b700;
+  }
+  @page { size: A4 portrait; margin: 0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: #9aa3b8; }
+  body { font-family: "IBM Plex Sans Thai Looped", "Noto Sans Myanmar", sans-serif; color: var(--ink); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .my { font-family: "Noto Sans Myanmar", "IBM Plex Sans Thai Looped", sans-serif; }
+  .page { width: 210mm; height: 297mm; margin: 8mm auto; background: #fff; position: relative; overflow: hidden; display: flex; flex-direction: column; }
+  @media print { html, body { background: #fff; } .page { margin: 0; break-after: page; } .page:last-child { break-after: auto; } }
+
+  header { flex: none; background: var(--brand); color: #fff; padding: 6.5mm 11mm 6.5mm 11mm; position: relative; min-height: 56mm; }
+  header .brand { display: flex; align-items: center; gap: 3mm; font-size: 11pt; font-weight: 600; opacity: .9; }
+  header .brand img { width: 9mm; height: 9mm; border-radius: 2mm; background: #fff; }
+  header h1 { margin-top: 3.5mm; font-size: 26pt; line-height: 1.2; font-weight: 700; max-width: 145mm; }
+  header h1 em { display: block; }
+  header h1 em { font-style: normal; color: var(--yellow); }
+  header p { margin-top: 2mm; font-size: 11.5pt; opacity: .92; max-width: 140mm; line-height: 1.45; }
+  header .mascot { position: absolute; right: 6mm; bottom: 2mm; width: 42mm; height: 52mm; border-radius: 6mm 6mm 0 0; background: #fff url("../public/mascot/point.jpg") center 30% / 115% auto no-repeat; transform: scaleX(-1); }
+  header .stripe { position: absolute; left: 0; right: 0; bottom: 0; height: 2mm; background: var(--red); }
+
+  main { flex: none; padding: 4.5mm 11mm 0; display: flex; flex-direction: column; gap: 3.8mm; }
+  h2 { font-size: 15pt; font-weight: 700; color: var(--brand); display: flex; align-items: center; gap: 2.5mm; }
+  h2 .n { width: 9mm; height: 9mm; border-radius: 50%; background: var(--brand); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 13pt; flex: none; }
+
+  /* ครั้งแรก: กล่องถามสิทธิ์จำลอง */
+  .first { display: grid; grid-template-columns: 1fr 74mm; gap: 6mm; align-items: center; background: var(--sky); border-radius: 5mm; padding: 4mm 6mm; }
+  .first p { font-size: 13pt; line-height: 1.45; margin-top: 2mm; }
+  .first p b { color: var(--ok); }
+  .dialog { background: #fff; border-radius: 4mm; box-shadow: 0 1mm 3mm rgba(17,28,65,.18); padding: 4mm; text-align: center; }
+  .dialog .q { font-size: 10.5pt; font-weight: 600; line-height: 1.35; }
+  .dialog .site { font-size: 8.5pt; color: var(--muted); margin-top: 1mm; }
+  .dialog .btns { display: grid; grid-template-columns: 1fr 1.25fr; gap: 2mm; margin-top: 3mm; }
+  .dialog .b { border-radius: 2.5mm; padding: 2mm 1mm; font-size: 10.5pt; font-weight: 700; position: relative; }
+  .dialog .no { background: #eef0f5; color: #8b93a8; text-decoration: line-through; }
+  .dialog .yes { background: var(--ok); color: #fff; outline: 1.2mm solid rgba(30,142,90,.3); }
+  .dialog .mark { position: absolute; top: -3.5mm; right: -2mm; width: 7mm; height: 7mm; border-radius: 50%; color: #fff; font-size: 11pt; line-height: 7mm; }
+  .dialog .no .mark { background: var(--red); }
+  .dialog .yes .mark { background: var(--brand); }
+
+  /* ถ้ากด "ไม่อนุญาต" ไปแล้ว: 2 คอลัมน์ */
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm; }
+  .card { border: 0.5mm solid var(--line); border-radius: 5mm; padding: 3.5mm 5mm 4mm; }
+  .card h3 { font-size: 14pt; font-weight: 700; display: flex; align-items: center; gap: 2mm; padding-bottom: 2.5mm; border-bottom: 0.4mm dashed var(--line); }
+  .card h3 .tag { font-size: 9.5pt; font-weight: 600; color: var(--muted); }
+  .card h3 svg { width: 7mm; height: 7mm; flex: none; }
+  ol.steps { list-style: none; margin-top: 2.5mm; display: flex; flex-direction: column; gap: 2.2mm; }
+  ol.steps li { display: grid; grid-template-columns: 7mm 1fr; gap: 2mm; font-size: 11.5pt; line-height: 1.4; }
+  ol.steps li .k { width: 7mm; height: 7mm; border-radius: 50%; background: var(--brand); color: #fff; font-weight: 700; font-size: 10.5pt; display: flex; align-items: center; justify-content: center; }
+  ol.steps li.done .k { background: var(--ok); }
+  ol.steps li.done { font-weight: 700; color: var(--ok); }
+  .chip { display: inline-block; background: var(--sky); color: var(--brand); border-radius: 1.6mm; padding: 0 1.6mm; font-weight: 700; white-space: nowrap; }
+  .card .gps { margin-top: 3mm; background: #fff7dc; border-radius: 3mm; padding: 2.5mm 3mm; font-size: 10.5pt; line-height: 1.4; }
+  .card .gps b { color: #7a5600; }
+
+  /* แถวเคล็ดลับ */
+  .tips { display: grid; grid-template-columns: 1fr 1fr 1.25fr; gap: 4mm; }
+  .tip { border-radius: 4mm; padding: 3mm 4mm; background: var(--paper); font-size: 10.5pt; line-height: 1.4; }
+  .tip b { display: block; font-size: 12pt; color: var(--brand); margin-bottom: 1mm; }
+  .tip.fix { background: #fdecea; }
+  .tip.fix b { color: var(--red); }
+  .tip .btn { display: inline-block; margin-top: 1.5mm; border: 0.5mm solid #c9d6f2; background: #fff; color: var(--brand); border-radius: 2.5mm; padding: 1mm 2.5mm; font-weight: 700; }
+
+  footer { flex: none; margin-top: auto; background: var(--paper); border-top: 0.5mm solid var(--line); padding: 4mm 11mm; display: grid; grid-template-columns: 27mm 1fr; gap: 5mm; align-items: center; }
+  .qr { width: 27mm; height: 27mm; background: #fff; border-radius: 2mm; padding: 1.5mm; }
+  .qr svg { width: 100%; height: 100%; display: block; }
+  footer .t { font-size: 13pt; font-weight: 700; color: var(--brand); }
+  footer .u { font-size: 12pt; font-weight: 600; margin-top: 1mm; letter-spacing: .1mm; }
+  footer .s { font-size: 10pt; color: var(--muted); margin-top: 1.5mm; line-height: 1.4; }
+  /* อักษรพม่าสูงกว่าไทย: ลดขนาดให้พอดี 1 หน้า */
+  .my header h1 { font-size: 21pt; line-height: 1.45; }
+  .my header p { font-size: 10.5pt; line-height: 1.6; }
+  .my h2 { font-size: 13pt; }
+  .my .first { padding: 4mm 5mm; }
+  .my .first p { font-size: 11pt; line-height: 1.55; }
+  .my .dialog .q { font-size: 9.5pt; }
+  .my .card { padding: 4mm 4.5mm; }
+  .my .card h3 { font-size: 13pt; }
+  .my ol.steps { gap: 2mm; }
+  .my ol.steps li { font-size: 10pt; line-height: 1.55; }
+  .my .card .gps { font-size: 9.5pt; line-height: 1.55; }
+  .my .tip { font-size: 9pt; line-height: 1.55; padding: 3mm 3.5mm; }
+  .my .tip b { font-size: 10.5pt; }
+  .my footer .t { font-size: 11.5pt; }
+  .my footer .s { font-size: 9pt; line-height: 1.55; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+const URL_APP = "https://pull-operation-wha.vercel.app/attendance";
+const ICON_ANDROID = '<svg viewBox="0 0 24 24" fill="#1e8e5a"><path d="M6 18c0 .55.45 1 1 1h1v3.5a1.5 1.5 0 003 0V19h2v3.5a1.5 1.5 0 003 0V19h1c.55 0 1-.45 1-1V8H6v10zM3.5 8A1.5 1.5 0 002 9.5v7a1.5 1.5 0 003 0v-7A1.5 1.5 0 003.5 8zm17 0A1.5 1.5 0 0019 9.5v7a1.5 1.5 0 003 0v-7A1.5 1.5 0 0020.5 8zm-4.97-5.84l1.3-1.3a.5.5 0 00-.7-.7l-1.48 1.48A5.84 5.84 0 0012 1c-.96 0-1.86.23-2.66.63L7.85.15a.5.5 0 00-.7.7l1.31 1.31A5.98 5.98 0 006 7h12a5.98 5.98 0 00-2.47-4.84zM10 5H9V4h1v1zm5 0h-1V4h1v1z"/></svg>';
+const ICON_APPLE = '<svg viewBox="0 0 24 24" fill="#16204a"><path d="M16.37 12.6c-.02-2.2 1.8-3.26 1.88-3.31-1.03-1.5-2.62-1.7-3.18-1.73-1.35-.14-2.64.8-3.33.8-.69 0-1.74-.78-2.87-.76a4.25 4.25 0 00-3.6 2.18c-1.54 2.66-.39 6.6 1.1 8.76.74 1.06 1.61 2.25 2.75 2.2 1.1-.04 1.52-.71 2.86-.71 1.33 0 1.71.71 2.88.69 1.19-.02 1.94-1.08 2.66-2.14.84-1.23 1.19-2.42 1.2-2.48-.02-.01-2.3-.88-2.35-3.5zM14.2 6.13c.6-.74 1.01-1.75.9-2.77-.87.04-1.93.58-2.55 1.31-.56.64-1.05 1.68-.92 2.68.97.07 1.96-.49 2.57-1.22z"/></svg>';
+
+const T = {
+  th: {
+    cls: "",
+    brand: "WHA Workforce · ลงเวลา",
+    h1: 'ลงเวลาไม่ได้? <em>แก้ได้ใน 1 นาที</em>',
+    sub: "แอปต้องรู้ว่าคุณอยู่ในคลัง ใช้ตำแหน่งเฉพาะตอนกดปุ่ม ไม่ติดตามตลอดเวลา",
+    s1: "ครั้งแรก: มือถือจะถามแบบนี้",
+    s1p: 'ให้กด <b>"อนุญาต"</b> หรือ <b>"ขณะใช้แอป"</b><br>อย่ากด "ไม่อนุญาต" เพราะจะลงเวลาไม่ได้',
+    dq: "อนุญาตให้ pull-operation-wha.vercel.app ใช้ตำแหน่งของคุณไหม",
+    dsite: "pull-operation-wha.vercel.app",
+    dno: "ไม่อนุญาต", dyes: "อนุญาต",
+    s2: 'เผลอกด "ไม่อนุญาต" ไปแล้ว ทำตามนี้',
+    and: "Android", andTag: "(Chrome)",
+    andSteps: [
+      'แตะ<span class="chip">ไอคอน</span>หน้าชื่อเว็บ ด้านบนจอ',
+      'แตะ <span class="chip">สิทธิ์</span> → <span class="chip">ตำแหน่ง</span> → <span class="chip">อนุญาต</span>',
+      'ถ้าไม่มีให้กด: การตั้งค่ามือถือ → แอป → Chrome → สิทธิ์ → ตำแหน่ง → อนุญาต',
+    ],
+    andDone: 'กลับมากด "ลองใหม่"',
+    andGps: '<b>GPS ปิด?</b> ปัดหน้าจอจากขอบบนลงมา แล้วแตะปุ่ม <span class="chip">ตำแหน่ง</span> ให้เปิด',
+    ios: "iPhone", iosTag: "(Safari)",
+    iosSteps: [
+      'แตะ <span class="chip">aA</span> ที่ช่องชื่อเว็บ → การตั้งค่าเว็บไซต์ → ตำแหน่งที่ตั้ง → <span class="chip">อนุญาต</span>',
+      'ถ้ายังไม่ได้: การตั้งค่า → ความเป็นส่วนตัวและความปลอดภัย → <span class="chip">บริการหาตำแหน่ง</span> → เปิด',
+      'เลื่อนลงแตะ "เว็บไซต์ของ Safari" → <span class="chip">ขณะใช้งานแอป</span>',
+    ],
+    iosDone: 'กลับมากด "โหลดหน้าใหม่"',
+    iosGps: '<b>ใช้ Chrome บน iPhone?</b> การตั้งค่า → บริการหาตำแหน่ง → Chrome → ขณะใช้งานแอป',
+    t1h: "เปิดลิงก์จาก LINE", t1: 'ใน LINE หาตำแหน่งไม่ได้บ่อย กดปุ่ม "เปิดใน Chrome / Safari" ในแอป',
+    t2h: "หาตำแหน่งไม่ทัน", t2: "หลังคาเหล็กทำให้ GPS ช้า ออกไปใกล้ประตูหรือที่โล่ง แล้วลองใหม่",
+    t3h: "ลืมลงเวลา / ยังกดไม่ได้", t3: "กดปุ่มนี้ในหน้าลงเวลา ใส่เวลาและเหตุผล ส่งให้หัวหน้าอนุมัติ", t3b: "ลืมลงเวลา? กดขอแก้เวลา",
+    ft: "สแกนเพื่อเปิดหน้าลงเวลา",
+    fs: "ในแอปมีวิธีแก้ทีละขั้นตามรุ่นมือถือ (ภาษาไทย / မြန်မာ) · ชื่อเมนูอาจต่างกันเล็กน้อยตามรุ่น · ยังไม่ได้ ให้แจ้งหัวหน้างาน",
+  },
+  my: {
+    cls: "my",
+    brand: "WHA Workforce · အချိန်မှတ်",
+    h1: 'အချိန်မှတ်လို့ မရဘူးလား? <em>၁ မိနစ်နဲ့ ပြင်လို့ရတယ်</em>',
+    sub: "ဂိုဒေါင်ထဲမှာ ရှိမရှိ သိဖို့ ခလုတ်နှိပ်ချိန်မှာသာ တည်နေရာကို သုံးပါတယ်။ အမြဲမစောင့်ကြည့်ပါ",
+    s1: "ပထမဆုံးအကြိမ်: ဖုန်းက ဒီလို မေးပါမယ်",
+    s1p: '<b>"Allow"</b> သို့မဟုတ် <b>"While using the app"</b> ကို နှိပ်ပါ<br>"Don\'t allow" မနှိပ်ပါနဲ့ - အချိန်မှတ်လို့ မရတော့ပါ',
+    dq: "pull-operation-wha.vercel.app က သင့်တည်နေရာကို သုံးခွင့်ပြုမလား",
+    dsite: "pull-operation-wha.vercel.app",
+    dno: "Don't allow", dyes: "Allow",
+    s2: '"Don\'t allow" နှိပ်မိသွားရင် ဒီလို လုပ်ပါ',
+    and: "Android", andTag: "(Chrome)",
+    andSteps: [
+      'စခရင်အပေါ်က ဝက်ဘ်ဆိုက်နာမည်ရှေ့က <span class="chip">အိုင်ကွန်</span> ကို နှိပ်ပါ',
+      '<span class="chip">Permissions</span> → <span class="chip">Location</span> → <span class="chip">Allow</span>',
+      'မရှိရင်: ဖုန်း Settings → Apps → Chrome → Permissions → Location → Allow',
+    ],
+    andDone: '"ထပ်ကြိုးစားရန်" ကို နှိပ်ပါ',
+    andGps: '<b>GPS ပိတ်ထားလား?</b> စခရင်အပေါ်ကနေ အောက်ဆွဲပြီး <span class="chip">Location</span> ခလုတ်ကို ဖွင့်ပါ',
+    ios: "iPhone", iosTag: "(Safari)",
+    iosSteps: [
+      'ဝက်ဘ်ဆိုက်နာမည်နေရာက <span class="chip">aA</span> → Website Settings → Location → <span class="chip">Allow</span>',
+      'မရသေးရင်: Settings → Privacy &amp; Security → <span class="chip">Location Services</span> → ဖွင့်ပါ',
+      'အောက်ဆွဲပြီး "Safari Websites" → <span class="chip">While Using the App</span>',
+    ],
+    iosDone: '"စာမျက်နှာ ပြန်ဖွင့်ရန်" ကို နှိပ်ပါ',
+    iosGps: '<b>iPhone မှာ Chrome သုံးလား?</b> Settings → Location Services → Chrome → While Using the App',
+    t1h: "LINE ကနေ ဖွင့်ထားရင်", t1: 'LINE ထဲမှာ တည်နေရာ မကြာခဏ ရှာမရပါ။ အက်ပ်ထဲက "Chrome / Safari မှာ ဖွင့်" ခလုတ်ကို နှိပ်ပါ',
+    t2h: "တည်နေရာ ရှာမမီရင်", t2: "သံမိုးကာအောက်မှာ GPS နှေးပါတယ်။ တံခါးနား သို့မဟုတ် ကွင်းပြင်ကို ထွက်ပြီး ထပ်ကြိုးစားပါ",
+    t3h: "မှတ်ဖို့ မေ့သွားရင်", t3: "အချိန်မှတ် စာမျက်နှာမှာ ဒီခလုတ်ကို နှိပ်၊ အချိန်နဲ့ အကြောင်းပြချက် ထည့်ပြီး ခေါင်းဆောင်ထံ ပို့ပါ", t3b: "အချိန်မှတ်ဖို့ မေ့သွားလား?",
+    ft: "စကင်ဖတ်ပြီး အချိန်မှတ် စာမျက်နှာကို ဖွင့်ပါ",
+    fs: "အက်ပ်ထဲမှာ ဖုန်းအမျိုးအစားအလိုက် အဆင့်ဆင့် ဖြေရှင်းနည်း ရှိပါတယ် (ภาษาไทย / မြန်မာ) · မရသေးရင် ခေါင်းဆောင်ကို ပြောပါ",
+  },
+};
+
+function qrSvg() {
+  const q = qrcode(0, "M");
+  q.addData(URL_APP);
+  q.make();
+  return q.createSvgTag({ cellSize: 4, margin: 0, scalable: true });
+}
+
+function page(t, qr) {
+  const steps = (arr, done) => `<ol class="steps">${arr.map((s, i) => `<li><span class="k">${i + 1}</span><span>${s}</span></li>`).join("")}<li class="done"><span class="k">✓</span><span>${done}</span></li></ol>`;
+  return `<section class="page ${t.cls}">
+    <header>
+      <div class="brand"><img src="../public/icons/icon-192.png" alt="">${t.brand}</div>
+      <h1>${t.h1}</h1>
+      <p>${t.sub}</p>
+      <div class="mascot" aria-hidden="true"></div>
+      <div class="stripe"></div>
+    </header>
+    <main>
+      <div class="first">
+        <div><h2><span class="n">1</span>${t.s1}</h2><p>${t.s1p}</p></div>
+        <div class="dialog" aria-hidden="true">
+          <div class="q">${t.dq}</div>
+          <div class="btns"><div class="b no">${t.dno}<span class="mark">✗</span></div><div class="b yes">${t.dyes}<span class="mark">✓</span></div></div>
+        </div>
+      </div>
+      <h2><span class="n">2</span>${t.s2}</h2>
+      <div class="cols">
+        <div class="card"><h3>${ICON_ANDROID}${t.and} <span class="tag">${t.andTag}</span></h3>${steps(t.andSteps, t.andDone)}<div class="gps">${t.andGps}</div></div>
+        <div class="card"><h3>${ICON_APPLE}${t.ios} <span class="tag">${t.iosTag}</span></h3>${steps(t.iosSteps, t.iosDone)}<div class="gps">${t.iosGps}</div></div>
+      </div>
+      <div class="tips">
+        <div class="tip"><b>${t.t1h}</b>${t.t1}</div>
+        <div class="tip"><b>${t.t2h}</b>${t.t2}</div>
+        <div class="tip fix"><b>${t.t3h}</b>${t.t3}<br><span class="btn">🕒 ${t.t3b}</span></div>
+      </div>
+    </main>
+    <footer>
+      <div class="qr">${qr}</div>
+      <div><div class="t">${t.ft}</div><div class="u">pull-operation-wha.vercel.app/attendance</div><div class="s">${t.fs}</div></div>
+    </footer>
+  </section>`;
+}
+
+const qr = typeof qrcode === "function" ? qrSvg() : '<div style="font-size:8pt;padding:2mm">QR</div>';
+document.getElementById("root").innerHTML = page(T.th, qr) + page(T.my, qr);
+</script>
+</body>
+</html>
