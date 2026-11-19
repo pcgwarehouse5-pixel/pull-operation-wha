@@ -6,6 +6,7 @@ import { useApp } from "@/components/AuthProvider";
 import { Alert, Badge, Button, Card, Empty, Field, Modal, inputCls } from "@/components/ui";
 import { PageHelper } from "@/components/Puinun";
 import { Icon } from "@/components/Icon";
+import { CurrentLocation } from "@/components/warehouses/CurrentLocation";
 import { errText, sb } from "@/lib/supabase";
 import { isManagerRole, type Warehouse } from "@/lib/types";
 
@@ -31,6 +32,7 @@ export default function WarehousesPage() {
   const { profile, warehouses, reload, preview } = useApp();
   const canEdit = isManagerRole(profile.role);
   const [form, setForm] = useState<Form | null>(null);
+  const [autoLocate, setAutoLocate] = useState(false);
 
   return (
     <AppShell title="คลัง" minRole="supervisor">
@@ -67,23 +69,32 @@ export default function WarehousesPage() {
                     </p>
                   </div>
                   {canEdit && (
-                    <Button variant="secondary" size="sm" onClick={() => setForm(toForm(w))}>
+                    <Button variant="secondary" size="sm" onClick={() => { setAutoLocate(false); setForm(toForm(w)); }}>
                       แก้ไข
                     </Button>
                   )}
                 </div>
+                {canEdit && (
+                  <button
+                    type="button"
+                    onClick={() => { setAutoLocate(true); setForm(toForm(w)); }}
+                    className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-sky font-semibold text-brand hover:bg-[#dbe5f8]"
+                  >
+                    <Icon name="pin" size={18} /> ตั้งพิกัดจากจุดที่ฉันยืนอยู่
+                  </button>
+                )}
               </Card>
             </li>
           ))}
         </ul>
       )}
 
-      {form && <WarehouseForm initial={form} preview={preview} onClose={() => setForm(null)} onSaved={reload} />}
+      {form && <WarehouseForm initial={form} preview={preview} autoLocate={autoLocate} onClose={() => setForm(null)} onSaved={reload} />}
     </AppShell>
   );
 }
 
-function WarehouseForm({ initial, preview, onClose, onSaved }: { initial: Form; preview: boolean; onClose: () => void; onSaved: () => Promise<void> }) {
+function WarehouseForm({ initial, preview, autoLocate, onClose, onSaved }: { initial: Form; preview: boolean; autoLocate: boolean; onClose: () => void; onSaved: () => Promise<void> }) {
   const [f, setF] = useState(initial);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -139,7 +150,12 @@ function WarehouseForm({ initial, preview, onClose, onSaved }: { initial: Form; 
             <input className={inputCls} value={f.longitude} onChange={(e) => set("longitude", e.target.value)} inputMode="decimal" placeholder="100.9259" />
           </Field>
         </div>
-        <p className="-mt-2 text-[13px] text-muted">เปิด Google Maps กดค้างที่คลัง แล้วคัดลอกตัวเลข 2 ชุดมาใส่ (ใช้ตอน Check In)</p>
+        <CurrentLocation
+          auto={autoLocate}
+          prev={initial.latitude && initial.longitude ? { lat: Number(initial.latitude), lng: Number(initial.longitude) } : null}
+          onFix={(lat, lng) => setF((x) => ({ ...x, latitude: lat, longitude: lng }))}
+        />
+        <p className="-mt-2 text-[13px] text-muted">หรือเปิด Google Maps กดค้างที่คลัง แล้วคัดลอกตัวเลข 2 ชุดมาใส่ (ใช้ตอน Check In)</p>
         <div className="grid grid-cols-2 gap-3">
           <Field label="รัศมี Check In (เมตร)">
             <input className={inputCls} value={f.checkin_radius_m} onChange={(e) => set("checkin_radius_m", e.target.value)} inputMode="numeric" />
