@@ -91,6 +91,9 @@ export default function HomePage() {
             {clockedIn ? t("home.clockOut") : t("home.clockIn")}
           </Link>
           {clockedIn && row?.first_in && <p className="mt-2 text-center text-[14px] font-semibold text-ok">{t("home.inAt", { t: fmt.time(row.first_in) })}</p>}
+          <Link href="/attendance/fix" className="mt-2 flex min-h-11 items-center justify-center gap-1.5 rounded-2xl bg-white/80 text-[15px] font-semibold text-brand hover:bg-white">
+            <Icon name="clock" size={18} /> {t("att.forgot")}
+          </Link>
         </div>}
       </section>
 

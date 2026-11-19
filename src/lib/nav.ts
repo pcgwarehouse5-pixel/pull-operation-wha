@@ -12,6 +12,7 @@ export type NavItem = {
   onlyRole?: AppRole; // เฉพาะบทบาทนี้
   short?: string; // ชื่อสั้นบนแถบล่างของมือถือ
   timekeeping?: boolean; // เฉพาะคนที่ลงเวลา/อยู่ในตารางกะ (ซ่อนจากผู้จัดการฝ่ายขึ้นไป)
+  activeAs?: string; // เปิดหน้านี้แล้วให้ไฮไลต์เมนูอื่นแทน (หน้าย่อยของเมนูนั้น)
 };
 
 export const NAV_GROUPS: { id: "mine" | "staff" | "pull" | "manage"; title: string; items: NavItem[] }[] = [
@@ -21,6 +22,7 @@ export const NAV_GROUPS: { id: "mine" | "staff" | "pull" | "manage"; title: stri
     items: [
       { key: "home", href: "/", label: "หน้าหลัก", desc: "ภาพรวมของฉัน", icon: "home" },
       { key: "attendance", href: "/attendance", label: "ลงเวลา", desc: "กดเข้า-ออกงาน ดูเวลาย้อนหลัง ขอแก้เวลา", icon: "pin", timekeeping: true },
+      { key: "attendance-fix", href: "/attendance/fix", label: "ขอแก้เวลา", desc: "ลืมกดเข้า-ออกงาน หรือ GPS ใช้ไม่ได้ ส่งให้หัวหน้าอนุมัติ", icon: "clock", timekeeping: true, activeAs: "attendance" },
       { key: "leave", href: "/leave", label: "ลางาน", desc: "ยื่นใบลา ดูวันลาคงเหลือ", icon: "leave", timekeeping: true },
       { key: "my-shifts", href: "/my-shifts", label: "ตารางกะของฉัน", desc: "กะของฉันรายเดือน", icon: "calendar", short: "กะของฉัน", timekeeping: true },
       { key: "my-position", href: "/my-position", label: "ตำแหน่งงานวันนี้", desc: "ตำแหน่งที่หัวหน้าจัดให้ และเวลาพัก", icon: "grid", short: "ตำแหน่ง", timekeeping: true },
@@ -90,5 +92,5 @@ export function activeKey(pathname: string): string | null {
   for (const g of NAV_GROUPS)
     for (const i of g.items)
       if (i.href !== "/" && (pathname === i.href || pathname.startsWith(i.href + "/")) && (!best || i.href.length > best.href.length)) best = i;
-  return best?.key ?? null;
+  return best ? (best.activeAs ?? best.key) : null;
 }

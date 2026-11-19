@@ -50,7 +50,7 @@ function useClock() {
   return now;
 }
 
-export default function AttendancePage() {
+export default function AttendancePage({ openFix = false }: { openFix?: boolean }) {
   const { profile: me, warehouses, myWarehouseIds, demo } = useApp();
   const { t, fmt } = useI18n();
   const shiftDefs = useShiftDefs();
@@ -114,6 +114,12 @@ export default function AttendancePage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- โหลดข้อมูลจาก Supabase ตอนเปิดหน้า/เปลี่ยนเดือน
     load();
   }, [load]);
+
+  // เปิดจากเมนู "ขอแก้เวลา" หรือลิงก์ "ลืมลงเวลา?" ในหน้าหลัก (/attendance/fix): เปิดฟอร์มของวันนี้ทันที
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- เปิดฟอร์มหลัง mount (วันที่ตามเครื่องผู้ใช้)
+    if (openFix) setFix(todayIso());
+  }, [openFix]);
 
   // สถานะสิทธิ์ตำแหน่ง: ถ้าเคยกด "ไม่อนุญาต" ไว้ แสดงวิธีแก้ทันทีที่เปิดหน้า (ไม่ต้องรอกดเข้างานก่อน)
   useEffect(() => {
@@ -242,6 +248,17 @@ export default function AttendancePage() {
           </Button>
         </div>
 
+        {/* ลืมกด / กดไม่ได้: ปุ่มขอแก้เวลาให้เห็นชัด (เดิมอยู่ท้ายหน้า หาไม่เจอ) */}
+        <div className="mt-3 px-4 sm:px-5">
+          <button
+            type="button"
+            onClick={() => setFix(openIn?.work_date ?? today)}
+            className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-white text-[16px] font-bold text-brand ring-2 ring-[#c9d6f2] hover:bg-sky"
+          >
+            <Icon name="clock" size={20} /> {t("att.forgot")}
+          </button>
+        </div>
+
         {/* สถานะตำแหน่ง */}
         <div className="mt-4 flex items-center gap-2 border-t border-line bg-paper/60 px-4 py-3 text-[14px] sm:px-5">
           <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${near ? (near.d <= near.w.checkin_radius_m ? "bg-ok" : "bg-bad") : "bg-[#a9b2c8]"}`} aria-hidden="true" />
@@ -322,7 +339,7 @@ export default function AttendancePage() {
       ) : (
         <ul className="overflow-hidden rounded-[20px] bg-white ring-1 ring-line">
           {rows.map((r) => {
-            const fixable = ["no_out", "no_in", "absent", "late", "early", "late_early"].includes(r.status) && !r.pending_correction;
+            const fixable = ["no_out", "no_in", "absent", "waiting", "late", "early", "late_early"].includes(r.status) && !r.pending_correction;
             return (
               <li key={r.work_date} className="border-b border-line px-3.5 py-3 last:border-b-0">
                 <div className="flex items-center gap-3">
