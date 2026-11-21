@@ -222,6 +222,16 @@ export function previewLeaveQueue(meId: string) {
   return previewLeaves(meId).filter((r) => PREVIEW_PEOPLE[r.user_id]).map((r) => ({ ...r, profiles: PREVIEW_PEOPLE[r.user_id] }));
 }
 
+// ใบลาที่อนุมัติแล้ว (ตารางกะ): ป่วย 1 วัน · พักร้อนคร่อมวันหยุด · กิจครึ่งวันเช้า
+export function previewShiftLeaves(dates: string[]) {
+  const at = (i: number) => dates[Math.min(i, dates.length - 1)];
+  return [
+    { user_id: "p1", leave_type: "sick", start_date: at(2), end_date: at(2), period: "full" as const, status: "approved" },
+    { user_id: "p2", leave_type: "vacation", start_date: at(4), end_date: at(8), period: "full" as const, status: "approved" },
+    { user_id: "preview-me", leave_type: "personal", start_date: at(11), end_date: at(11), period: "morning" as const, status: "approved" },
+  ];
+}
+
 // คำขอแก้เวลาของคนในคลัง (หน้าติดตาม)
 export function previewFixQueue() {
   return previewCorrections("p1").map((c) => ({ ...c, profiles: PREVIEW_PEOPLE.p1 }));

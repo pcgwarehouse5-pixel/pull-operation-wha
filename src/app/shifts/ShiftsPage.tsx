@@ -11,6 +11,7 @@ import { ShiftTools, type ToolKey } from "@/components/shifts/ShiftTools";
 import { ExcelGrid, GridHelp, type Group } from "@/components/shifts/ExcelGrid";
 import { errText, fetchAll, sb } from "@/lib/supabase";
 import { mergeMembers, sortByMembers } from "@/lib/shift-grid";
+import { LEAVE_PERIOD_TEXT, leaveDayMap, leaveOnDay, type DayLeave, type LeaveSpan } from "@/lib/shift-leave";
 import { useOptions } from "@/lib/useOptions";
 import { shortDay, thaiDateTime } from "@/lib/format";
 import { isGlobal, isManagerRole } from "@/lib/types";
@@ -34,7 +35,7 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
   const canEdit = !lead || isManagerRole(me.role);
   const audience = lead ? "หัวหน้าคลัง" : "พนักงาน";
   const title = lead ? "ตารางกะหัวหน้าคลัง" : "ตารางกะ";
-  const opts = useOptions(["shift_type", "position"]);
+  const opts = useOptions(["shift_type", "position", "leave_type"]);
   const visible = useMemo(
     () => warehouses.filter((w) => w.is_active && (isGlobal(me.role) || myWarehouseIds.includes(w.id))),
     [warehouses, me.role, myWarehouseIds],
@@ -85,6 +86,13 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
   const [absent, setAbsent] = useState<Set<string>>(new Set());
   const [liveDate, setLiveDate] = useState<string | null>(null);
   const absReq = useRef(0);
+  // วันลาที่อนุมัติแล้ว: อ่านจากใบลาโดยตรง ไม่เขียนทับกะในตาราง ถ้ายกเลิกใบลา ช่องกลับเป็นกะเดิมเอง
+  const [leaves, setLeaves] = useState<Map<string, DayLeave>>(new Map());
+  const leaveReq = useRef(0);
+  const leaveLabels = useMemo(
+    () => new Map((demo ? demo.PREVIEW_LEAVE_TYPES : (opts.leave_type ?? [])).map((o) => [o.value, o.label])),
+    [demo, opts.leave_type],
+  );
 
   const defs = useMemo(() => new Map((opts.shift_type ?? []).map((o) => [o.value, shiftDef(o)])), [opts.shift_type]);
   const activeDefs = useMemo(() => (opts.shift_type ?? []).filter((o) => o.is_active).map(shiftDef), [opts.shift_type]);
@@ -135,6 +143,31 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
         setAbsent(new Set(rows.map((r) => keyOf(r.user_id, r.work_date))));
       } catch {
         if (req === absReq.current) setAbsent(new Set());
+      }
+    })();
+    // วันลาโหลดแยก: ถ้าโหลดไม่ได้ ตารางกะยังใช้ได้ แต่ต้องบอกผู้ใช้ เพราะช่องจะไม่ขึ้นว่าลา
+    setLeaves(new Map());
+    const lvReq = ++leaveReq.current;
+    (async () => {
+      try {
+        const list: LeaveSpan[] = demo
+          ? demo.previewShiftLeaves(viewDates)
+          : await fetchAll<LeaveSpan>((f, t) =>
+              sb()
+                .from("leave_requests")
+                .select("user_id, leave_type, start_date, end_date, period, status, profiles!inner(warehouse_id)")
+                .eq("profiles.warehouse_id", wh)
+                .in("status", ["approved", "cancel_requested"])
+                .lte("start_date", lastDay)
+                .gte("end_date", from)
+                .order("user_id")
+                .order("start_date")
+                .order("id")
+                .range(f, t),
+            );
+        if (lvReq === leaveReq.current) setLeaves(leaveDayMap(list, viewDates));
+      } catch {
+        if (lvReq === leaveReq.current) setMsg({ tone: "warning", text: "โหลดข้อมูลวันลาไม่สำเร็จ ช่องวันลาอาจไม่แสดง ลองรีเฟรชหน้า" });
       }
     })();
     try {
@@ -205,6 +238,13 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
   const multiMonth = viewMonths.length > 1;
   const isPublished = (m: string) => statuses[m]?.status === "published";
   const monthHolidays = useMemo(() => holidays.filter((h) => h.holiday_date.startsWith(ym)), [holidays, ym]); // เครื่องมือวางกะใช้เฉพาะเดือนหลัก
+  const leaveFor = useCallback(
+    (id: string, d: string) => {
+      const cell = grid[id]?.[d];
+      return leaveOnDay(leaves, id, d, cell, cell ? defs.get(cell.shift_code) : undefined, holidayMap.has(d));
+    },
+    [leaves, grid, defs, holidayMap],
+  );
 
   // คนที่แสดงในตาราง: ยังทำงานอยู่และไม่ได้ตั้ง "ไม่แสดงในตารางกะ" + คนที่มีกะในเดือนนี้อยู่แล้ว
   const roster = useMemo(
@@ -234,6 +274,17 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
     for (const k of absent) if (ids.has(k.slice(0, k.indexOf("|")))) n++;
     return n;
   }, [absent, shown]);
+
+  const leaveInView = useMemo(() => {
+    let n = 0;
+    for (const e of shown) {
+      for (const d of viewDates) {
+        const l = leaveFor(e.id, d);
+        if (l) n += l.period === "full" ? 1 : 0.5;
+      }
+    }
+    return n;
+  }, [shown, viewDates, leaveFor]);
 
   function changeScope(next: () => void) {
     if (nChanges && !confirm(`ยังไม่ได้บันทึก ${nChanges} ช่อง ต้องการทิ้งการแก้ไขหรือไม่?`)) return;
@@ -569,6 +620,12 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
                 {multiMonth ? "ช่วงนี้" : "เดือนนี้"} {absentInView} คน-วัน
               </span>
             )}
+            {leaveInView > 0 && (
+              <span className="inline-flex items-center gap-1.5 font-semibold text-ink">
+                <span className="inline-flex h-6 items-center rounded-md bg-white px-1.5 text-[12px] font-bold text-black ring-2 ring-black ring-inset">ลา</span>
+                {multiMonth ? "ช่วงนี้" : "เดือนนี้"} {leaveInView} คน-วัน
+              </span>
+            )}
           </div>
 
           {!emps ? (
@@ -601,15 +658,21 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
                 onOpenCell={(emp, date) => canEdit && setCellEdit({ emp, date })}
                 onMessage={(tone, text) => setMsg({ tone, text })}
                 absent={absent}
+                leaves={leaves}
+                leaveLabels={leaveLabels}
               />
               <GridHelp />
             </>
           ) : (
-            <DayView emps={shown} dates={viewDates} day={dayInMonth} setDay={setDay} grid={grid} defs={defs} holidayMap={holidayMap} absent={absent} />
+            <DayView emps={shown} dates={viewDates} day={dayInMonth} setDay={setDay} grid={grid} defs={defs} holidayMap={holidayMap} absent={absent} leaveFor={leaveFor} leaveLabels={leaveLabels} />
           )}
 
           <Legend defs={activeDefs} grid={grid} />
           <DayColorLegend />
+          <div className="mt-1.5 flex items-start gap-2 px-1 text-[13px] leading-snug text-muted">
+            <span className="inline-flex h-7 w-10 shrink-0 items-center justify-center rounded-md bg-white text-[13px] font-bold text-black ring-2 ring-black ring-inset">ลา</span>
+            <p className="min-w-0 pt-1">ลาที่อนุมัติแล้ว ในช่องบอกประเภท เช่น ป่วย กิจ พักร้อน · ลาเช้า/ลาบ่าย = ครึ่งวัน · ลาเต็มวันไม่นับในจำนวนคนทำงาน</p>
+          </div>
           {liveDate && (
             <div className="mt-1.5 flex items-start gap-2 px-1 text-[13px] leading-snug text-muted">
               <span className="inline-flex h-7 w-10 shrink-0 items-center justify-center rounded-md bg-black text-[13px] font-bold text-white">ขาด</span>
@@ -644,6 +707,10 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
               defs={activeDefs}
               allDefs={defs}
               holiday={holidayMap.get(cellEdit.date)}
+              leaveText={(() => {
+                const l = leaveFor(cellEdit.emp.id, cellEdit.date);
+                return l ? `ลา${leaveLabels.get(l.type) ?? l.type} (${LEAVE_PERIOD_TEXT[l.period]})` : undefined;
+              })()}
               onClose={() => setCellEdit(null)}
               onPick={(cell) => {
                 applyChanges([{ user_id: cellEdit.emp.id, work_date: cellEdit.date, cell }]);
@@ -687,8 +754,10 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
 
 // ---------- มุมมองรายวัน (เหมาะกับมือถือ) ----------
 function DayView({
-  emps, dates, day, setDay, grid, defs, holidayMap, absent,
+  emps, dates, day, setDay, grid, defs, holidayMap, absent, leaveFor, leaveLabels,
 }: {
+  leaveFor: (id: string, d: string) => DayLeave | null;
+  leaveLabels: Map<string, string>;
   emps: Emp[];
   dates: string[];
   day: string;
@@ -716,8 +785,9 @@ function DayView({
     if (!!da?.working !== !!db?.working) return da?.working ? -1 : 1;
     return (da?.start ?? 9999) - (db?.start ?? 9999) || a.localeCompare(b);
   });
-  const workingCount = emps.filter((e) => defs.get(grid[e.id]?.[day]?.shift_code ?? "")?.working).length;
-  const absentCount = emps.filter((e) => absent.has(keyOf(e.id, day))).length;
+  const workingCount = emps.filter((e) => defs.get(grid[e.id]?.[day]?.shift_code ?? "")?.working && leaveFor(e.id, day)?.period !== "full").length;
+  const absentCount = emps.filter((e) => !leaveFor(e.id, day) && absent.has(keyOf(e.id, day))).length;
+  const leaveCount = emps.filter((e) => leaveFor(e.id, day)).length;
 
   return (
     <div>
@@ -749,6 +819,7 @@ function DayView({
       </div>
       <p className="mb-2 px-1 font-semibold text-brand">
         ทำงาน {workingCount} คน{holidayMap.get(day) ? ` · ${holidayMap.get(day)}` : ""}
+        {leaveCount > 0 && <span className="text-ink"> · ลา {leaveCount} คน</span>}
         {absentCount > 0 && <span className="text-bad"> · ขาดงาน {absentCount} คน</span>}
       </p>
       <div className="grid gap-3 sm:grid-cols-2">
@@ -763,14 +834,23 @@ function DayView({
                 <span className="ml-auto text-lg font-bold">{list.length} คน</span>
               </div>
               <ul className="divide-y divide-line">
-                {list.map((e) => (
-                  <li key={e.id} className="flex items-center gap-2 py-1.5">
-                    <span className="min-w-0 flex-1 truncate">{empName(e)}</span>
-                    {absent.has(keyOf(e.id, day)) && <span className="shrink-0 rounded-md bg-black px-2 py-0.5 text-[13px] font-bold text-white">ขาดงาน</span>}
-                    {grid[e.id]?.[day]?.holiday_work && <Badge tone="amber">{HW_LABEL[grid[e.id][day].holiday_work!]}</Badge>}
-                    <span className="text-[13px] text-muted">{e.position ?? "-"}</span>
-                  </li>
-                ))}
+                {list.map((e) => {
+                  const lv = leaveFor(e.id, day);
+                  return (
+                    <li key={e.id} className="flex items-center gap-2 py-1.5">
+                      <span className="min-w-0 flex-1 truncate">{empName(e)}</span>
+                      {lv ? (
+                        <span className="shrink-0 rounded-md bg-white px-2 py-0.5 text-[13px] font-bold text-black ring-2 ring-black ring-inset">
+                          ลา{leaveLabels.get(lv.type) ?? lv.type}{lv.period !== "full" ? ` (${LEAVE_PERIOD_TEXT[lv.period]})` : ""}
+                        </span>
+                      ) : (
+                        absent.has(keyOf(e.id, day)) && <span className="shrink-0 rounded-md bg-black px-2 py-0.5 text-[13px] font-bold text-white">ขาดงาน</span>
+                      )}
+                      {grid[e.id]?.[day]?.holiday_work && <Badge tone="amber">{HW_LABEL[grid[e.id][day].holiday_work!]}</Badge>}
+                      <span className="text-[13px] text-muted">{e.position ?? "-"}</span>
+                    </li>
+                  );
+                })}
               </ul>
             </Card>
           );
@@ -782,8 +862,9 @@ function DayView({
 
 // ---------- แก้ทีละช่อง ----------
 function CellModal({
-  emp, date, cell, defs, allDefs, holiday, onClose, onPick,
+  emp, date, cell, defs, allDefs, holiday, leaveText, onClose, onPick,
 }: {
+  leaveText?: string;
   emp: Emp;
   date: string;
   cell: Cell | null;
@@ -802,6 +883,11 @@ function CellModal({
         {holiday ? ` · ${holiday}` : ""}
         {cell ? ` · ตอนนี้: ${cell.shift_code}` : " · ยังไม่มีกะ"}
       </p>
+      {leaveText && (
+        <p className="mb-3 rounded-lg bg-white px-3 py-2 text-[14px] font-bold text-black ring-2 ring-black ring-inset">
+          วันนี้{leaveText} อนุมัติแล้ว · การเปลี่ยนกะไม่ได้ยกเลิกใบลา
+        </p>
+      )}
       <div className="mb-4 flex flex-wrap gap-2">
         {defs.map((d) => (
           <ShiftChip
