@@ -570,18 +570,20 @@ export function ExcelGrid(p: Props) {
               return (
                 <td key={d} data-r={r} data-c={c} className="h-[42px] min-w-[52px] border-r border-b border-line/70 p-[2px]">
                   <div
-                    className={`relative flex h-full w-full flex-col items-center justify-center rounded-[5px] text-[11px] leading-[1.15] font-semibold ${cell ? "" : "text-transparent"} ${changed ? "outline-2 -outline-offset-2 outline-ink outline-dashed" : ""} ${abs ? "outline-[3px] -outline-offset-[3px] outline-[#d92d20]" : ""}`}
-                    style={cell ? { background: color.bg, color: color.text } : undefined}
-                    title={abs ? `ขาดงาน: ไม่ลงเวลาเข้า-ออก และไม่ได้ลา${tip ? ` · ${tip}` : ""}` : tip}
+                    className={`relative flex h-full w-full flex-col items-center justify-center rounded-[5px] text-[11px] leading-[1.15] font-semibold ${cell ? "" : "text-transparent"} ${changed ? "outline-2 -outline-offset-2 outline-ink outline-dashed" : ""}`}
+                    style={abs ? { background: "#000", color: "#fff" } : cell ? { background: color.bg, color: color.text } : undefined}
+                    title={abs ? `ขาดงาน: ต้องเข้างาน ${lines?.[0] ?? "-"} น. ไม่ลงเวลาเข้า-ออก และไม่ได้ลา${tip ? ` · ${tip}` : ""}` : tip}
                   >
-                    {lines ? (
+                    {abs ? (
+                      <>
+                        {/* ขาดงาน: ช่องดำ ตัวขาวเต็มช่อง + เวลาที่ต้องเข้างานตัวเล็ก */}
+                        <span className="text-[17px] leading-[19px] font-bold" aria-label="ขาดงาน">ขาด</span>
+                        <span className="num text-[10px] leading-[11px] font-medium">{lines?.[0]}</span>
+                      </>
+                    ) : lines ? (
                       <>
                         <span className="num">{lines[0]}</span>
-                        {abs ? (
-                          <span className="mt-[1px] rounded-[4px] bg-[#d92d20] px-[4px] text-[10px] leading-[14px] font-bold text-white" aria-label="ขาดงาน">ขาด</span>
-                        ) : (
-                          lines[1] && <span className="num opacity-90">{lines[1]}</span>
-                        )}
+                        {lines[1] && <span className="num opacity-90">{lines[1]}</span>}
                       </>
                     ) : (
                       "·"

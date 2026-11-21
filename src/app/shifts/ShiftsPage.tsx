@@ -478,11 +478,13 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
 
           <DayColorLegend />
           {liveDate && (
-            <p className="-mt-1 mb-3 flex flex-wrap items-center gap-1.5 px-1 text-[13px] text-muted">
-              <span className="inline-flex h-6 items-center rounded-md bg-[#d92d20] px-1.5 text-[11px] font-bold text-white">ขาด</span>
-              ขาดงาน = มีกะทำงาน แต่ไม่ลงเวลาเข้า-ออก และไม่ได้ลา (นับตั้งแต่ {shortDay(liveDate)} {Number(liveDate.slice(0, 4)) + 543})
-              {absentInView > 0 && <b className="text-bad">· เดือนนี้ {absentInView} คน-วัน</b>}
-            </p>
+            <div className="-mt-1 mb-3 flex items-start gap-2 px-1 text-[13px] leading-snug text-muted">
+              <span className="inline-flex h-6 shrink-0 items-center rounded-md bg-black px-1.5 text-[12px] font-bold text-white">ขาด</span>
+              <p className="min-w-0">
+                มีกะทำงาน แต่ไม่ลงเวลาเข้า-ออก และไม่ได้ลา · ตัวเลขเล็ก = เวลาที่ต้องเข้างาน (นับตั้งแต่ {shortDay(liveDate)} {Number(liveDate.slice(0, 4)) + 543})
+                {absentInView > 0 && <b className="text-bad"> · เดือนนี้ {absentInView} คน-วัน</b>}
+              </p>
+            </div>
           )}
 
           {!emps ? (
@@ -666,7 +668,7 @@ function DayView({
                 {list.map((e) => (
                   <li key={e.id} className="flex items-center gap-2 py-1.5">
                     <span className="min-w-0 flex-1 truncate">{empName(e)}</span>
-                    {absent.has(keyOf(e.id, day)) && <Badge tone="red">ขาดงาน</Badge>}
+                    {absent.has(keyOf(e.id, day)) && <span className="shrink-0 rounded-md bg-black px-2 py-0.5 text-[13px] font-bold text-white">ขาดงาน</span>}
                     {grid[e.id]?.[day]?.holiday_work && <Badge tone="amber">{HW_LABEL[grid[e.id][day].holiday_work!]}</Badge>}
                     <span className="text-[13px] text-muted">{e.position ?? "-"}</span>
                   </li>
