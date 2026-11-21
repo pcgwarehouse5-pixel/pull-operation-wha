@@ -6,7 +6,7 @@ import { PageHelper } from "@/components/Puinun";
 import { useApp } from "@/components/AuthProvider";
 import { Alert, Badge, Button, Card, Empty, Loading, Modal, inputCls } from "@/components/ui";
 import { Icon } from "@/components/Icon";
-import { DayColorLegend, EMP_COLS, empName, isLeadEmp, ShiftChip, type Emp, type Holiday } from "@/components/shifts/common";
+import { DayColorLegend, EMP_COLS, empName, isLeadEmp, ShiftChip, ShiftMarkText, type Emp, type Holiday } from "@/components/shifts/common";
 import { ShiftTools, type ToolKey } from "@/components/shifts/ShiftTools";
 import { ExcelGrid, GridHelp, type Group } from "@/components/shifts/ExcelGrid";
 import { errText, fetchAll, sb } from "@/lib/supabase";
@@ -476,16 +476,18 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
             </Card>
           )}
 
-          <DayColorLegend />
-          {liveDate && (
-            <div className="-mt-1 mb-3 flex items-start gap-2 px-1 text-[13px] leading-snug text-muted">
-              <span className="inline-flex h-6 shrink-0 items-center rounded-md bg-black px-1.5 text-[12px] font-bold text-white">ขาด</span>
-              <p className="min-w-0">
-                มีกะทำงาน แต่ไม่ลงเวลาเข้า-ออก และไม่ได้ลา · ตัวเลขเล็ก = เวลาที่ต้องเข้างาน (นับตั้งแต่ {shortDay(liveDate)} {Number(liveDate.slice(0, 4)) + 543})
-                {absentInView > 0 && <b className="text-bad"> · เดือนนี้ {absentInView} คน-วัน</b>}
-              </p>
-            </div>
-          )}
+          {/* บรรทัดเดียวเหนือตาราง ให้เห็นตารางเร็วที่สุด · คำอธิบายสีเต็มอยู่ใต้ตาราง */}
+          <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-[13px] text-muted">
+            <span>
+              เลขในช่อง = <b className="text-ink">เวลาเข้างาน</b> <span className="num">(8 = 08:00 · 20 = 20:00 · 7:30 = 07:30)</span>
+            </span>
+            {absentInView > 0 && (
+              <span className="inline-flex items-center gap-1.5 font-semibold text-ink">
+                <span className="inline-flex h-6 items-center rounded-md bg-black px-1.5 text-[12px] font-bold text-white">ขาด</span>
+                เดือนนี้ {absentInView} คน-วัน
+              </span>
+            )}
+          </div>
 
           {!emps ? (
             <Loading />
@@ -524,7 +526,16 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
             <DayView emps={shown} dates={dates} day={dayInMonth} setDay={setDay} grid={grid} defs={defs} holidayMap={holidayMap} absent={absent} />
           )}
 
-          <Legend defs={activeDefs} />
+          <Legend defs={activeDefs} grid={grid} />
+          <DayColorLegend />
+          {liveDate && (
+            <div className="mt-1.5 flex items-start gap-2 px-1 text-[13px] leading-snug text-muted">
+              <span className="inline-flex h-7 w-10 shrink-0 items-center justify-center rounded-md bg-black text-[13px] font-bold text-white">ขาด</span>
+              <p className="min-w-0 pt-1">
+                มีกะทำงาน แต่ไม่ลงเวลาเข้า-ออก และไม่ได้ลา · ตัวเลขเล็ก = เวลาที่ต้องเข้างาน (นับตั้งแต่ {shortDay(liveDate)} {Number(liveDate.slice(0, 4)) + 543})
+              </p>
+            </div>
+          )}
 
           {/* แถบบันทึก */}
           {nChanges > 0 && (
@@ -741,16 +752,30 @@ function CellModal({
   );
 }
 
-function Legend({ defs }: { defs: ShiftDef[] }) {
-  if (!defs.length) return null;
+/** รายการกะใต้ตาราง: เลขในช่อง → เวลาเข้า-เลิกเต็ม · แสดงเฉพาะกะที่ใช้ในเดือนนี้ เรียงตามเวลาเข้างาน */
+function Legend({ defs, grid }: { defs: ShiftDef[]; grid: Grid }) {
+  const used = new Set(Object.values(grid).flatMap((row) => Object.values(row).map((c) => c.shift_code)));
+  const list = (used.size ? defs.filter((d) => used.has(d.code)) : defs)
+    .filter((d) => d.code !== "OFF" && d.code !== "OFFC") // 2 สีนี้มีคำอธิบายใน DayColorLegend แล้ว
+    .slice()
+    .sort((a, b) => (a.start ?? 9999) - (b.start ?? 9999));
+  if (!list.length) return null;
   return (
-    <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 px-1 text-[13px] text-muted">
-      {defs.map((d) => (
-        <span key={d.code} className="inline-flex items-center gap-1.5">
-          <span className="inline-block h-3.5 w-3.5 rounded" style={{ background: d.bg }} aria-hidden="true" />
-          <b className="text-ink">{d.code}</b> {shiftTimeText(d) || d.label}
-        </span>
-      ))}
-    </div>
+    <ul className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1.5 px-1 text-[13px] text-muted sm:grid-cols-3 lg:grid-cols-4" aria-label="กะที่ใช้ในเดือนนี้">
+      {list.map((d) => {
+        const main = shiftTimeText(d) || d.label;
+        return (
+          <li key={d.code} className="flex min-w-0 items-center gap-1.5">
+            <span className="inline-flex h-7 w-10 shrink-0 items-center justify-center rounded-md" style={{ background: d.bg, color: d.text }}>
+              <ShiftMarkText code={d.code} def={d} small />
+            </span>
+            <span className="min-w-0 truncate" title={`${d.code} ${main}`}>
+              <b className="num text-ink">{main}</b>
+              {d.code !== main && <span className="ml-1 text-[11px]">{d.code}</span>}
+            </span>
+          </li>
+        );
+      })}
+    </ul>
   );
 }

@@ -4,6 +4,7 @@
 import { useMemo, useState } from "react";
 import { inputCls } from "../ui";
 import { fmtMinutes, type ShiftDef } from "@/lib/shifts";
+import { shiftMark } from "@/lib/shift-grid";
 
 export type Emp = {
   id: string;
@@ -117,20 +118,35 @@ export function DayRange({ dates, from, to, onChange }: { dates: string[]; from:
   );
 }
 
+/** ตัวใหญ่ในช่องกะ: เวลาเข้างานอย่างเดียว เช่น 8, 20, 7:30 (นาทีตัวเล็ก) · วันหยุด = ชื่อสั้น */
+export function ShiftMarkText({ code, def, small }: { code: string; def?: ShiftDef; small?: boolean }) {
+  const m = shiftMark(code, def);
+  if (m.kind === "time") {
+    return (
+      <span className="num inline-flex items-baseline leading-none font-bold tracking-tight">
+        {/* มีนาที (เช่น 19:30) ลดขนาดเล็กน้อยให้พอดีช่องกว้าง 44px */}
+        <span className={small ? "text-[15px]" : m.min ? "text-[17px]" : "text-[20px]"}>{m.hour}</span>
+        {m.min && <span className="text-[10px]">{m.min}</span>}
+      </span>
+    );
+  }
+  return <span className={`leading-none font-bold ${m.text.length <= 3 ? "text-[13px]" : "text-[10px]"}`}>{m.text}</span>;
+}
+
 /** คำอธิบายสีช่องในตารางกะ: OFF 2 สี และการมาทำงานวันหยุด (ได้ OT) */
 export function DayColorLegend() {
   const items: [string, string, string, string][] = [
     ["#ff0000", "#fff", "OFF", "วันหยุดประจำสัปดาห์ · ถ้าให้มาทำงาน = ได้ OT"],
     ["#facc15", "#16204a", "OFF", "วันหยุดที่บริษัทให้พิเศษ · เปลี่ยนเป็นวันทำงาน = ไม่ได้ OT"],
-    ["#dc2626", "#fff", "08:00", "แดงทั้งช่อง = มาทำงานวัน OFF แดง (ได้ OT)"],
-    ["#7c3aed", "#fff", "08:00", "ม่วง = วันหยุดประจำปี / มาทำงานวันหยุดประจำปี (ได้ OT อัตโนมัติ)"],
+    ["#dc2626", "#fff", "8", "แดงทั้งช่อง = มาทำงานวัน OFF แดง (ได้ OT)"],
+    ["#7c3aed", "#fff", "8", "ม่วง = วันหยุดประจำปี / มาทำงานวันหยุดประจำปี (ได้ OT อัตโนมัติ)"],
   ];
   return (
-    <ul className="mb-3 flex flex-wrap gap-x-4 gap-y-1.5 px-1 text-[13px] text-muted" aria-label="ความหมายของสี">
+    <ul className="mt-3 flex flex-col gap-1.5 px-1 text-[13px] leading-snug text-muted" aria-label="ความหมายของสี">
       {items.map(([bg, fg, t, d]) => (
-        <li key={d} className="flex items-center gap-1.5">
-          <span className="num inline-flex h-6 min-w-11 items-center justify-center rounded-md px-1 text-[11px] font-bold" style={{ background: bg, color: fg }}>{t}</span>
-          {d}
+        <li key={d} className="flex items-start gap-2">
+          <span className="num inline-flex h-7 w-10 shrink-0 items-center justify-center rounded-md text-[13px] font-bold" style={{ background: bg, color: fg }}>{t}</span>
+          <span className="min-w-0 pt-1">{d}</span>
         </li>
       ))}
     </ul>

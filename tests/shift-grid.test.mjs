@@ -1,7 +1,7 @@
 // ทดสอบสูตรตารางกะแบบ Excel (ข้อมูลสมมติ)
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseCellText, cellCopyText, cellLines, toTsv, fromTsv, pastePlan, fillPlan, moveTarget, norm } from "../src/lib/shift-grid.ts";
+import { parseCellText, cellCopyText, cellLines, shiftMark, toTsv, fromTsv, pastePlan, fillPlan, moveTarget, norm } from "../src/lib/shift-grid.ts";
 import { shiftDef, cellOf } from "../src/lib/shifts.ts";
 
 const defs = [
@@ -33,6 +33,18 @@ test("พิมพ์/วาง: เวลาหลายแบบ รหัส 
   assert.equal(p("   "), null, "ว่าง = ลบ");
   assert.match(p("9-18"), /ERR:ไม่มีกะเวลา 09:00-18:00/);
   assert.match(p("abc"), /ERR:ไม่รู้จัก/);
+});
+
+test("ตัวใหญ่ในช่อง: แสดงแค่เวลาเข้างาน (8, 20, 7:30) วันหยุดใช้ชื่อสั้น", () => {
+  const d = new Map(defs.map((x) => [x.code, x]));
+  assert.deepEqual(shiftMark("STD1", d.get("STD1")), { kind: "time", hour: "8", min: "" });
+  assert.deepEqual(shiftMark("GN_5", d.get("GN_5")), { kind: "time", hour: "20", min: "" });
+  assert.deepEqual(shiftMark("GA-2", d.get("GA-2")), { kind: "time", hour: "7", min: ":30" });
+  const midnight = shiftDef({ value: "N0", label: "00:00-09:00", extra: { start_time: "00:00", end_time: "09:00" } });
+  assert.deepEqual(shiftMark("N0", midnight), { kind: "time", hour: "0", min: "" });
+  assert.deepEqual(shiftMark("OFF", d.get("OFF")), { kind: "text", text: "หยุด" });
+  assert.deepEqual(shiftMark("HOL", d.get("HOL")), { kind: "text", text: "HOL" }, "ชื่อยาวใช้รหัสแทน");
+  assert.deepEqual(shiftMark("XYZ", undefined), { kind: "text", text: "XYZ" }, "รหัสที่ไม่มีในตั้งค่า");
 });
 
 test("ข้อความในช่องและตอนคัดลอก (วางกลับเข้าแอปได้ตรงเดิม)", () => {

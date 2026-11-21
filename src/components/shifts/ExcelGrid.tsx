@@ -5,7 +5,7 @@
 // กลุ่มตามตำแหน่ง: พับ/กาง และลากหัวกลุ่มเพื่อเรียงลำดับ · ลากจุด ⋮⋮ หน้าชื่อเพื่อเรียงคนในกลุ่ม (ใช้ได้ทั้งเมาส์และนิ้ว)
 // บนจอสัมผัส: แตะช่องเพื่อเลือกกะจากรายการ (ลากคลุมช่วงชนกับการเลื่อนจอ)
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { empName, type Emp } from "./common";
+import { ShiftMarkText, empName, type Emp } from "./common";
 import { Icon } from "../Icon";
 import { THAI_DAYS_SHORT, keyOf, weekday, type Cell, type Change, type Grid, type ShiftDef } from "@/lib/shifts";
 import {
@@ -567,12 +567,14 @@ export function ExcelGrid(p: Props) {
               const changed = keyOf(e.id, d) in pending;
               const abs = !!cell && !changed && !!p.absent?.has(keyOf(e.id, d));
               const tip = otDay === "HOL" ? `ทำงานวันหยุดประจำปี${holidayMap.get(d) ? ` (${holidayMap.get(d)})` : ""} · ได้ OT` : otDay === "OFF" ? "ทำงานวันหยุดประจำสัปดาห์ (OFF) · ได้ OT" : def?.noOt ? "วันหยุดที่บริษัทให้พิเศษ · มาทำงานไม่ได้ OT" : undefined;
+              // ในช่องโชว์แค่เวลาเข้างาน เวลาเต็มดูได้จากคำอธิบายเมื่อชี้ที่ช่อง และจากรายการกะใต้ตาราง
+              const timeTip = lines?.[1] ? `เข้างาน ${lines[0]} · เลิกงาน ${lines[1]}` : undefined;
               return (
-                <td key={d} data-r={r} data-c={c} className="h-[42px] min-w-[52px] border-r border-b border-line/70 p-[2px]">
+                <td key={d} data-r={r} data-c={c} className="h-[42px] min-w-[44px] border-r border-b border-line/70 p-[2px]">
                   <div
                     className={`relative flex h-full w-full flex-col items-center justify-center rounded-[5px] text-[11px] leading-[1.15] font-semibold ${cell ? "" : "text-transparent"} ${changed ? "outline-2 -outline-offset-2 outline-ink outline-dashed" : ""}`}
                     style={abs ? { background: "#000", color: "#fff" } : cell ? { background: color.bg, color: color.text } : undefined}
-                    title={abs ? `ขาดงาน: ต้องเข้างาน ${lines?.[0] ?? "-"} น. ไม่ลงเวลาเข้า-ออก และไม่ได้ลา${tip ? ` · ${tip}` : ""}` : tip}
+                    title={abs ? `ขาดงาน: ต้องเข้างาน ${lines?.[0] ?? "-"} น. ไม่ลงเวลาเข้า-ออก และไม่ได้ลา${tip ? ` · ${tip}` : ""}` : [timeTip, tip].filter(Boolean).join(" · ") || undefined}
                   >
                     {abs ? (
                       <>
@@ -580,11 +582,8 @@ export function ExcelGrid(p: Props) {
                         <span className="text-[17px] leading-[19px] font-bold" aria-label="ขาดงาน">ขาด</span>
                         <span className="num text-[10px] leading-[11px] font-medium">{lines?.[0]}</span>
                       </>
-                    ) : lines ? (
-                      <>
-                        <span className="num">{lines[0]}</span>
-                        {lines[1] && <span className="num opacity-90">{lines[1]}</span>}
-                      </>
+                    ) : cell ? (
+                      <ShiftMarkText code={cell.shift_code} def={def} />
                     ) : (
                       "·"
                     )}

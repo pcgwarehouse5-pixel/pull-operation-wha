@@ -18,6 +18,19 @@ export function cellLines(cell: Cell | undefined, def: ShiftDef | undefined): [s
   return [def?.label || cell.shift_code, ""];
 }
 
+export type ShiftMark = { kind: "time"; hour: string; min: string } | { kind: "text"; text: string };
+
+/** ตัวใหญ่ในช่องตารางกะ: แสดงแค่เวลาเข้างาน 08:00 → 8 · 20:00 → 20 · 07:30 → 7 + :30 · วันหยุด = ชื่อสั้น (ยาวเกิน 4 ตัวใช้รหัสแทน) */
+export function shiftMark(code: string, def: ShiftDef | undefined): ShiftMark {
+  if (def?.working && def.start !== null) {
+    const m = def.start % 1440;
+    const min = m % 60;
+    return { kind: "time", hour: String(Math.floor(m / 60)), min: min ? `:${String(min).padStart(2, "0")}` : "" };
+  }
+  const label = def?.label || code;
+  return { kind: "text", text: label.length <= 4 ? label : code };
+}
+
 /** ข้อความตอนคัดลอก (วางใน Excel ได้ และวางกลับเข้าแอปได้) · วันหยุดใช้รหัส (OFF / OFFC / HOL) เพราะชื่อซ้ำกันได้ */
 export function cellCopyText(cell: Cell | undefined, def: ShiftDef | undefined): string {
   if (!cell) return "";
