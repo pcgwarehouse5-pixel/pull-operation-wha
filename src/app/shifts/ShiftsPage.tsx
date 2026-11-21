@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { PageHelper } from "@/components/Puinun";
 import { useApp } from "@/components/AuthProvider";
@@ -15,8 +15,8 @@ import { useOptions } from "@/lib/useOptions";
 import { shortDay, thaiDateTime } from "@/lib/format";
 import { isGlobal, isManagerRole } from "@/lib/types";
 import {
-  THAI_DAYS_SHORT, addMonths, cellOf, currentMonth, mergeGrid, monthDates, shiftDef, shiftTimeText, stage, thaiMonthLabel,
-  keyOf, toRows, todayIso, weekday, type Cell, type Change, type Grid, type ShiftDef,
+  THAI_DAYS_SHORT, VIEW_SPANS, addDays, addMonths, cellOf, currentMonth, mergeGrid, monthDates, monthsIn, shiftDef, shiftTimeText, spanDates, splitByMonth, stage,
+  thaiMonthLabel, thaiMonthShort, keyOf, toRows, todayIso, weekday, type Cell, type Change, type Grid, type ShiftDef, type ViewSpan,
 } from "@/lib/shifts";
 
 type Row = { user_id: string; work_date: string; shift_code: string; holiday_work: Cell["holiday_work"]; is_volunteer: boolean };
@@ -25,6 +25,7 @@ type Brush = { code: string | null; holiday_work: Cell["holiday_work"] };
 
 const HW_LABEL = { OFF: "ทำงานวันหยุดประจำสัปดาห์", HOL: "ทำงานวันนักขัตฤกษ์" } as const;
 const WH_KEY = "wha-shifts-wh";
+const SPAN_KEY = "wha-shifts-span";
 
 // scope "staff" = ตารางกะปกติ (ไม่รวมหัวหน้าคลัง) · "lead" = ตารางกะหัวหน้าคลัง (แก้ได้เฉพาะผู้จัดการ)
 export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lead" }) {
@@ -46,11 +47,22 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
     return visible.some((w) => w.id === saved) ? saved : (visible.find((w) => w.id === me.warehouse_id) ?? visible[0])?.id ?? "";
   });
   const [ym, setYm] = useState(currentMonth);
-  const dates = useMemo(() => monthDates(ym), [ym]);
+  const dates = useMemo(() => monthDates(ym), [ym]); // เดือนหลัก: เครื่องมือวางกะทำงานกับเดือนนี้
+  // ช่วงที่แสดง: 1 เดือน / เดือนครึ่ง / 2 เดือน (จำไว้ในเครื่อง)
+  const [span, setSpan] = useState<ViewSpan>(() => {
+    try {
+      const saved = localStorage.getItem(SPAN_KEY);
+      return VIEW_SPANS.some((s) => s.key === saved) ? (saved as ViewSpan) : "1";
+    } catch {
+      return "1";
+    }
+  });
+  const viewDates = useMemo(() => spanDates(ym, span), [ym, span]);
+  const viewMonths = useMemo(() => monthsIn(viewDates), [viewDates]);
   const [emps, setEmps] = useState<Emp[] | null>(null);
   const [base, setBase] = useState<Grid>({});
   const [pending, setPending] = useState<Record<string, Cell | null>>({});
-  const [status, setStatus] = useState<Status | null>(null);
+  const [statuses, setStatuses] = useState<Record<string, Status>>({}); // สถานะประกาศแยกรายเดือน
   const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [view, setView] = useState<"month" | "day">("month");
   const [day, setDay] = useState(() => todayIso());
@@ -87,8 +99,9 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
     redoStack.current = [];
     setSource("manual");
     setMsg(null);
-    const from = dates[0];
-    const to = addMonths(ym, 1) + "-01";
+    const from = viewDates[0];
+    const lastDay = viewDates[viewDates.length - 1];
+    const to = addDays(lastDay, 1);
     const today = todayIso();
     setAbsent(new Set());
     const req = ++absReq.current;
@@ -99,12 +112,12 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
         let live: string | null = null;
         if (demo) {
           live = "2026-11-01";
-          rows = demo.previewAbsent(dates, today);
+          rows = demo.previewAbsent(viewDates, today);
         } else {
           const s = await sb().from("app_settings").select("value").eq("key", "attendance.go_live_date").lte("effective_from", today).order("effective_from", { ascending: false }).limit(1).maybeSingle();
           const v = (s.data as { value?: unknown } | null)?.value;
           live = typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null;
-          const last = dates[dates.length - 1] < today ? dates[dates.length - 1] : today;
+          const last = lastDay < today ? lastDay : today;
           if (live && live <= last && from <= last) {
             rows = await fetchAll<{ user_id: string; work_date: string }>((f, t) =>
               sb()
@@ -127,11 +140,11 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
     try {
       let people: Emp[];
       let rows: Row[];
-      let st: Status | null = null;
+      let st: Record<string, Status> = {};
       let hol: Holiday[];
       if (demo) {
         people = demo.previewRoster(wh);
-        rows = demo.previewShifts(dates).filter((r) => people.some((p) => p.id === r.user_id));
+        rows = demo.previewShifts(viewDates).filter((r) => people.some((p) => p.id === r.user_id));
         hol = demo.PREVIEW_HOLIDAYS.filter((h) => h.holiday_date >= from && h.holiday_date < to);
       } else {
         const [p, r, s, h, go, lp] = await Promise.all([
@@ -147,7 +160,7 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
               .order("work_date")
               .range(f, t),
           ),
-          sb().from("schedule_months").select("status, published_at").eq("warehouse_id", wh).eq("month", from).eq("scope", scope).maybeSingle(),
+          sb().from("schedule_months").select("month, status, published_at").eq("warehouse_id", wh).in("month", viewMonths.map((m) => `${m}-01`)).eq("scope", scope),
           sb().from("holidays").select("holiday_date, name").gte("holiday_date", from).lt("holiday_date", to).order("holiday_date"),
           sb().from("schedule_group_order").select("positions, members").eq("warehouse_id", wh).maybeSingle(),
           sb().from("app_settings").select("value").eq("key", "shifts.lead_positions").lte("effective_from", todayIso()).order("effective_from", { ascending: false }).limit(1).maybeSingle(),
@@ -158,20 +171,20 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
         setMemberOrder(((go.data as { members?: string[] } | null)?.members ?? []) as string[]);
         people = p;
         rows = r;
-        st = (s.data as Status | null) ?? null;
+        st = Object.fromEntries(((s.data ?? []) as (Status & { month: string })[]).map((x) => [x.month.slice(0, 7), { status: x.status, published_at: x.published_at }]));
         hol = (h.data ?? []) as Holiday[];
       }
       const g: Grid = {};
       for (const r of rows) (g[r.user_id] ??= {})[r.work_date] = { shift_code: r.shift_code, holiday_work: r.holiday_work, is_volunteer: r.is_volunteer };
       setEmps(people);
       setBase(g);
-      setStatus(st);
+      setStatuses(st);
       setHolidays(hol);
     } catch (e) {
       setEmps([]);
       setMsg({ tone: "error", text: errText(e) });
     }
-  }, [wh, ym, dates, demo, scope]);
+  }, [wh, viewDates, viewMonths, demo, scope]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- โหลดข้อมูลจาก Supabase ตอนเปลี่ยนคลัง/เดือน
@@ -188,7 +201,10 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
 
   const grid = useMemo(() => mergeGrid(base, pending), [base, pending]);
   const holidayMap = useMemo(() => new Map(holidays.map((h) => [h.holiday_date, h.name])), [holidays]);
-  const dayInMonth = dates.includes(day) ? day : dates[0];
+  const dayInMonth = viewDates.includes(day) ? day : viewDates[0];
+  const multiMonth = viewMonths.length > 1;
+  const isPublished = (m: string) => statuses[m]?.status === "published";
+  const monthHolidays = useMemo(() => holidays.filter((h) => h.holiday_date.startsWith(ym)), [holidays, ym]); // เครื่องมือวางกะใช้เฉพาะเดือนหลัก
 
   // คนที่แสดงในตาราง: ยังทำงานอยู่และไม่ได้ตั้ง "ไม่แสดงในตารางกะ" + คนที่มีกะในเดือนนี้อยู่แล้ว
   const roster = useMemo(
@@ -298,30 +314,69 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
       setPending({});
       return setMsg({ tone: "success", text: "โหมดดูดีไซน์: ไม่ได้บันทึกจริง" });
     }
+    // บันทึกทีละเดือน: ประวัติและการย้อนกลับเก็บแยกรายเดือน
+    const parts = splitByMonth(pending);
     setBusy(true);
-    const { data, error } = await sb().rpc("apply_shifts", { p_wh: wh, p_rows: toRows(pending), p_source: source });
+    let total = 0;
+    const saved: Record<string, Cell | null> = {};
+    for (const part of parts) {
+      const { data, error } = await sb().rpc("apply_shifts", { p_wh: wh, p_rows: toRows(part.pending), p_source: source });
+      if (error) {
+        setBusy(false);
+        const reason = `${thaiMonthLabel(part.month)} บันทึกไม่สำเร็จ: ${errText(error)}`;
+        if (!total) return setMsg({ tone: "error", text: reason });
+        // เดือนก่อนหน้าบันทึกแล้ว: เก็บเฉพาะช่องที่ยังไม่สำเร็จไว้ให้กดบันทึกซ้ำ
+        const rest = Object.fromEntries(Object.entries(pending).filter(([k]) => !(k in saved)));
+        setBase(mergeGrid(base, saved));
+        pendingRef.current = rest;
+        setPending(rest);
+        undoStack.current = [];
+        redoStack.current = [];
+        return setMsg({ tone: "error", text: `บันทึกแล้ว ${total} ช่อง แต่${reason} ช่องที่เหลือยังอยู่ กดบันทึกอีกครั้งได้` });
+      }
+      total += Number(data ?? 0);
+      Object.assign(saved, part.pending);
+    }
     setBusy(false);
-    if (error) return setMsg({ tone: "error", text: errText(error) });
+    const changed = parts.map((x) => x.month);
+    const live = changed.filter(isPublished).map(thaiMonthLabel);
+    const draft = changed.filter((m) => !isPublished(m)).map(thaiMonthLabel);
     await load();
-    setMsg({ tone: "success", text: `บันทึกแล้ว ${data} ช่อง${status?.status === "published" ? " (เดือนนี้ประกาศแล้ว ${audience}เห็นทันที)" : ""}` });
+    setMsg({
+      tone: "success",
+      text: `บันทึกแล้ว ${total} ช่อง${live.length ? ` · ${live.join(", ")} ประกาศแล้ว ${audience}เห็นทันที` : ""}${multiMonth && draft.length ? ` · ${draft.join(", ")} ยังเป็นร่าง` : ""}`,
+    });
   }
 
-  async function setPublished(next: "published" | "draft") {
+  async function setPublished(month: string, next: "published" | "draft") {
+    const label = thaiMonthLabel(month);
+    const partial = !viewDates.includes(monthDates(month).at(-1)!); // เดือนครึ่ง: เดือนถัดไปแสดงไม่ครบ แต่ประกาศมีผลทั้งเดือน
     const text =
       next === "published"
-        ? `ประกาศ${title} ${thaiMonthLabel(ym)} ให้${audience}ในคลังเห็น?`
-        : `กลับเป็นร่าง? ${audience}จะไม่เห็น${title} ${thaiMonthLabel(ym)} จนกว่าจะประกาศอีกครั้ง`;
+        ? `ประกาศ${title} ${label} ${partial ? "ทั้งเดือน รวมวันที่ยังไม่แสดงบนจอ " : ""}ให้${audience}ในคลังเห็น?`
+        : `กลับเป็นร่าง? ${audience}จะไม่เห็น${title} ${label} ${partial ? "ทั้งเดือน " : ""}จนกว่าจะประกาศอีกครั้ง`;
     if (!confirm(text)) return;
-    if (demo) return setStatus({ status: next, published_at: new Date().toISOString() });
+    const value: Status = { status: next, published_at: next === "published" ? new Date().toISOString() : null };
+    if (demo) return setStatuses((s) => ({ ...s, [month]: value }));
     setBusy(true);
-    const { error } = await sb().rpc("set_schedule_status_scope", { p_wh: wh, p_month: dates[0], p_status: next, p_scope: scope });
+    const { error } = await sb().rpc("set_schedule_status_scope", { p_wh: wh, p_month: `${month}-01`, p_status: next, p_scope: scope });
     setBusy(false);
     if (error) return setMsg({ tone: "error", text: errText(error) });
-    setStatus({ status: next, published_at: next === "published" ? new Date().toISOString() : null });
-    setMsg({ tone: "success", text: next === "published" ? `ประกาศแล้ว ${audience}เห็น${title}เดือนนี้แล้ว` : "กลับเป็นร่างแล้ว" });
+    setStatuses((s) => ({ ...s, [month]: value }));
+    setMsg({ tone: "success", text: next === "published" ? `ประกาศแล้ว ${audience}เห็น${title} ${label} แล้ว` : `${label} กลับเป็นร่างแล้ว` });
   }
 
-  const published = status?.status === "published";
+  function changeSpan(next: ViewSpan) {
+    if (next === span) return;
+    changeScope(() => {
+      setSpan(next);
+      try {
+        localStorage.setItem(SPAN_KEY, next);
+      } catch {}
+    });
+  }
+
+  const rangeText = `${Number(viewDates[0].slice(8))} ${thaiMonthShort(viewMonths[0])} – ${Number(viewDates[viewDates.length - 1].slice(8))} ${thaiMonthShort(viewMonths[viewMonths.length - 1])} ${Number(viewDates[viewDates.length - 1].slice(0, 4)) + 543}`;
   const whName = visible.find((w) => w.id === wh)?.name ?? "";
 
   return (
@@ -368,25 +423,52 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
                   <Icon name="next" size={18} />
                 </Button>
               </div>
-              <div className="ml-auto flex flex-wrap items-center gap-2">
-                {published ? (
-                  <Badge tone="green">ประกาศแล้ว{status?.published_at ? ` · ${thaiDateTime(status.published_at)}` : ""}</Badge>
-                ) : (
-                  <Badge tone="amber">ร่าง · {audience}ยังไม่เห็น</Badge>
-                )}
-                {canEdit ? (
-                <Button
-                  size="sm"
-                  variant={published ? "secondary" : "primary"}
-                  disabled={busy || !emps || nChanges > 0}
-                  title={nChanges ? "บันทึกการแก้ไขก่อน" : ""}
-                  onClick={() => setPublished(published ? "draft" : "published")}
-                >
-                  {published ? "กลับเป็นร่าง" : `ประกาศให้${audience}เห็น`}
-                </Button>
-                ) : (
-                  <Badge>ดูอย่างเดียว</Badge>
-                )}
+              {/* ช่วงที่แสดง: ดูคาบเกี่ยวเดือน */}
+              <div className="flex rounded-xl bg-white p-1 ring-1 ring-line" role="group" aria-label="ช่วงที่แสดง">
+                {VIEW_SPANS.map((s) => (
+                  <button
+                    key={s.key}
+                    type="button"
+                    aria-pressed={span === s.key}
+                    className={`min-h-10 rounded-lg px-3 text-[14px] font-semibold whitespace-nowrap ${span === s.key ? "bg-brand text-white" : "text-ink"}`}
+                    onClick={() => changeSpan(s.key)}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+              {multiMonth && <span className="num text-[14px] font-semibold text-muted">{rangeText}</span>}
+              {/* สถานะประกาศแยกรายเดือน */}
+              <div className={multiMonth ? "mt-1 grid w-full gap-2 border-t border-line pt-3 lg:grid-cols-2" : "ml-auto flex flex-wrap items-center gap-2"}>
+                {viewMonths.map((m) => {
+                  const published = isPublished(m);
+                  const at = statuses[m]?.published_at;
+                  return (
+                    <div key={m} className={multiMonth ? "flex flex-wrap items-center gap-2" : "contents"}>
+                      {multiMonth && <b className="min-w-24 text-[15px] text-brand">{thaiMonthLabel(m)}</b>}
+                      {published ? (
+                        <Badge tone="green">ประกาศแล้ว{at ? ` · ${thaiDateTime(at)}` : ""}</Badge>
+                      ) : (
+                        <Badge tone="amber">ร่าง · {audience}ยังไม่เห็น</Badge>
+                      )}
+                      {canEdit ? (
+                        <Button
+                          size="sm"
+                          variant={published ? "secondary" : "primary"}
+                          className={multiMonth ? "ml-auto" : ""}
+                          disabled={busy || !emps || nChanges > 0}
+                          title={nChanges ? "บันทึกการแก้ไขก่อน" : ""}
+                          aria-label={`${published ? "กลับเป็นร่าง" : "ประกาศ"} ${thaiMonthLabel(m)}`}
+                          onClick={() => setPublished(m, published ? "draft" : "published")}
+                        >
+                          {published ? "กลับเป็นร่าง" : multiMonth ? "ประกาศ" : `ประกาศให้${audience}เห็น`}
+                        </Button>
+                      ) : (
+                        <Badge>ดูอย่างเดียว</Badge>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </Card>
@@ -484,7 +566,7 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
             {absentInView > 0 && (
               <span className="inline-flex items-center gap-1.5 font-semibold text-ink">
                 <span className="inline-flex h-6 items-center rounded-md bg-black px-1.5 text-[12px] font-bold text-white">ขาด</span>
-                เดือนนี้ {absentInView} คน-วัน
+                {multiMonth ? "ช่วงนี้" : "เดือนนี้"} {absentInView} คน-วัน
               </span>
             )}
           </div>
@@ -506,7 +588,7 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
                 })}
                 onReorder={canEdit ? reorderGroups : () => {}}
                 onReorderEmps={canEdit ? reorderEmps : undefined}
-                dates={dates}
+                dates={viewDates}
                 grid={grid}
                 pending={pending}
                 defs={defs}
@@ -523,7 +605,7 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
               <GridHelp />
             </>
           ) : (
-            <DayView emps={shown} dates={dates} day={dayInMonth} setDay={setDay} grid={grid} defs={defs} holidayMap={holidayMap} absent={absent} />
+            <DayView emps={shown} dates={viewDates} day={dayInMonth} setDay={setDay} grid={grid} defs={defs} holidayMap={holidayMap} absent={absent} />
           )}
 
           <Legend defs={activeDefs} grid={grid} />
@@ -584,7 +666,7 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
               grid={grid}
               defs={defs}
               activeDefs={activeDefs}
-              holidays={holidays}
+              holidays={monthHolidays}
               nChanges={nChanges}
               applyChanges={(c, onlyEmpty, src) => {
                 applyChanges(c, onlyEmpty);
@@ -641,21 +723,26 @@ function DayView({
     <div>
       <div ref={ref} className="-mx-3 mb-3 overflow-x-auto px-3 pb-1">
         <div className="flex w-max gap-1.5">
-          {dates.map((d) => {
+          {dates.map((d, i) => {
             const wd = weekday(d);
             const hol = holidayMap.has(d);
             return (
-              <button
-                key={d}
-                data-day={d}
-                type="button"
-                onClick={() => setDay(d)}
-                aria-pressed={d === day}
-                className={`flex h-14 w-12 flex-col items-center justify-center rounded-xl text-[13px] ${d === day ? "bg-brand text-white" : hol ? "bg-[#fce6e7] text-bad" : "bg-white ring-1 ring-line"} ${wd === 0 && d !== day ? "text-bad" : ""}`}
-              >
-                <span className="text-[17px] font-bold leading-none">{Number(d.slice(8))}</span>
-                <span>{THAI_DAYS_SHORT[wd]}</span>
-              </button>
+              <Fragment key={d}>
+                {i > 0 && d.endsWith("-01") && (
+                  <span className="flex h-14 items-center rounded-xl bg-ink px-2 text-[13px] font-bold whitespace-nowrap text-white">{thaiMonthShort(d.slice(0, 7))}</span>
+                )}
+                <button
+                  data-day={d}
+                  type="button"
+                  onClick={() => setDay(d)}
+                  aria-pressed={d === day}
+                  aria-label={`${Number(d.slice(8))} ${thaiMonthShort(d.slice(0, 7))}`}
+                  className={`flex h-14 w-12 flex-col items-center justify-center rounded-xl text-[13px] ${d === day ? "bg-brand text-white" : hol ? "bg-[#fce6e7] text-bad" : "bg-white ring-1 ring-line"} ${wd === 0 && d !== day ? "text-bad" : ""}`}
+                >
+                  <span className="text-[17px] font-bold leading-none">{Number(d.slice(8))}</span>
+                  <span>{THAI_DAYS_SHORT[wd]}</span>
+                </button>
+              </Fragment>
             );
           })}
         </div>

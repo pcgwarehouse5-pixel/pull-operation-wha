@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ShiftMarkText, empName, type Emp } from "./common";
 import { Icon } from "../Icon";
-import { THAI_DAYS_SHORT, keyOf, weekday, type Cell, type Change, type Grid, type ShiftDef } from "@/lib/shifts";
+import { THAI_DAYS_SHORT, keyOf, monthsIn, thaiMonthLabel, thaiMonthShort, weekday, type Cell, type Change, type Grid, type ShiftDef } from "@/lib/shifts";
 import {
   OT_DAY_COLOR, autoHolidayWork, cellCopyText, cellLines, fillPlan, fromTsv, inRange, moveItem, moveTarget, norm, otDayKind, parseCellText, pastePlan, size, toTsv,
   type Pos, type Range,
@@ -54,6 +54,14 @@ export function ExcelGrid(p: Props) {
   const rows = useMemo(() => groups.flatMap((g) => (collapsed.has(g.position) ? [] : g.emps)), [groups, collapsed]);
   const R = rows.length;
   const C = dates.length;
+
+  // ดูหลายเดือน: แถบชื่อเดือนบนหัวตาราง + เส้นหนาคั่นตรงวันที่ 1 ของเดือนถัดไป
+  const months = useMemo(
+    () => monthsIn(dates).map((ym) => ({ ym, c0: dates.findIndex((d) => d.startsWith(ym)), n: dates.filter((d) => d.startsWith(ym)).length })),
+    [dates],
+  );
+  const multi = months.length > 1;
+  const edge = (c: number) => (c > 0 && dates[c].endsWith("-01") ? "border-l-[3px] border-l-brand" : "");
 
   const [anchor, setAnchor] = useState<Pos>({ r: 0, c: 0 });
   const [focus, setFocus] = useState<Pos>({ r: 0, c: 0 });
@@ -386,6 +394,18 @@ export function ExcelGrid(p: Props) {
     el?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }, [focus]);
 
+  // เปิดแบบหลายเดือน: เลื่อนให้รอยต่อเดือนอยู่กลางจอ เห็นปลายเดือนนี้กับต้นเดือนหน้าพร้อมกัน
+  const seam = months[1]?.c0;
+  const firstDay = dates[0];
+  useEffect(() => {
+    const s = scroller.current;
+    const th = seam === undefined ? null : s?.querySelector<HTMLElement>(`th[data-head="${seam}"]`);
+    const name = s?.querySelector<HTMLElement>("th[data-corner]");
+    if (!s || !th || !name) return;
+    const x = th.getBoundingClientRect().left - s.getBoundingClientRect().left + s.scrollLeft;
+    s.scrollLeft = Math.max(0, x - name.offsetWidth - (s.clientWidth - name.offsetWidth) / 2);
+  }, [seam, firstDay]);
+
   // ---------- กรอบที่เลือก (วาดทับตาราง) ----------
   const [boxes, setBoxes] = useState<{ sel?: Rect; ghost?: Rect; cell?: Rect }>({});
 
@@ -523,8 +543,8 @@ export function ExcelGrid(p: Props) {
               <button type="button" className="rounded px-0.5 text-[11px] text-muted hover:bg-white" onClick={() => shiftGroup(g.position, 1)} aria-label={`เลื่อนกลุ่ม ${g.position} ลง`}>▼</button>
             </span>
           </th>
-          {dates.map((d) => (
-            <td key={d} className="border-y border-line bg-[#eef2fa] text-center text-[11px] font-semibold text-muted" title="คนทำงานในกลุ่มนี้">
+          {dates.map((d, c) => (
+            <td key={d} className={`border-y border-line bg-[#eef2fa] text-center text-[11px] font-semibold text-muted ${edge(c)}`} title="คนทำงานในกลุ่มนี้">
               {working(g.emps, d) || ""}
             </td>
           ))}
@@ -580,7 +600,7 @@ export function ExcelGrid(p: Props) {
               // ในช่องโชว์แค่เวลาเข้างาน เวลาเต็มดูได้จากคำอธิบายเมื่อชี้ที่ช่อง และจากรายการกะใต้ตาราง
               const timeTip = lines?.[1] ? `เข้างาน ${lines[0]} · เลิกงาน ${lines[1]}` : undefined;
               return (
-                <td key={d} data-r={r} data-c={c} className="h-[42px] min-w-[44px] border-r border-b border-line/70 p-[2px]">
+                <td key={d} data-r={r} data-c={c} className={`h-[42px] min-w-[44px] border-r border-b border-line/70 p-[2px] ${edge(c)}`}>
                   <div
                     className={`relative flex h-full w-full flex-col items-center justify-center rounded-[5px] text-[11px] leading-[1.15] font-semibold ${cell ? "" : "text-transparent"} ${changed ? "outline-2 -outline-offset-2 outline-ink outline-dashed" : ""}`}
                     style={abs ? { background: "#000", color: "#fff" } : cell ? { background: color.bg, color: color.text } : undefined}
@@ -612,6 +632,16 @@ export function ExcelGrid(p: Props) {
 
   const allEmps = useMemo(() => groups.flatMap((g) => g.emps), [groups]);
   const S = boxes.sel;
+  const cornerHead = (
+    <th data-corner rowSpan={multi ? 2 : 1} className="sticky top-0 left-0 z-30 min-w-36 border-r border-b border-line bg-white px-2 py-1.5 text-left font-semibold sm:min-w-48">
+      พนักงาน ({allEmps.length})
+    </th>
+  );
+  const totalHead = (
+    <th rowSpan={multi ? 2 : 1} className="sticky top-0 z-20 min-w-14 border-b border-l border-line bg-white px-1 text-center text-[12px] font-semibold" title={multi ? "จำนวนวันทำงานรวมทุกวันที่แสดงอยู่" : undefined}>
+      {multi ? "รวมช่วงนี้" : "วันทำงาน"}
+    </th>
+  );
 
   return (
     <div
@@ -627,10 +657,23 @@ export function ExcelGrid(p: Props) {
       <div ref={wrap} className="relative inline-block min-w-full align-top">
         <table className="border-separate border-spacing-0 text-[13px]" onPointerDown={onCellPointerDown} onClick={onCellClick} onDoubleClick={onCellDoubleClick} onContextMenu={onContext}>
           <thead>
+            {multi && (
+              <tr>
+                {cornerHead}
+                {months.map((m, i) => (
+                  <th key={m.ym} colSpan={m.n} className={`sticky top-0 z-20 h-[26px] border-b border-line text-left text-white ${i % 2 ? "bg-ink" : "bg-brand"} ${edge(m.c0)}`}>
+                    {/* ชื่อเดือนเลื่อนตามจอ จึงเห็นเสมอว่ากำลังดูเดือนไหน */}
+                    <span className="sticky left-[calc(9rem+8px)] inline-block px-2 text-[13px] font-bold whitespace-nowrap sm:left-[calc(12rem+8px)]">
+                      <span className="sm:hidden">{thaiMonthShort(m.ym)} {Number(m.ym.slice(0, 4)) + 543}</span>
+                      <span className="hidden sm:inline">{thaiMonthLabel(m.ym)}</span>
+                    </span>
+                  </th>
+                ))}
+                {totalHead}
+              </tr>
+            )}
             <tr>
-              <th className="sticky top-0 left-0 z-30 min-w-36 border-r border-b border-line bg-white px-2 py-1.5 text-left font-semibold sm:min-w-48">
-                พนักงาน ({allEmps.length})
-              </th>
+              {!multi && cornerHead}
               {dates.map((d, c) => {
                 const wd = weekday(d);
                 const hol = holidayMap.get(d);
@@ -638,6 +681,7 @@ export function ExcelGrid(p: Props) {
                 return (
                   <th
                     key={d}
+                    data-head={c}
                     title={hol ?? "คลิกเพื่อเลือกทั้งวัน"}
                     onClick={() => {
                       if (!R) return;
@@ -645,22 +689,22 @@ export function ExcelGrid(p: Props) {
                       setFocus({ r: R - 1, c });
                       scroller.current?.focus({ preventScroll: true });
                     }}
-                    className={`sticky top-0 z-20 cursor-pointer border-b border-line px-0.5 py-1 text-center font-semibold ${on ? "!bg-sky text-brand" : ""} ${hol ? "bg-[#7c3aed] text-white" : wd === 0 || wd === 6 ? "bg-[#eef2fa]" : "bg-white"}`}
+                    className={`sticky ${multi ? "top-[26px]" : "top-0"} z-20 cursor-pointer border-b border-line px-0.5 py-1 text-center font-semibold ${edge(c)} ${on ? "!bg-sky text-brand" : ""} ${hol ? "bg-[#7c3aed] text-white" : wd === 0 || wd === 6 ? "bg-[#eef2fa]" : "bg-white"}`}
                   >
                     <span className="block text-[14px] leading-tight">{Number(d.slice(8))}</span>
                     <span className="block text-[11px] font-normal">{hol ? "วันหยุด" : THAI_DAYS_SHORT[wd]}</span>
                   </th>
                 );
               })}
-              <th className="sticky top-0 z-20 min-w-14 border-b border-l border-line bg-white px-1 text-center text-[12px] font-semibold">วันทำงาน</th>
+              {!multi && totalHead}
             </tr>
           </thead>
           <tbody>{body}</tbody>
           <tfoot>
             <tr>
               <th className="sticky bottom-0 left-0 z-30 border-t border-r border-line bg-[#f6f8fc] px-2 py-1.5 text-left text-[12px] font-semibold">คนทำงาน/วัน</th>
-              {dates.map((d) => (
-                <td key={d} className="sticky bottom-0 z-20 border-t border-line bg-[#f6f8fc] text-center font-bold text-brand">{working(allEmps, d)}</td>
+              {dates.map((d, c) => (
+                <td key={d} className={`sticky bottom-0 z-20 border-t border-line bg-[#f6f8fc] text-center font-bold text-brand ${edge(c)}`}>{working(allEmps, d)}</td>
               ))}
               <td className="sticky bottom-0 z-20 border-t border-l border-line bg-[#f6f8fc]" />
             </tr>

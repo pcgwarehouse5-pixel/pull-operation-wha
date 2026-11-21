@@ -41,6 +41,33 @@ export function thaiMonthLabel(ym: string): string {
   return `${THAI_MONTHS[m - 1]} ${y + 543}`;
 }
 
+const THAI_MONTHS_SHORT = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+
+/** "2026-12" → "ธ.ค." */
+export const thaiMonthShort = (ym: string) => THAI_MONTHS_SHORT[Number(ym.slice(5, 7)) - 1];
+
+// ---------- ช่วงที่แสดงในตารางกะ (ดูคาบเกี่ยวเดือน) ----------
+export type ViewSpan = "1" | "1.5" | "2";
+export const VIEW_SPANS: { key: ViewSpan; label: string }[] = [
+  { key: "1", label: "1 เดือน" },
+  { key: "1.5", label: "เดือนครึ่ง" },
+  { key: "2", label: "2 เดือน" },
+];
+const HALF_MONTH_DAYS = 15;
+
+/** วันที่ที่แสดง: เดือนที่เลือก · เดือนครึ่ง = ต่อด้วย 15 วันแรกของเดือนถัดไป · 2 เดือน = ต่อด้วยเดือนถัดไปทั้งเดือน */
+export function spanDates(ym: string, span: ViewSpan): string[] {
+  const first = monthDates(ym);
+  if (span === "1") return first;
+  const next = monthDates(addMonths(ym, 1));
+  return [...first, ...(span === "2" ? next : next.slice(0, HALF_MONTH_DAYS))];
+}
+
+/** เดือนทั้งหมดในรายการวันที่ เรียงตามลำดับที่พบ: ["2026-11", "2026-12"] */
+export function monthsIn(dates: string[]): string[] {
+  return [...new Set(dates.map((d) => d.slice(0, 7)))];
+}
+
 /** เดือนปัจจุบันตามเวลาไทย */
 export function currentMonth(now = new Date()): string {
   const s = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok", year: "numeric", month: "2-digit" }).format(now);
@@ -147,6 +174,17 @@ export function toRows(pending: Record<string, Cell | null>) {
     const [user_id, work_date] = splitKey(k);
     return { user_id, work_date, shift_code: c?.shift_code ?? null, holiday_work: c?.holiday_work ?? null, is_volunteer: c?.is_volunteer ?? false };
   });
+}
+
+/** แยกการแก้ไขตามเดือน เพื่อบันทึกทีละเดือน ประวัติการแก้ของแต่ละเดือนจึงไม่ปนกัน */
+export function splitByMonth(pending: Record<string, Cell | null>): { month: string; pending: Record<string, Cell | null> }[] {
+  const out = new Map<string, Record<string, Cell | null>>();
+  for (const [k, c] of Object.entries(pending)) {
+    const month = splitKey(k)[1].slice(0, 7);
+    if (!out.has(month)) out.set(month, {});
+    out.get(month)![k] = c;
+  }
+  return [...out.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([month, p]) => ({ month, pending: p }));
 }
 
 // ---------- เครื่องมือวางกะ ----------

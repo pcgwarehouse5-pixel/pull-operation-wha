@@ -4,7 +4,41 @@ import assert from "node:assert/strict";
 import {
   monthDates, addMonths, addDays, weekday, thaiMonthLabel, currentMonth, shiftDef, shiftTimeText,
   stage, mergeGrid, toRows, cellOf, copyFromPrevious, repeatPattern, holidayFill, countByDay, generatePlan,
+  spanDates, monthsIn, splitByMonth, thaiMonthShort, keyOf,
 } from "../src/lib/shifts.ts";
+
+test("ช่วงที่แสดง: 1 เดือน เดือนครึ่ง 2 เดือน ต่อเนื่องไม่ขาดวัน ข้ามปีและกุมภาพันธ์ได้", () => {
+  assert.equal(spanDates("2026-11", "1").length, 30);
+  const half = spanDates("2026-11", "1.5");
+  assert.equal(half.length, 45);
+  assert.equal(half[0], "2026-11-01");
+  assert.equal(half.at(-1), "2026-12-15");
+  const two = spanDates("2026-12", "2");
+  assert.equal(two.length, 62);
+  assert.equal(two.at(-1), "2027-01-31", "ข้ามปี");
+  assert.equal(spanDates("2028-01", "2").at(-1), "2028-02-29", "ปีอธิกสุรทิน");
+  for (const list of [half, two, spanDates("2027-01", "2")]) {
+    list.slice(1).forEach((d, i) => assert.equal(d, addDays(list[i], 1), "วันที่ต้องเรียงติดกัน"));
+  }
+  assert.deepEqual(monthsIn(half), ["2026-11", "2026-12"]);
+  assert.deepEqual(monthsIn(spanDates("2026-11", "1")), ["2026-11"]);
+  assert.equal(thaiMonthShort("2026-12"), "ธ.ค.");
+  assert.equal(thaiMonthShort("2027-01"), "ม.ค.");
+});
+
+test("บันทึกข้ามเดือน: แยกการแก้ไขตามเดือน ครบทุกช่อง รวมช่องที่ลบ", () => {
+  const pending = {
+    [keyOf("u1", "2026-12-01")]: cellOf("STD1"),
+    [keyOf("u1", "2026-11-30")]: cellOf("GN_5"),
+    [keyOf("u2", "2026-12-15")]: null,
+  };
+  const parts = splitByMonth(pending);
+  assert.deepEqual(parts.map((p) => p.month), ["2026-11", "2026-12"], "เรียงตามเดือน");
+  assert.deepEqual(Object.keys(parts[0].pending), [keyOf("u1", "2026-11-30")]);
+  assert.equal(Object.keys(parts[1].pending).length, 2);
+  assert.equal(parts[1].pending[keyOf("u2", "2026-12-15")], null);
+  assert.deepEqual(splitByMonth({}), []);
+});
 
 test("วันที่: จำนวนวัน เดือนถัดไป วันในสัปดาห์ และเดือนตามเวลาไทย", () => {
   assert.equal(monthDates("2028-02").length, 29, "ปีอธิกสุรทิน");
