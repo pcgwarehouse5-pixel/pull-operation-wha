@@ -100,8 +100,9 @@ test("สถานะรายวัน: สาย/ออกก่อนตา�
 
 test("ขอแก้เวลา: หัวหน้าอนุมัติแล้วระบบเพิ่มเวลาให้และล็อก / อนุมัติของตัวเองไม่ได้", async () => {
   const db = await base();
-  await shift(db, U.emp5, "2026-11-20", "STD1");
-  await shift(db, U.emp5, "2026-11-21", "GN_5");
+  // วันที่ตั้งต้นต้องไม่ชนกับ "เมื่อวาน" ด้านล่าง (เดิมใช้ 20-21 พ.ย. 2569 จึงพังเฉพาะวันที่รันตรงกัน)
+  await shift(db, U.emp5, "2020-01-02", "STD1");
+  await shift(db, U.emp5, "2020-01-03", "GN_5");
   const today = (await rows(db, `select (now() at time zone 'Asia/Bangkok')::date::text as d`))[0].d;
   const req = (user, date, i, o, reason = "ลืมกด") =>
     as(db, user, () => rows(db, `select public.request_correction($1, $2, $3, $4) as id`, [date, i, o, reason])).then((r) => r[0].id);
