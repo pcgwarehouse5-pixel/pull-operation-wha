@@ -5,10 +5,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { PageHelper } from "@/components/Puinun";
 import { useApp } from "@/components/AuthProvider";
-import { Alert, Badge, Button, Empty, Field, Loading, Modal, inputCls } from "@/components/ui";
+import { Alert, Button, Empty, Field, Loading, Modal, inputCls } from "@/components/ui";
 import { Icon } from "@/components/Icon";
 import { LeaveForm } from "@/components/leave/LeaveForm";
-import { LeaveItem } from "@/components/leave/LeaveItem";
+import { LEAVE_ROW_GRID, LeaveQueueRow } from "@/components/leave/LeaveQueueRow";
 import { RejectModal } from "@/components/attendance/RejectModal";
 import { EMP_COLS, empName, type Emp } from "@/components/shifts/common";
 import { errText, fetchAll, sb } from "@/lib/supabase";
@@ -16,6 +16,7 @@ import { useOptions, labelOf } from "@/lib/useOptions";
 import { ROLE_RANK, canApproveRole, isGlobal, type AppRole } from "@/lib/types";
 import { addDays, todayIso } from "@/lib/shifts";
 import { type LeaveApproval, type LeaveBalance, type LeaveRequest } from "@/lib/attendance";
+import { leaveDue, sortLeaveQueue } from "@/lib/leave-queue";
 
 type Row = LeaveRequest & { profiles: { employee_code: string; first_name_th: string; last_name_th: string | null; nickname: string | null; position: string | null; warehouse_id?: string | null; role?: AppRole } };
 type Msg = { tone: "success" | "error"; text: string };
@@ -40,7 +41,7 @@ export default function LeaveApprovalsPage() {
     setRows(null);
     if (demo) {
       const list = demo.previewLeaveQueue(me.id);
-      setRows(tab === "pending" ? list.filter((r) => r.status === "pending") : []);
+      setRows(tab === "pending" ? sortLeaveQueue(list.filter((r) => r.status === "pending")) : []);
       return;
     }
     try {
@@ -51,7 +52,8 @@ export default function LeaveApprovalsPage() {
         q = tab === "pending" ? q.in("status", ["pending", "cancel_requested"]).order("start_date") : q.in("status", ["approved", "rejected", "cancelled"]).gte("start_date", addDays(todayIso(), -90)).order("start_date", { ascending: false });
         return q.range(f, t);
       });
-      setRows(list);
+      // รออนุมัติ: วันลาที่มาถึงก่อนขึ้นก่อน · ประวัติ: ล่าสุดก่อน
+      setRows(tab === "pending" ? sortLeaveQueue(list) : list);
       if (list.length) {
         const a = await fetchAll<LeaveApproval>((f, t) => sb().from("leave_approvals").select("*").in("request_id", list.map((x) => x.id)).order("created_at").range(f, t));
         setApps(a);
@@ -68,6 +70,7 @@ export default function LeaveApprovalsPage() {
   }, [load]);
 
   async function loadBalance(r: Row) {
+    if (bal[r.id]) return;
     if (demo) return setBal((b) => ({ ...b, [r.id]: demo.PREVIEW_BALANCE }));
     const { data, error } = await sb().rpc("leave_balance", { p_year: Number(r.start_date.slice(0, 4)), p_user: r.user_id });
     if (error) return setMsg({ tone: "error", text: errText(error) });
@@ -93,6 +96,8 @@ export default function LeaveApprovalsPage() {
   const canAct = (r: Row) => r.user_id !== me.id && levelOk(r) && !(r.status === "pending" && r.steps_done >= 1 && !mgr);
   const waitText = (r: Row) =>
     r.user_id === me.id ? "ใบลาของคุณเอง ต้องให้คนอื่นอนุมัติ" : !levelOk(r) ? "รอระดับที่สูงกว่าอนุมัติ (ผู้จัดการแผนกขึ้นไป)" : "รอผู้จัดการแผนกขึ้นไปอนุมัติขั้นที่ 2";
+  const today = todayIso();
+  const overdue = tab === "pending" ? (rows ?? []).filter((r) => r.end_date < today).length : 0;
 
   return (
     <AppShell title="อนุมัติใบลา" minRole="supervisor" wide>
@@ -125,34 +130,36 @@ export default function LeaveApprovalsPage() {
       ) : !rows.length ? (
         <Empty>{tab === "pending" ? "ไม่มีใบลารออนุมัติ" : "ไม่มีประวัติในช่วง 90 วัน"}</Empty>
       ) : (
-        <ul className="grid gap-2 lg:grid-cols-2">
-          {rows.map((r) => (
-            <li key={r.id}>
-              <LeaveItem
-                r={r}
-                typeLabel={labelOf(typeOpts, r.leave_type)}
-                approvals={apps.filter((a) => a.request_id === r.id)}
-                onError={(t) => setMsg({ tone: "error", text: t })}
-                who={
-                  <p className="font-bold text-brand">
-                    {empName(r.profiles)} <span className="text-[13px] font-normal text-muted">· {r.profiles.employee_code} · {r.profiles.position ?? "-"}</span>
-                  </p>
-                }
-                actions={
-                  <>
-                    {bal[r.id] ? (
-                      <div className="mb-2 flex flex-wrap gap-1.5">
-                        {bal[r.id].map((b) => (
-                          <Badge key={b.leave_type} tone={b.leave_type === r.leave_type ? "blue" : "slate"}>
-                            {b.label} {b.quota === null ? `ใช้ ${Number(b.approved) + Number(b.pending)}` : `เหลือ ${Number(b.remaining)}/${Number(b.quota)}`}
-                          </Badge>
-                        ))}
-                      </div>
-                    ) : (
-                      <button type="button" className="mb-2 text-[14px] font-semibold text-brand" onClick={() => loadBalance(r)}>ดูวันลาคงเหลือ</button>
-                    )}
-                    {tab === "pending" &&
-                      (canAct(r) ? (
+        <>
+          <p className="mb-2 px-1 text-[14px] text-muted">
+            <b className="text-ink">{tab === "pending" ? `รออนุมัติ ${rows.length} ใบ` : `${rows.length} ใบ`}</b>
+            {tab === "pending" ? " · เรียงจากวันลาที่ใกล้สุดก่อน" : " · วันลาล่าสุดอยู่บนสุด"}
+            {overdue > 0 && <b className="text-bad"> · เลยวันลาแล้ว {overdue} ใบ</b>}
+          </p>
+          <div className="overflow-hidden rounded-[20px] bg-white ring-1 ring-line">
+            <div className={`hidden gap-x-4 border-b border-line bg-[#eef2fa] py-2 pr-4 pl-5 text-[13px] font-bold text-brand xl:grid ${LEAVE_ROW_GRID}`} aria-hidden="true">
+              <span>วันลา</span>
+              <span>พนักงาน</span>
+              <span>ประเภท</span>
+              <span>เหตุผล</span>
+              <span>{tab === "pending" ? "อนุมัติ" : ""}</span>
+            </div>
+            <ul className="divide-y divide-line">
+              {rows.map((r) => (
+                <LeaveQueueRow
+                  key={r.id}
+                  r={r}
+                  typeLabel={labelOf(typeOpts, r.leave_type)}
+                  name={empName(r.profiles)}
+                  sub={`${r.profiles.employee_code} · ${r.profiles.position ?? "-"}`}
+                  due={tab === "pending" ? leaveDue(r.start_date, r.end_date, today) : null}
+                  approvals={apps.filter((a) => a.request_id === r.id)}
+                  balance={bal[r.id]}
+                  onOpen={() => loadBalance(r)}
+                  onError={(t) => setMsg({ tone: "error", text: t })}
+                  actions={
+                    tab === "pending" ? (
+                      canAct(r) ? (
                         <div className="flex gap-2">
                           <Button size="sm" variant="secondary" className="flex-1" disabled={busy} onClick={() => setReject(r)}>
                             {r.status === "cancel_requested" ? "ไม่ให้ยกเลิก" : "ไม่อนุมัติ"}
@@ -163,13 +170,14 @@ export default function LeaveApprovalsPage() {
                         </div>
                       ) : (
                         <p className="text-[14px] text-muted">{waitText(r)}</p>
-                      ))}
-                  </>
-                }
-              />
-            </li>
-          ))}
-        </ul>
+                      )
+                    ) : undefined
+                  }
+                />
+              ))}
+            </ul>
+          </div>
+        </>
       )}
 
       {reject && (
