@@ -41,10 +41,23 @@ export function cellCopyText(cell: Cell | undefined, def: ShiftDef | undefined):
 // ---------- แปลงข้อความที่พิมพ์/วาง เป็นกะ ----------
 export type Parsed = { ok: true; cell: Cell | null } | { ok: false; error: string };
 const TIME_RE = /^(\d{1,2})(?:[:.](\d{2}))?\s*[-–~/]\s*(\d{1,2})(?:[:.](\d{2}))?$/;
+const START_RE = /^(\d{1,2})(?:[:.](\d{2}))?$/;
 const OFF_WORDS = ["หยุด", "off", "วันหยุด"];
 
+/** หากะจากเวลาเข้างานอย่างเดียว: เวลาเลิกเหมือนกันหลายรหัส = ใช้รหัสแรก · เวลาเลิกต่างกัน = ให้พิมพ์เวลาเต็ม เพราะเดาแทนไม่ได้ */
+function defByStart(start: number, defs: ShiftDef[]): { def: ShiftDef } | { error: string } {
+  const list = defs.filter((d) => d.working && d.start === start);
+  if (!list.length) return { error: `ไม่มีกะที่เข้างาน ${fmtMinutes(start)} เพิ่มรหัสกะในหน้าตั้งค่าก่อน` };
+  const ends = [...new Set(list.map((d) => (d.end === null ? null : d.end % 1440)))];
+  if (ends.length > 1) {
+    const times = ends.map((e) => (e === null ? "ไม่ระบุเวลาเลิก" : `${fmtMinutes(start)}-${fmtMinutes(e)}`)).join(" หรือ ");
+    return { error: `มีหลายกะที่เข้างาน ${fmtMinutes(start)} พิมพ์เวลาเต็ม เช่น ${times}` };
+  }
+  return { def: list[0] };
+}
+
 /**
- * รับได้: เวลา (8-17, 08:00-17:00, 7.30-16.30), รหัสกะ (STD1), ชื่อกะ (หยุด, นักขัตฤกษ์)
+ * รับได้: เวลาเข้างาน (8, 20, 7:30), เวลาเข้า-เลิก (8-17, 08:00-17:00, 7.30-16.30), รหัสกะ (STD1), ชื่อกะ (หยุด, นักขัตฤกษ์)
  * ต่อท้าย +OFF / +HOL หรือ (ห) / (น) = ทำงานวันหยุด · ว่าง = ลบ
  * defs = รหัสกะที่ใช้งาน เรียงตามลำดับในหน้าตั้งค่า (เวลาเหมือนกันหลายรหัส = ใช้รหัสแรก)
  */
@@ -64,6 +77,14 @@ export function parseCellText(raw: string, defs: ShiftDef[]): Parsed {
   let def = byCode ?? byLabel;
   if (!def && OFF_WORDS.includes(lower)) def = defs.find((d) => d.code.toUpperCase() === "OFF") ?? defs.find((d) => !d.working);
   if (!def) {
+    const m = text.match(START_RE);
+    if (m && Number(m[1]) < 24 && Number(m[2] ?? 0) < 60) {
+      const got = defByStart(Number(m[1]) * 60 + Number(m[2] ?? 0), defs);
+      if ("error" in got) return { ok: false, error: got.error };
+      def = got.def;
+    }
+  }
+  if (!def) {
     const m = text.match(TIME_RE);
     if (m) {
       const s = Number(m[1]) * 60 + Number(m[2] ?? 0);
@@ -72,7 +93,7 @@ export function parseCellText(raw: string, defs: ShiftDef[]): Parsed {
       if (!def) return { ok: false, error: `ไม่มีกะเวลา ${fmtMinutes(s)}-${fmtMinutes(e)} เพิ่มรหัสกะในหน้าตั้งค่าก่อน` };
     }
   }
-  if (!def) return { ok: false, error: `ไม่รู้จัก "${raw.trim()}" พิมพ์เป็นเวลา เช่น 8-17 หรือรหัสกะ` };
+  if (!def) return { ok: false, error: `ไม่รู้จัก "${raw.trim()}" พิมพ์เวลาเข้างาน เช่น 8 หรือ 20 · เวลาเต็ม 8-17 · หรือรหัสกะ` };
   return { ok: true, cell: { shift_code: def.code, holiday_work: def.working ? hw : null, is_volunteer: false } };
 }
 

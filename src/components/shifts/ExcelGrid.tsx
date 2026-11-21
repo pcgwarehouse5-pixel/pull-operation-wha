@@ -46,6 +46,7 @@ export function ExcelGrid(p: Props) {
   const scroller = useRef<HTMLDivElement>(null);
   const wrap = useRef<HTMLDivElement>(null);
   const editor = useRef<HTMLInputElement>(null);
+  const editOpen = useRef(false);
   const clip = useRef<{ tsv: string; cells: (Cell | null)[][] } | null>(null);
   const lastPointer = useRef<string>("mouse");
 
@@ -262,11 +263,14 @@ export function ExcelGrid(p: Props) {
   // ---------- คีย์บอร์ด ----------
   function startEdit(text?: string) {
     const cell = cellAt(focus.r, focus.c);
+    editOpen.current = true;
     setEditing({ r: focus.r, c: focus.c, text: text ?? cellCopyText(cell, cell ? defs.get(cell.shift_code) : undefined) });
   }
 
   function finishEdit(save: boolean, move?: "down" | "right" | "left") {
-    if (!editing) return;
+    // กันจบซ้ำ: ตอนย้ายเคอร์เซอร์กลับตาราง ช่องพิมพ์จะ blur อีกครั้ง ถ้าไม่กันไว้ Esc จะกลายเป็นบันทึก
+    if (!editing || !editOpen.current) return;
+    editOpen.current = false;
     const ed = editing;
     setEditing(null);
     if (save) {
@@ -382,12 +386,18 @@ export function ExcelGrid(p: Props) {
     el?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }, [focus]);
 
-  useEffect(() => {
-    if (editing) editor.current?.focus();
-  }, [editing]);
-
   // ---------- กรอบที่เลือก (วาดทับตาราง) ----------
   const [boxes, setBoxes] = useState<{ sel?: Rect; ghost?: Rect; cell?: Rect }>({});
+
+  // ช่องพิมพ์โผล่หลังรู้ตำแหน่งช่องแล้ว (boxes.cell) จึงต้องรอจังหวะนั้นก่อนย้ายเคอร์เซอร์เข้าไป ไว้ท้ายข้อความ
+  const editorShown = !!editing && !!boxes.cell;
+  useEffect(() => {
+    const el = editor.current;
+    if (!editorShown || !el) return;
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+  }, [editorShown]);
+
   const rectOf = useCallback((g: Range): Rect | undefined => {
     const w = wrap.current;
     const a = w?.querySelector(`[data-r="${g.r0}"][data-c="${g.c0}"]`) as HTMLElement | null;
@@ -718,7 +728,7 @@ export function ExcelGrid(p: Props) {
             onBlur={() => finishEdit(true)}
             className="absolute z-[8] rounded-[4px] border-2 border-brand bg-white px-1 text-[13px] font-semibold text-ink shadow-lg outline-none"
             style={{ left: boxes.cell.left - 2, top: boxes.cell.top - 2, width: Math.max(150, boxes.cell.width + 4), height: boxes.cell.height + 4 }}
-            aria-label="พิมพ์เวลา เช่น 8-17 หรือรหัสกะ แล้วกด Enter"
+            aria-label="พิมพ์เวลาเข้างาน เช่น 8 หรือ 20 หรือรหัสกะ แล้วกด Enter"
           />
         )}
         <datalist id="shift-input-options">
@@ -797,7 +807,7 @@ function MenuItem({ children, onClick, keys }: { children: ReactNode; onClick: (
 export function GridHelp() {
   const items: [string, string][] = [
     ["ลากเมาส์ / Shift+คลิก", "เลือกหลายช่อง"],
-    ["พิมพ์ 8-17 แล้ว Enter", "ใส่กะตามเวลา"],
+    ["พิมพ์ 8 หรือ 20 แล้ว Enter", "ใส่กะตามเวลาเข้างาน"],
     ["Ctrl+C / Ctrl+V", "คัดลอก-วาง (กับ Excel ได้)"],
     ["ลากจุดมุมขวาล่าง", "เติมซ้ำรูปแบบ"],
     ["ลากขอบกรอบ", "ย้าย (Ctrl = คัดลอก)"],

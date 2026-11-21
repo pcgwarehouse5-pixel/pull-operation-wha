@@ -35,6 +35,33 @@ test("พิมพ์/วาง: เวลาหลายแบบ รหัส 
   assert.match(p("abc"), /ERR:ไม่รู้จัก/);
 });
 
+test("พิมพ์แค่เวลาเข้างาน: 8, 20, 7:30 และกันการเดาเมื่อเวลาเลิกต่างกัน", () => {
+  assert.equal(p("8"), "STD1", "เวลาเข้า-เลิกเหมือนกันหลายรหัส = รหัสแรก");
+  assert.equal(p("08"), "STD1");
+  assert.equal(p("8:00"), "STD1");
+  assert.equal(p("20"), "GN_5");
+  assert.equal(p("7:30"), "GA-2");
+  assert.equal(p("7.30"), "GA-2");
+  assert.equal(p("20+HOL"), "GN_5+HOL");
+  assert.equal(p("8 (ห)"), "STD1+OFF");
+  assert.match(p("9"), /ERR:ไม่มีกะที่เข้างาน 09:00/);
+  assert.match(p("24"), /ERR:ไม่รู้จัก/);
+  assert.match(p("7:99"), /ERR:ไม่รู้จัก/);
+  assert.match(p("123"), /ERR:ไม่รู้จัก/);
+
+  const twoEnds = [
+    { value: "D8", label: "08:00-17:00", extra: { start_time: "08:00", end_time: "17:00" } },
+    { value: "H8", label: "08:00-12:00", extra: { start_time: "08:00", end_time: "12:00" } },
+  ].map(shiftDef);
+  const res = parseCellText("8", twoEnds);
+  assert.equal(res.ok, false, "เข้า 08:00 แต่เลิกต่างกัน ห้ามเดา");
+  assert.match(res.error, /มีหลายกะที่เข้างาน 08:00.*08:00-17:00 หรือ 08:00-12:00/);
+  assert.equal(parseCellText("8-12", twoEnds).cell.shift_code, "H8", "พิมพ์เวลาเต็มเลือกกะได้");
+
+  const coded = [...defs, shiftDef({ value: "8", label: "กะพิเศษ", extra: { start_time: "09:00", end_time: "18:00" } })];
+  assert.equal(parseCellText("8", coded).cell.shift_code, "8", "รหัสกะที่ตรงตัวมาก่อนเวลา");
+});
+
 test("ตัวใหญ่ในช่อง: แสดงแค่เวลาเข้างาน (8, 20, 7:30) วันหยุดใช้ชื่อสั้น", () => {
   const d = new Map(defs.map((x) => [x.code, x]));
   assert.deepEqual(shiftMark("STD1", d.get("STD1")), { kind: "time", hour: "8", min: "" });
