@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useApp } from "@/components/AuthProvider";
 import { sb } from "@/lib/supabase";
+import { loadMyAttendance } from "@/lib/my-attendance";
 import { addDays, todayIso } from "@/lib/shifts";
 import type { AttendanceRow } from "@/lib/attendance";
 import type { MyPos, ShiftTime } from "@/lib/my-position";
@@ -42,7 +43,7 @@ export function useMyPositions(days = 7) {
           .gte("work_date", from)
           .lte("work_date", to)
           .order("work_date"),
-        sb().rpc("my_attendance", { p_from: from, p_to: to }),
+        loadMyAttendance(from, to),
       ]);
       if (!live) return;
       if (b.error) {

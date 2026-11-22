@@ -73,6 +73,35 @@ html[lang="my"] :is(.leading-none, .leading-tight, .leading-snug) {
 }
 
 /* ปุยนุ่นทักทายตอนเปิดหน้า (ครั้งเดียว) */
+/* แถบกำลังโหลดตอนเปลี่ยนหน้า */
+.nav-progress {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 100;
+  height: 3px;
+  overflow: hidden;
+  pointer-events: none;
+  background: rgb(215 38 56 / 0.2);
+}
+.nav-progress::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 40%;
+  background: #d72638;
+  animation: nav-progress 0.9s ease-in-out infinite;
+}
+@keyframes nav-progress {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(260%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .nav-progress::after {
+    width: 100%;
+    animation: none;
+  }
+}
+
 @keyframes puinun-in {
   from {
     opacity: 0;

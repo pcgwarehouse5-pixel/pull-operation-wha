@@ -10,6 +10,7 @@ import { SkillsManager } from "@/components/SkillsManager";
 import { HolidaysManager } from "@/components/HolidaysManager";
 import { RulesManager } from "@/components/RulesManager";
 import { errText, fetchAll, sb } from "@/lib/supabase";
+import { invalidateOptions } from "@/lib/useOptions";
 import type { DropdownOption } from "@/lib/types";
 
 // หมวดที่แก้ได้ในหน้านี้ (ผังองค์กรและการตั้งค่าช่องข้อมูลจะมีหน้าของตัวเองในโมดูลถัดไป)
@@ -173,6 +174,7 @@ function OptionForm({ category, categoryLabel, isShift, initial, preview, onClos
           ? await sb().from("dropdown_options").update({ label: row.label, sort_order: row.sort_order, is_active: row.is_active, extra: row.extra }).eq("id", f.id)
           : await sb().from("dropdown_options").insert(row);
         if (error) throw error;
+        invalidateOptions(); // หน้าอื่นจะเห็นค่าใหม่ทันที
         await onSaved();
       }
       onClose();

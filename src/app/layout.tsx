@@ -3,6 +3,7 @@ import { IBM_Plex_Sans_Thai_Looped, Noto_Sans_Myanmar } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/components/AuthProvider";
 import { LocaleProvider } from "@/i18n";
+import { NavProgress } from "@/components/NavProgress";
 
 // ไทย: แบบมีหัว อ่านง่ายสำหรับทุกคน / พม่า: Noto Sans Myanmar (ฟอนต์ถูกเก็บไว้กับเว็บเอง ไม่ดึงจาก Google ตอนใช้งาน)
 const thai = IBM_Plex_Sans_Thai_Looped({ subsets: ["thai", "latin"], weight: ["400", "500", "600", "700"], variable: "--font-thai", display: "swap" });
@@ -43,6 +44,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <script dangerouslySetInnerHTML={{ __html: PWA_BOOT }} />
       </head>
       <body className="min-h-full">
+        <NavProgress />
         <LocaleProvider>
           <AuthProvider>{children}</AuthProvider>
         </LocaleProvider>

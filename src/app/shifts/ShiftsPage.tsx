@@ -10,6 +10,7 @@ import { DayColorLegend, EMP_COLS, empName, isLeadEmp, ShiftChip, ShiftMarkText,
 import { ShiftTools, type ToolKey } from "@/components/shifts/ShiftTools";
 import { ExcelGrid, GridHelp, type Group } from "@/components/shifts/ExcelGrid";
 import { errText, fetchAll, sb } from "@/lib/supabase";
+import { fetchPagesFast } from "@/lib/fetch-pages";
 import { mergeMembers, sortByMembers } from "@/lib/shift-grid";
 import { LEAVE_PERIOD_TEXT, leaveDayMap, leaveOnDay, pendingLeaveDays, type DayLeave, type LeaveSpan } from "@/lib/shift-leave";
 import { absentSummary } from "@/lib/shift-absent";
@@ -18,7 +19,7 @@ import { useOptions } from "@/lib/useOptions";
 import { shortDay, thaiDateTime } from "@/lib/format";
 import { isGlobal, isManagerRole } from "@/lib/types";
 import {
-  THAI_DAYS_SHORT, VIEW_SPANS, addDays, addMonths, cellOf, currentMonth, mergeGrid, monthDates, monthsIn, shiftDef, shiftTimeText, spanDates, splitByMonth, stage,
+  THAI_DAYS_SHORT, VIEW_SPANS, addDays, addMonths, cellOf, currentMonth, keepSameMap, keepSameRows, keepSameSet, mergeGrid, monthDates, monthsIn, shiftDef, shiftTimeText, spanDates, splitByMonth, stage,
   thaiMonthLabel, thaiMonthShort, keyOf, toRows, todayIso, weekday, type Cell, type Change, type Grid, type ShiftDef, type ViewSpan,
 } from "@/lib/shifts";
 
@@ -104,20 +105,25 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
   const posOrder = useMemo(() => new Map((opts.position ?? []).map((o, i) => [o.value, i])), [opts.position]);
   const nChanges = Object.keys(pending).length;
 
-  const load = useCallback(async () => {
+  // soft = กลับมาหน้าเดิม ช่วงเดิม: แสดงตารางทันที ไม่ทิ้งงานที่แก้ค้าง แล้วอัปเดตข้อมูลอยู่เบื้องหลัง
+  const load = useCallback(async (soft = false) => {
     if (!wh) return;
-    setEmps(null);
-    setPending({});
-    undoStack.current = [];
-    redoStack.current = [];
-    setSource("manual");
-    setMsg(null);
+    if (!soft) {
+      setEmps(null);
+      setPending({});
+      undoStack.current = [];
+      redoStack.current = [];
+      setSource("manual");
+      setMsg(null);
+      setAbsent(new Set());
+      setPendingFixes(new Set());
+      setLeaves(new Map());
+      setPendingLeaves(new Map());
+    }
     const from = viewDates[0];
     const lastDay = viewDates[viewDates.length - 1];
     const to = addDays(lastDay, 1);
     const today = todayIso();
-    setAbsent(new Set());
-    setPendingFixes(new Set());
     const req = ++absReq.current;
     // วันขาดงานโหลดแยก: ถ้าโหลดไม่ได้ ตารางกะยังใช้ได้ตามปกติ
     (async () => {
@@ -146,15 +152,15 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
         }
         if (req !== absReq.current) return;
         setLiveDate(live);
-        setAbsent(new Set(rows.map((r) => keyOf(r.user_id, r.work_date))));
-        setPendingFixes(new Set(rows.filter((r) => r.pending_correction).map((r) => keyOf(r.user_id, r.work_date))));
+        const nextAbsent = new Set(rows.map((r) => keyOf(r.user_id, r.work_date)));
+        const nextFixes = new Set(rows.filter((r) => r.pending_correction).map((r) => keyOf(r.user_id, r.work_date)));
+        setAbsent((prev) => keepSameSet(prev, nextAbsent));
+        setPendingFixes((prev) => keepSameSet(prev, nextFixes));
       } catch {
-        if (req === absReq.current) setAbsent(new Set());
+        if (req === absReq.current && !soft) setAbsent(new Set());
       }
     })();
     // วันลาโหลดแยก: ถ้าโหลดไม่ได้ ตารางกะยังใช้ได้ แต่ต้องบอกผู้ใช้ เพราะช่องจะไม่ขึ้นว่าลา
-    setLeaves(new Map());
-    setPendingLeaves(new Map());
     const lvReq = ++leaveReq.current;
     (async () => {
       try {
@@ -174,8 +180,10 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
                 .range(f, t),
             );
         if (lvReq === leaveReq.current) {
-          setLeaves(leaveDayMap(list, viewDates)); // ใช้เฉพาะใบที่อนุมัติแล้ว
-          setPendingLeaves(pendingLeaveDays(list, viewDates));
+          const nextLeaves = leaveDayMap(list, viewDates); // ใช้เฉพาะใบที่อนุมัติแล้ว
+          const nextWaiting = pendingLeaveDays(list, viewDates);
+          setLeaves((prev) => keepSameMap(prev, nextLeaves));
+          setPendingLeaves((prev) => keepSameMap(prev, nextWaiting));
         }
       } catch {
         if (lvReq === leaveReq.current) setMsg({ tone: "warning", text: "โหลดข้อมูลวันลาไม่สำเร็จ ช่องวันลาอาจไม่แสดง ลองรีเฟรชหน้า" });
@@ -193,10 +201,11 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
       } else {
         const [p, r, s, h, go, lp] = await Promise.all([
           fetchAll<Emp>((f, t) => sb().from("profiles").select(EMP_COLS).eq("warehouse_id", wh).order("employee_code").range(f, t)),
-          fetchAll<Row & { profiles: unknown }>((f, t) =>
+          // ดึงหลายหน้าพร้อมกัน · profiles!inner() ใช้กรองคลังอย่างเดียว ไม่ส่งข้อมูลซ้ำมาทุกแถว
+          fetchPagesFast<Row>((f, t) =>
             sb()
               .from("shift_schedules")
-              .select("user_id, work_date, shift_code, holiday_work, is_volunteer, profiles!inner(warehouse_id)")
+              .select("user_id, work_date, shift_code, holiday_work, is_volunteer, profiles!inner()")
               .eq("profiles.warehouse_id", wh)
               .gte("work_date", from)
               .lt("work_date", to)
@@ -221,19 +230,27 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
       const g: Grid = {};
       for (const r of rows) (g[r.user_id] ??= {})[r.work_date] = { shift_code: r.shift_code, holiday_work: r.holiday_work, is_volunteer: r.is_volunteer };
       setEmps(people);
-      setBase(g);
+      setBase((prev) => keepSameRows(prev, g));
       setStatuses(st);
-      setHolidays(hol);
+      setHolidays((prev) => (JSON.stringify(prev) === JSON.stringify(hol) ? prev : hol));
     } catch (e) {
-      setEmps([]);
-      setMsg({ tone: "error", text: errText(e) });
+      // อัปเดตเบื้องหลังไม่สำเร็จ: ตารางที่เห็นอยู่ยังใช้ต่อได้
+      if (soft) setMsg({ tone: "warning", text: "อัปเดตข้อมูลล่าสุดไม่สำเร็จ ลองรีเฟรชหน้า" });
+      else {
+        setEmps([]);
+        setMsg({ tone: "error", text: errText(e) });
+      }
     }
   }, [wh, viewDates, viewMonths, demo, scope]);
+  const reload = useCallback(() => load(), [load]);
 
+  const loadedKey = useRef("");
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- โหลดข้อมูลจาก Supabase ตอนเปลี่ยนคลัง/เดือน
-    load();
-  }, [load]);
+    const key = `${wh}|${scope}|${viewDates[0]}|${viewDates[viewDates.length - 1]}`;
+    const soft = loadedKey.current === key;
+    loadedKey.current = key;
+    load(soft); // โหลดตอนเปลี่ยนคลัง/เดือน หรือกลับมาที่หน้านี้
+  }, [load, wh, scope, viewDates]);
 
   // เตือนก่อนปิดหน้าถ้ายังไม่ได้บันทึก
   useEffect(() => {
@@ -767,7 +784,7 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
                 setEditing(true);
                 setView("month");
               }}
-              reload={load}
+              reload={reload}
               setMsg={setMsg}
               scope={scope}
             />
@@ -953,11 +970,14 @@ function CellModal({
 
 /** รายการกะใต้ตาราง: เลขในช่อง → เวลาเข้า-เลิกเต็ม · แสดงเฉพาะกะที่ใช้ในเดือนนี้ เรียงตามเวลาเข้างาน */
 function Legend({ defs, grid }: { defs: ShiftDef[]; grid: Grid }) {
-  const used = new Set(Object.values(grid).flatMap((row) => Object.values(row).map((c) => c.shift_code)));
-  const list = (used.size ? defs.filter((d) => used.has(d.code)) : defs)
-    .filter((d) => d.code !== "OFF" && d.code !== "OFFC") // 2 สีนี้มีคำอธิบายใน DayColorLegend แล้ว
-    .slice()
-    .sort((a, b) => (a.start ?? 9999) - (b.start ?? 9999));
+  const list = useMemo(() => {
+    const used = new Set<string>();
+    for (const row of Object.values(grid)) for (const c of Object.values(row)) used.add(c.shift_code);
+    return (used.size ? defs.filter((d) => used.has(d.code)) : defs)
+      .filter((d) => d.code !== "OFF" && d.code !== "OFFC") // 2 สีนี้มีคำอธิบายใน DayColorLegend แล้ว
+      .slice()
+      .sort((a, b) => (a.start ?? 9999) - (b.start ?? 9999));
+  }, [defs, grid]);
   if (!list.length) return null;
   return (
     <ul className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1.5 px-1 text-[13px] text-muted sm:grid-cols-3 lg:grid-cols-4" aria-label="กะที่ใช้ในเดือนนี้">

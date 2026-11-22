@@ -140,15 +140,43 @@ export function sameCell(a: Cell | null | undefined, b: Cell | null | undefined)
 
 /** รวมการแก้ไขที่ยังไม่บันทึกเข้ากับตารางจริง */
 export function mergeGrid(base: Grid, pending: Record<string, Cell | null>): Grid {
-  const out: Grid = {};
-  for (const [u, days] of Object.entries(base)) out[u] = { ...days };
+  // คัดลอกเฉพาะแถวที่ถูกแก้ แถวอื่นใช้ของเดิม หน้าจอจึงวาดใหม่แค่แถวที่เปลี่ยน
+  const out: Grid = { ...base };
+  const copied = new Set<string>();
   for (const [key, cell] of Object.entries(pending)) {
     const [u, d] = splitKey(key);
-    out[u] = out[u] ?? {};
+    if (!copied.has(u)) {
+      out[u] = { ...(base[u] ?? {}) };
+      copied.add(u);
+    }
     if (cell) out[u][d] = cell;
     else delete out[u][d];
   }
   return out;
+}
+
+/** โหลดข้อมูลซ้ำแล้วเหมือนเดิม: ใช้แถวเดิม (ถ้าเหมือนทั้งตารางคืนตารางเดิม) หน้าจอจะได้ไม่ต้องวาดใหม่ */
+export function keepSameRows(prev: Grid, next: Grid): Grid {
+  const out: Grid = {};
+  let same = Object.keys(prev).length === Object.keys(next).length;
+  for (const [u, row] of Object.entries(next)) {
+    const old = prev[u];
+    const keys = Object.keys(row);
+    const equal = !!old && Object.keys(old).length === keys.length && keys.every((d) => sameCell(old[d], row[d]));
+    out[u] = equal ? old : row;
+    if (!equal) same = false;
+  }
+  return same ? prev : out;
+}
+
+/** Set / Map ที่มีค่าเหมือนเดิม: คืนตัวเดิม */
+export function keepSameSet<T>(prev: Set<T>, next: Set<T>): Set<T> {
+  return prev.size === next.size && [...next].every((x) => prev.has(x)) ? prev : next;
+}
+export function keepSameMap<V>(prev: Map<string, V>, next: Map<string, V>): Map<string, V> {
+  if (prev.size !== next.size) return next;
+  for (const [k, v] of next) if (!prev.has(k) || JSON.stringify(prev.get(k)) !== JSON.stringify(v)) return next;
+  return prev;
 }
 
 export const keyOf = (userId: string, date: string) => `${userId}|${date}`;

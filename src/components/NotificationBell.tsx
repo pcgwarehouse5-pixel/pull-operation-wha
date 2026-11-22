@@ -1,6 +1,7 @@
 "use client";
 
-// กระดิ่งแจ้งเตือนบนแถบหัว: ตัวเลขยังไม่อ่าน (ดึงใหม่ทุก 60 วินาที และตอนกลับมาที่หน้าจอ)
+// กระดิ่งแจ้งเตือนบนแถบหัว: ตัวเลขยังไม่อ่าน (ดึงใหม่ทุก 60 วินาทีเมื่อเปิดจออยู่ และตอนกลับมาที่หน้าจอ)
+// เปลี่ยนหน้าในแอปใช้ตัวเลขที่จำไว้ ถ้าเพิ่งดึงไม่เกิน 30 วินาทีจะไม่ดึงซ้ำ
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useApp } from "./AuthProvider";
@@ -8,9 +9,12 @@ import { Icon } from "./Icon";
 import { sb } from "@/lib/supabase";
 import { useI18n } from "@/i18n";
 
+const FRESH_MS = 30000;
+const memo: { user: string; n: number; at: number } = { user: "", n: 0, at: 0 };
+
 export function NotificationBell() {
   const { profile, demo } = useApp();
-  const [n, setN] = useState(0);
+  const [n, setN] = useState(() => (!demo && memo.user === profile.id ? memo.n : 0));
   const { t } = useI18n();
 
   useEffect(() => {
@@ -20,23 +24,33 @@ export function NotificationBell() {
       return;
     }
     let live = true;
-    const load = () =>
+    const fetchCount = () =>
       sb()
         .from("notifications")
         .select("id", { count: "exact", head: true })
         .eq("user_id", profile.id)
         .is("read_at", null)
-        .then(({ count }) => live && setN(count ?? 0));
+        .then(({ count, error }) => {
+          if (error) return;
+          memo.user = profile.id;
+          memo.n = count ?? 0;
+          memo.at = Date.now();
+          if (live) setN(memo.n);
+        });
+    const load = () => {
+      if (document.visibilityState !== "visible") return; // ปิดจอ/สลับแอปอยู่ ไม่ต้องดึง
+      if (memo.user === profile.id && Date.now() - memo.at < FRESH_MS) return;
+      fetchCount();
+    };
     load();
     const t = setInterval(load, 60000);
-    const onFocus = () => document.visibilityState === "visible" && load();
-    document.addEventListener("visibilitychange", onFocus);
-    window.addEventListener("wha-notifications-read", load);
+    document.addEventListener("visibilitychange", load);
+    window.addEventListener("wha-notifications-read", fetchCount);
     return () => {
       live = false;
       clearInterval(t);
-      document.removeEventListener("visibilitychange", onFocus);
-      window.removeEventListener("wha-notifications-read", load);
+      document.removeEventListener("visibilitychange", load);
+      window.removeEventListener("wha-notifications-read", fetchCount);
     };
   }, [demo, profile.id]);
 

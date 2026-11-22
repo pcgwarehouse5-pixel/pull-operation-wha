@@ -12,7 +12,8 @@ import { MySummary } from "@/components/home/MySummary";
 import { navFor, type NavItem } from "@/lib/nav";
 import { sb } from "@/lib/supabase";
 import { isGlobal, isSupervisorUp, noTimekeeping } from "@/lib/types";
-import { todayIso } from "@/lib/shifts";
+import { addDays, todayIso } from "@/lib/shifts";
+import { loadMyAttendance } from "@/lib/my-attendance";
 import type { AttendanceRow } from "@/lib/attendance";
 import { useI18n } from "@/i18n";
 import { shiftText, useShiftDefs } from "@/lib/useShiftDefs";
@@ -38,10 +39,9 @@ export default function HomePage() {
       return;
     }
     let live = true;
+    // ช่วงเดียวกับการ์ดตำแหน่งงานบนหน้านี้ จึงใช้คำขอเดียวกัน
     if (timekeep)
-      sb()
-        .rpc("my_attendance", { p_from: today, p_to: today })
-        .then(({ data }) => live && setRow(((data ?? []) as AttendanceRow[])[0] ?? null));
+      loadMyAttendance(addDays(today, -1), addDays(today, 1)).then(({ data }) => live && setRow((data ?? []).find((r) => r.work_date === today) ?? null));
     if (boss) {
       Promise.all([
         sb().from("leave_requests").select("id", { count: "exact", head: true }).in("status", ["pending", "cancel_requested"]).neq("user_id", profile.id),
