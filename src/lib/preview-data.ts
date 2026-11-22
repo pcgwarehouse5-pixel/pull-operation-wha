@@ -131,7 +131,7 @@ export function previewShifts(dates: string[]) {
 export function previewAbsent(dates: string[], today: string) {
   return previewShifts(dates)
     .filter((r, i) => r.user_id === "p2" && r.work_date < today && !r.shift_code.startsWith("OFF") && i % 3 === 0)
-    .map((r) => ({ user_id: r.user_id, work_date: r.work_date }));
+    .map((r, i) => ({ user_id: r.user_id, work_date: r.work_date, pending_correction: i === 0 }));
 }
 
 // พนักงานในตารางกะของโหมดดูดีไซน์ (รวมผู้ใช้เดโม)
@@ -229,6 +229,7 @@ export function previewShiftLeaves(dates: string[]) {
     { user_id: "p1", leave_type: "sick", start_date: at(2), end_date: at(2), period: "full" as const, status: "approved" },
     { user_id: "p2", leave_type: "vacation", start_date: at(4), end_date: at(8), period: "full" as const, status: "approved" },
     { user_id: "preview-me", leave_type: "personal", start_date: at(11), end_date: at(11), period: "morning" as const, status: "approved" },
+    { user_id: "p2", leave_type: "sick", start_date: at(9), end_date: at(9), period: "full" as const, status: "pending" },
   ];
 }
 

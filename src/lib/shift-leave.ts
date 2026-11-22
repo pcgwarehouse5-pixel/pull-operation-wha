@@ -27,6 +27,20 @@ export function leaveDayMap(rows: LeaveSpan[], dates: string[]): Map<string, Day
   return out;
 }
 
+/** วันที่มีใบลารออนุมัติ (ยังไม่นับเป็นวันลา ใช้เตือนในสรุปคนขาด) · key → รหัสประเภทลา */
+export function pendingLeaveDays(rows: LeaveSpan[], dates: string[]): Map<string, string> {
+  const out = new Map<string, string>();
+  if (!dates.length) return out;
+  const first = dates[0];
+  const last = dates[dates.length - 1];
+  for (const r of rows) {
+    if (r.status !== "pending") continue;
+    const end = r.end_date < last ? r.end_date : last;
+    for (let d = r.start_date > first ? r.start_date : first; d <= end; d = addDays(d, 1)) out.set(keyOf(r.user_id, d), r.leave_type);
+  }
+  return out;
+}
+
 /**
  * ช่องนี้ขึ้นว่าลาไหม (ตรงกับ leave_day_count ที่ใช้นับวันลา):
  * มีกะทำงาน = ลา · OFF/วันหยุดกลางใบลา = ไม่นับ คง OFF ไว้ · ยังไม่มีกะ = ลา ยกเว้นวันนักขัตฤกษ์

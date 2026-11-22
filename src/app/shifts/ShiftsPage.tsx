@@ -11,7 +11,9 @@ import { ShiftTools, type ToolKey } from "@/components/shifts/ShiftTools";
 import { ExcelGrid, GridHelp, type Group } from "@/components/shifts/ExcelGrid";
 import { errText, fetchAll, sb } from "@/lib/supabase";
 import { mergeMembers, sortByMembers } from "@/lib/shift-grid";
-import { LEAVE_PERIOD_TEXT, leaveDayMap, leaveOnDay, type DayLeave, type LeaveSpan } from "@/lib/shift-leave";
+import { LEAVE_PERIOD_TEXT, leaveDayMap, leaveOnDay, pendingLeaveDays, type DayLeave, type LeaveSpan } from "@/lib/shift-leave";
+import { absentSummary } from "@/lib/shift-absent";
+import { AbsentSummary } from "@/components/shifts/AbsentSummary";
 import { useOptions } from "@/lib/useOptions";
 import { shortDay, thaiDateTime } from "@/lib/format";
 import { isGlobal, isManagerRole } from "@/lib/types";
@@ -86,6 +88,9 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
   const [absent, setAbsent] = useState<Set<string>>(new Set());
   const [liveDate, setLiveDate] = useState<string | null>(null);
   const absReq = useRef(0);
+  const [absentOpen, setAbsentOpen] = useState(false); // หน้าสรุปคนขาด
+  const [pendingFixes, setPendingFixes] = useState<Set<string>>(new Set()); // วันที่ขาดแต่มีคำขอแก้เวลารออนุมัติ
+  const [pendingLeaves, setPendingLeaves] = useState<Map<string, string>>(new Map()); // วันที่ขาดแต่มีใบลารออนุมัติ
   // วันลาที่อนุมัติแล้ว: อ่านจากใบลาโดยตรง ไม่เขียนทับกะในตาราง ถ้ายกเลิกใบลา ช่องกลับเป็นกะเดิมเอง
   const [leaves, setLeaves] = useState<Map<string, DayLeave>>(new Map());
   const leaveReq = useRef(0);
@@ -112,11 +117,12 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
     const to = addDays(lastDay, 1);
     const today = todayIso();
     setAbsent(new Set());
+    setPendingFixes(new Set());
     const req = ++absReq.current;
     // วันขาดงานโหลดแยก: ถ้าโหลดไม่ได้ ตารางกะยังใช้ได้ตามปกติ
     (async () => {
       try {
-        let rows: { user_id: string; work_date: string }[] = [];
+        let rows: { user_id: string; work_date: string; pending_correction?: boolean }[] = [];
         let live: string | null = null;
         if (demo) {
           live = "2026-11-01";
@@ -127,10 +133,10 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
           live = typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null;
           const last = lastDay < today ? lastDay : today;
           if (live && live <= last && from <= last) {
-            rows = await fetchAll<{ user_id: string; work_date: string }>((f, t) =>
+            rows = await fetchAll<{ user_id: string; work_date: string; pending_correction: boolean }>((f, t) =>
               sb()
                 .rpc("warehouse_attendance", { p_wh: wh, p_from: live! > from ? live! : from, p_to: last })
-                .select("user_id, work_date")
+                .select("user_id, work_date, pending_correction")
                 .eq("status", "absent")
                 .order("user_id")
                 .order("work_date")
@@ -141,12 +147,14 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
         if (req !== absReq.current) return;
         setLiveDate(live);
         setAbsent(new Set(rows.map((r) => keyOf(r.user_id, r.work_date))));
+        setPendingFixes(new Set(rows.filter((r) => r.pending_correction).map((r) => keyOf(r.user_id, r.work_date))));
       } catch {
         if (req === absReq.current) setAbsent(new Set());
       }
     })();
     // วันลาโหลดแยก: ถ้าโหลดไม่ได้ ตารางกะยังใช้ได้ แต่ต้องบอกผู้ใช้ เพราะช่องจะไม่ขึ้นว่าลา
     setLeaves(new Map());
+    setPendingLeaves(new Map());
     const lvReq = ++leaveReq.current;
     (async () => {
       try {
@@ -157,7 +165,7 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
                 .from("leave_requests")
                 .select("user_id, leave_type, start_date, end_date, period, status, profiles!inner(warehouse_id)")
                 .eq("profiles.warehouse_id", wh)
-                .in("status", ["approved", "cancel_requested"])
+                .in("status", ["approved", "cancel_requested", "pending"])
                 .lte("start_date", lastDay)
                 .gte("end_date", from)
                 .order("user_id")
@@ -165,7 +173,10 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
                 .order("id")
                 .range(f, t),
             );
-        if (lvReq === leaveReq.current) setLeaves(leaveDayMap(list, viewDates));
+        if (lvReq === leaveReq.current) {
+          setLeaves(leaveDayMap(list, viewDates)); // ใช้เฉพาะใบที่อนุมัติแล้ว
+          setPendingLeaves(pendingLeaveDays(list, viewDates));
+        }
       } catch {
         if (lvReq === leaveReq.current) setMsg({ tone: "warning", text: "โหลดข้อมูลวันลาไม่สำเร็จ ช่องวันลาอาจไม่แสดง ลองรีเฟรชหน้า" });
       }
@@ -268,12 +279,12 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
     );
   }, [roster, pos, q]);
 
-  const absentInView = useMemo(() => {
-    const ids = new Set(shown.map((e) => e.id));
-    let n = 0;
-    for (const k of absent) if (ids.has(k.slice(0, k.indexOf("|")))) n++;
-    return n;
-  }, [absent, shown]);
+  // สรุปคนขาด: นับตรงกับช่องสีดำในตาราง ตามตำแหน่ง/คำค้นที่เลือกอยู่
+  const absentPeople = useMemo(
+    () => absentSummary({ emps: shown, dates: viewDates, absent, grid, pending, defs, isOnLeave: (id, d) => !!leaveFor(id, d), pendingLeaves, pendingFixes }),
+    [shown, viewDates, absent, grid, pending, defs, leaveFor, pendingLeaves, pendingFixes],
+  );
+  const absentInView = useMemo(() => absentPeople.reduce((n, p) => n + p.days.length, 0), [absentPeople]);
 
   const leaveInView = useMemo(() => {
     let n = 0;
@@ -615,10 +626,14 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
               เลขในช่อง = <b className="text-ink">เวลาเข้างาน</b> <span className="num">(8 = 08:00 · 20 = 20:00 · 7:30 = 07:30)</span>
             </span>
             {absentInView > 0 && (
-              <span className="inline-flex items-center gap-1.5 font-semibold text-ink">
-                <span className="inline-flex h-6 items-center rounded-md bg-black px-1.5 text-[12px] font-bold text-white">ขาด</span>
-                {multiMonth ? "ช่วงนี้" : "เดือนนี้"} {absentInView} คน-วัน
-              </span>
+              <button
+                type="button"
+                onClick={() => setAbsentOpen(true)}
+                className="inline-flex min-h-10 items-center gap-1.5 rounded-lg bg-black px-3 text-[14px] font-bold whitespace-nowrap text-white hover:bg-ink"
+              >
+                ขาด {multiMonth ? "ช่วงนี้" : "เดือนนี้"} {absentPeople.length} คน {absentInView} วัน
+                <span className="rounded bg-white px-1.5 py-0.5 text-[13px] text-black">ดูสรุป</span>
+              </button>
             )}
             {leaveInView > 0 && (
               <span className="inline-flex items-center gap-1.5 font-semibold text-ink">
@@ -698,6 +713,17 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
           )}
 
           {nChanges > 0 && <div className="h-20" aria-hidden="true" />}
+
+          {absentOpen && absentPeople.length > 0 && (
+            <AbsentSummary
+              people={absentPeople}
+              rangeText={rangeText}
+              sinceText={liveDate ? `${shortDay(liveDate)} ${Number(liveDate.slice(0, 4)) + 543}` : null}
+              filtered={!!pos || !!q.trim()}
+              leaveLabels={leaveLabels}
+              onClose={() => setAbsentOpen(false)}
+            />
+          )}
 
           {cellEdit && (
             <CellModal
