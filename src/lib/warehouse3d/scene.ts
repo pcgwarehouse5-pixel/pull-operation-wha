@@ -7,6 +7,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { WAREHOUSE_MAPS } from "./maps";
+import { workerIconUrl } from "../worker-icon";
 import type { ViewMode, WhMap } from "./types";
 
 /** ตัวคนบนแผนที่ (หน้าผังตำแหน่ง) · x/y = พิกัดผัง */
@@ -18,6 +19,8 @@ export type PersonObj = {
   label: string;
   group: string;
   groupLabel: string;
+  /** ใช้เลือกสีผิว/เสื้อของรูปการ์ตูน (เช่น รหัสพนักงาน) · ไม่ใส่ = ใช้ id */
+  seed?: string;
   /** บรรทัดที่ 2 ของป้าย เช่น "พัก 12:00" · สีพื้น/สีตัวอักษรของแถบนั้น */
   sub?: string;
   subBg?: string;
@@ -798,44 +801,20 @@ export function createWarehouse3D(el: HTMLElement, opt: { mobile: boolean; font?
   el.appendChild(layer);
   const peopleRoot = new THREE.Group();
   scene.add(peopleRoot);
-  /* ตัวคนงาน 3D (สูงราว 4.8 ม. ในผัง ให้เห็นชัดจากมุมไกล): หมวกนิรภัย + เสื้อกั๊กสีตามตำแหน่ง แถบสะท้อนแสง
-     กางเกง/แขนเสื้อกรมท่า · วงแหวนสีบนพื้นช่วยให้เห็นจากมุมบน · รูปทรงสร้างครั้งเดียว ทุกคนใช้ร่วมกัน (วาดเร็ว) */
+  /* จุดของพนักงานบนพื้น: วงกลมสีตามตำแหน่ง + ขอบขาว (เห็นได้ทุกมุมกล้อง ไม่บังชั้นวาง)
+     ตัวคนแสดงเป็นรูปการ์ตูนหน้าชื่อในป้ายแทนตัวคน 3D (ผู้ใช้ขอ: บางมุมมองไม่เห็นตัวคน) · รูปทรงสร้างครั้งเดียว ทุกคนใช้ร่วมกัน */
   const FIG = (() => {
-    const at = (g: THREE.BufferGeometry, x: number, y: number, rz = 0, rx = 0) => {
-      if (rx) g.rotateX(rx);
-      if (rz) g.rotateZ(rz);
-      return g.translate(x, y, 0);
-    };
-    const merge = (list: THREE.BufferGeometry[]) => {
-      const g = mergeGeometries(list)!;
-      list.forEach((x) => x.dispose());
-      return g;
-    };
+    const flat = (g: THREE.BufferGeometry, y: number) => g.rotateX(-Math.PI / 2).translate(0, y, 0);
     return {
-      vest: merge([
-        at(new THREE.CapsuleGeometry(0.82, 0.75, 6, 18), 0, 2.45),
-        at(new THREE.SphereGeometry(0.72, 22, 10, 0, Math.PI * 2, 0, Math.PI / 2), 0, 4.2),
-        at(new THREE.CylinderGeometry(0.8, 0.8, 0.1, 26), 0, 4.22),
-      ]),
-      cloth: merge([
-        at(new THREE.CapsuleGeometry(0.34, 1.0, 4, 12), -0.42, 0.88),
-        at(new THREE.CapsuleGeometry(0.34, 1.0, 4, 12), 0.42, 0.88),
-        at(new THREE.CapsuleGeometry(0.25, 1.05, 4, 12), -1.02, 2.5, -0.2),
-        at(new THREE.CapsuleGeometry(0.25, 1.05, 4, 12), 1.02, 2.5, 0.2),
-      ]),
-      skin: at(new THREE.SphereGeometry(0.66, 22, 16), 0, 3.98),
-      stripe: merge([at(new THREE.TorusGeometry(0.85, 0.075, 8, 32), 0, 2.15, 0, Math.PI / 2), at(new THREE.TorusGeometry(0.86, 0.075, 8, 32), 0, 2.75, 0, Math.PI / 2)]),
-      ring: at(new THREE.RingGeometry(1.25, 1.75, 44), 0, 0.25, 0, -Math.PI / 2), // ยกพ้นเส้น/โซนที่ทาบนพื้น
+      dot: flat(new THREE.CircleGeometry(1.3, 40), 0.25), // ยกพ้นเส้น/โซนที่ทาบนพื้น
+      edge: flat(new THREE.RingGeometry(1.3, 1.75, 44), 0.26),
     };
   })();
-  const SKIN = [0xf3c9a4, 0xe8b38a, 0xd69a6f, 0xf6d2b3];
-  const clothMat = stdMat({ color: 0x24305c, roughness: 0.75, metalness: 0.02 });
-  const stripeMat = stdMat({ color: 0xf5f8fc, roughness: 0.25, metalness: 0.35, emissive: 0x2a3440 });
-  const ringMat = (color: string) => {
-    const k = "ring" + color;
+  const markMat = (color: string, opacity: number) => {
+    const k = `mark${color}${opacity}`;
     let m = matCache.get(k);
     if (!m) {
-      m = new THREE.MeshBasicMaterial({ color: new THREE.Color(color), transparent: true, opacity: 0.85, depthWrite: false });
+      m = new THREE.MeshBasicMaterial({ color: new THREE.Color(color), transparent: true, opacity, depthWrite: false });
       m.userData.shared = true;
       matCache.set(k, m);
     }
@@ -843,36 +822,29 @@ export function createWarehouse3D(el: HTMLElement, opt: { mobile: boolean; font?
   };
   function makeFigure(id: string, color: string) {
     const g = new THREE.Group();
-    const seed = [...id].reduce((n, c) => n + c.charCodeAt(0), 0);
-    const part = (geo: THREE.BufferGeometry, mat: THREE.Material, shadow: boolean) => {
+    const part = (geo: THREE.BufferGeometry, mat: THREE.Material) => {
       const m = new THREE.Mesh(geo, mat);
-      m.castShadow = shadow;
       m.userData.person = id;
       g.add(m);
       return m;
     };
-    g.userData.ring = part(FIG.ring, ringMat(color), false);
-    g.userData.vest = part(FIG.vest, personMat(color), true);
-    part(FIG.cloth, clothMat, true);
-    part(FIG.skin, stdMat({ color: SKIN[seed % SKIN.length], roughness: 0.8, metalness: 0 }), true);
-    part(FIG.stripe, stripeMat, false);
+    g.userData.dot = part(FIG.dot, markMat(color, 0.9));
+    part(FIG.edge, markMat("#ffffff", 0.95));
     return g;
   }
   function recolorFigure(g: THREE.Group, color: string) {
-    (g.userData.vest as THREE.Mesh).material = personMat(color);
-    (g.userData.ring as THREE.Mesh).material = ringMat(color);
+    (g.userData.dot as THREE.Mesh).material = markMat(color, 0.9);
   }
   const ray = new THREE.Raycaster(), v2 = new THREE.Vector2();
   type Box = { x: number; y: number; w: number; h: number } | null;
-  type Obj = { p: PersonObj; mesh: THREE.Group; tag: HTMLButtonElement; nm: HTMLSpanElement; sb: HTMLSpanElement; box: Box };
+  type Obj = { p: PersonObj; mesh: THREE.Group; tag: HTMLButtonElement; av: HTMLImageElement; nm: HTMLSpanElement; sb: HTMLSpanElement; box: Box };
   type Grp = { key: string; tag: HTMLButtonElement; ids: string[]; color: string; box: Box };
   let OBJS = new Map<string, Obj>();
   let GRPS = new Map<string, Grp>();
   let drag: { ids: string[]; start: THREE.Vector3; orig: Map<string, { x: number; y: number }>; tap?: string; sx: number; sy: number; moved: boolean; pid: number } | null = null;
   const unit = () => (cur ? MAPS[cur].pxm : 6.6);
-  const FIG_SCALE = 2.6; // ขยายตัวคนให้ใหญ่กว่าจริง (2 เท่าของรุ่นแรก) มองเห็นชัดเวลาแคปขึ้นบอร์ดประชุม
-  const boxH = () => unit() * 4.95 * FIG_SCALE; // ความสูงตัวคน (ถึงยอดหมวก) · ป้ายชื่ออยู่เหนือจุดนี้
-  const personMat = (color: string) => stdMat({ color: new THREE.Color(color).getHex(), roughness: 0.55, metalness: 0.05 });
+  const FIG_SCALE = 2.6; // ขนาดจุดบนพื้น (ใหญ่ให้เห็นชัดเวลาแคปขึ้นบอร์ดประชุม)
+  const boxH = () => unit() * 1.2; // ป้ายชื่ออยู่เหนือจุดบนพื้นเล็กน้อย
 
   const chip = (bg: string, fg: string, border: string, size: number) => {
     const b = document.createElement("button");
@@ -880,19 +852,26 @@ export function createWarehouse3D(el: HTMLElement, opt: { mobile: boolean; font?
     b.style.cssText = `position:absolute;left:0;top:0;pointer-events:auto;white-space:nowrap;font:700 calc(var(--lk,1)*${size}px)/1.25 ${FONT};color:${fg};background:${bg};border:3px solid ${border};border-radius:14px;padding:3px calc(var(--lk,1)*12px);box-shadow:0 3px 12px rgba(11,42,74,.25);user-select:none;-webkit-user-select:none`;
     return b;
   };
-  /* ป้ายรายคน 2 บรรทัด: ชื่อ · แถบเวลาพัก (สีตามเวลาพัก) · ขนาดตายตัวให้ภาพที่บันทึกตรงกับบนจอ
-     ขนาด 2 เท่าของรุ่นแรก (อ่านออกเมื่อแคปขึ้นบอร์ดประชุม) · ภาพที่บันทึกใช้ค่าชุดเดียวกัน */
-  const NAME_PX = 28, NAME_LH = 34, SUB_PX = 22, SUB_LH = 30, TAG_PAD = 5, TAG_GAP = 3, TAG_BORDER = 3, GROUP_PX = 24;
+  /* ป้ายรายคน: รูปการ์ตูนพนักงาน (หมวก/เสื้อกั๊กสีตามตำแหน่ง) หน้าชื่อ · ใต้ชื่อเป็นแถบเวลาพัก (สีตามเวลาพัก)
+     ขนาดใหญ่ (อ่านออกเมื่อแคปขึ้นบอร์ดประชุม) · ภาพที่บันทึกวาดตามตำแหน่งจริงของแต่ละส่วนในป้าย */
+  const NAME_PX = 28, NAME_LH = 34, SUB_PX = 22, SUB_LH = 30, AV_PX = 62, TAG_PAD = 5, TAG_GAP = 3, TAG_BORDER = 3, GROUP_PX = 24;
   const personChip = (border: string) => {
     const b = document.createElement("button");
     b.type = "button";
-    b.style.cssText = `position:absolute;left:0;top:0;pointer-events:auto;white-space:nowrap;display:flex;flex-direction:column;align-items:center;gap:calc(var(--lk,1)*${TAG_GAP}px);padding:calc(var(--lk,1)*${TAG_PAD}px) calc(var(--lk,1)*10px);background:#fff;border:${TAG_BORDER}px solid ${border};border-radius:calc(var(--lk,1)*16px);box-shadow:0 3px 12px rgba(11,42,74,.25);user-select:none;-webkit-user-select:none;font-family:${FONT}`;
+    b.style.cssText = `position:absolute;left:0;top:0;pointer-events:auto;white-space:nowrap;display:flex;flex-direction:row;align-items:center;gap:calc(var(--lk,1)*8px);padding:calc(var(--lk,1)*${TAG_PAD}px) calc(var(--lk,1)*12px) calc(var(--lk,1)*${TAG_PAD}px) calc(var(--lk,1)*${TAG_PAD}px);background:#fff;border:${TAG_BORDER}px solid ${border};border-radius:calc(var(--lk,1)*40px);box-shadow:0 3px 12px rgba(11,42,74,.25);user-select:none;-webkit-user-select:none;font-family:${FONT}`;
+    const av = document.createElement("img");
+    av.alt = "";
+    av.draggable = false;
+    av.style.cssText = `display:block;flex:none;width:calc(var(--lk,1)*${AV_PX}px);height:calc(var(--lk,1)*${AV_PX}px);pointer-events:none`;
+    const col = document.createElement("span");
+    col.style.cssText = `display:flex;flex-direction:column;align-items:center;gap:calc(var(--lk,1)*${TAG_GAP}px)`;
     const nm = document.createElement("span");
     nm.style.cssText = `font:700 calc(var(--lk,1)*${NAME_PX}px)/calc(var(--lk,1)*${NAME_LH}px) ${FONT};color:#16204a`;
     const sb = document.createElement("span");
     sb.style.cssText = `font:700 calc(var(--lk,1)*${SUB_PX}px)/calc(var(--lk,1)*${SUB_LH}px) ${FONT};padding:0 calc(var(--lk,1)*10px);border-radius:calc(var(--lk,1)*10px)`;
-    b.append(nm, sb);
-    return { b, nm, sb };
+    col.append(nm, sb);
+    b.append(av, col);
+    return { b, av, nm, sb };
   };
   /* พื้นที่ที่ครอบตัวคนที่แสดงอยู่ (เผื่อขอบ · อย่างน้อย ~45 ม. ไม่ให้ซูมใกล้เกิน) */
   function peopleArea(full: number[]): [number, number, number, number] {
@@ -918,10 +897,10 @@ export function createWarehouse3D(el: HTMLElement, opt: { mobile: boolean; font?
       if (!o) {
         const mesh = makeFigure(p.id, p.color);
         peopleRoot.add(mesh);
-        const { b: tag, nm, sb } = personChip(p.color);
+        const { b: tag, av, nm, sb } = personChip(p.color);
         tag.addEventListener("pointerdown", (e) => startDrag(e, [p.id], p.id));
         layer.appendChild(tag);
-        o = { p, mesh, tag, nm, sb, box: null };
+        o = { p, mesh, tag, av, nm, sb, box: null };
         OBJS.set(p.id, o);
       } else if (o.p.color !== p.color) {
         recolorFigure(o.mesh, p.color);
@@ -929,6 +908,8 @@ export function createWarehouse3D(el: HTMLElement, opt: { mobile: boolean; font?
       }
       /* กำลังลากคนนี้อยู่ = คงตำแหน่งบนจอไว้ก่อน */
       o.p = drag?.ids.includes(p.id) ? { ...p, x: o.p.x, y: o.p.y } : p;
+      const icon = workerIconUrl(p.color, p.seed ?? p.id);
+      if (o.av.getAttribute("src") !== icon) o.av.src = icon;
       o.nm.textContent = p.label;
       o.sb.textContent = p.sub ?? "";
       o.sb.style.display = p.sub ? "" : "none";
@@ -1147,29 +1128,36 @@ export function createWarehouse3D(el: HTMLElement, opt: { mobile: boolean; font?
     m.translate(0, headH);
     const shadow = (on: boolean) => { m.shadowColor = on ? "rgba(11,42,74,.25)" : "transparent"; m.shadowBlur = on ? 12 : 0; m.shadowOffsetY = on ? 3 : 0; };
     const people = [...OBJS.values()].filter((o) => o.box && o.tag.style.display !== "none").sort((a, b) => b.box!.y - a.box!.y);
+    /* ตำแหน่งจริงของรูป/ชื่อ/แถบเวลาพักในป้ายบนจอ (เทียบกับกรอบแผนที่) → ภาพที่บันทึกตรงกับบนจอทุกขนาดจอ */
+    const base = layer.getBoundingClientRect();
+    const at = (e: HTMLElement) => { const r = e.getBoundingClientRect(); return { x: r.left - base.left, y: r.top - base.top, w: r.width, h: r.height }; };
     for (const o of people) {
-      const b = o.box!, mid = b.x + b.w / 2;
+      const b = o.box!;
       shadow(true);
-      rr(m, b.x + TAG_BORDER / 2, b.y + TAG_BORDER / 2, b.w - TAG_BORDER, b.h - TAG_BORDER, 16 * LK);
+      rr(m, b.x + TAG_BORDER / 2, b.y + TAG_BORDER / 2, b.w - TAG_BORDER, b.h - TAG_BORDER, Math.min(40 * LK, (b.h - TAG_BORDER) / 2));
       m.fillStyle = "#ffffff";
       m.fill();
       shadow(false);
       m.lineWidth = TAG_BORDER;
       m.strokeStyle = o.p.color;
       m.stroke();
+      if (o.av.complete && o.av.naturalWidth) {
+        const r = at(o.av);
+        m.drawImage(o.av, r.x, r.y, r.w, r.h);
+      }
       m.textAlign = "center";
       m.font = `700 ${NAME_PX * LK}px ${FONT}`;
       m.fillStyle = "#16204a";
-      const top = b.y + TAG_BORDER + TAG_PAD * LK;
-      m.fillText(o.p.label, mid, top + (NAME_LH * LK) / 2);
+      const n = at(o.nm);
+      m.fillText(o.p.label, n.x + n.w / 2, n.y + n.h / 2);
       if (o.p.sub) {
-        m.font = `700 ${SUB_PX * LK}px ${FONT}`;
-        const tw = m.measureText(o.p.sub).width + 20 * LK, ty = top + (NAME_LH + TAG_GAP) * LK;
-        rr(m, mid - tw / 2, ty, tw, SUB_LH * LK, 10 * LK);
+        const r = at(o.sb);
+        rr(m, r.x, r.y, r.w, r.h, 10 * LK);
         m.fillStyle = o.p.subBg ?? "#eef1f6";
         m.fill();
+        m.font = `700 ${SUB_PX * LK}px ${FONT}`;
         m.fillStyle = o.p.subFg ?? "#16204a";
-        m.fillText(o.p.sub, mid, ty + (SUB_LH * LK) / 2);
+        m.fillText(o.p.sub, r.x + r.w / 2, r.y + r.h / 2);
       }
     }
     for (const g of GRPS.values()) {

@@ -2,7 +2,7 @@
 
 // ผังตำแหน่งพนักงาน (Warehouse Team Layout) สำหรับประชุมก่อนเริ่มงาน (ไฟล์ "Pull-Operation Operation & Dashboard" หน้า 3)
 // การ์ดชื่อ + ไอคอนคน (หมวกนิรภัย/เสื้อกั๊กสีตามตำแหน่ง) แยกตามทักษะ พร้อมเวลาพัก · ด้านบนมีแผนที่คลัง 3D ของคลังที่เลือก (ถ้ามีผัง: WH5 / WH32)
-// บนแผนที่: คนที่จองแล้วเป็นตัวคน 3D สีตามตำแหน่ง กรองตามคลังต้นทาง/ตำแหน่งได้ · หัวหน้าลากวางแล้วบันทึกลงระบบ (set_pull_positions)
+// บนแผนที่: คนที่จองแล้วเป็นจุดสีบนพื้น + ป้ายรูปการ์ตูนหน้าชื่อ สีตามตำแหน่ง กรองตามคลังต้นทาง/ตำแหน่งได้ · หัวหน้าลากวางแล้วบันทึกลงระบบ (set_pull_positions)
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
@@ -96,10 +96,10 @@ export default function LayoutPage() {
       .filter((b) => mapSrc === "ทั้งหมด" || who.get(b.user_id)?.warehouse_code === mapSrc)
       .map((b) => {
         const p = who.get(b.user_id), t = hm(b.break_time), pair = breakPair(opts.pull_break_time, b.shift, b.break_time);
-        /* ป้ายบนแผนที่: ชื่อเล่น + เวลาพัก 2 รอบ (สีเดียวกับการ์ด) */
+        /* ป้ายบนแผนที่: รูปการ์ตูน (เหมือนการ์ด) + ชื่อเล่น + เวลาพัก 2 รอบ (สีเดียวกับการ์ด) */
         return {
           id: b.id, x: mapPos[b.id].x, y: mapPos[b.id].y, color: skillStyle(b.skill_name).color,
-          label: p?.nickname || p?.name.split(" ")[0] || "พนักงาน", group: b.skill_name, groupLabel: b.skill_name,
+          label: p?.nickname || p?.name.split(" ")[0] || "พนักงาน", seed: b.user_id, group: b.skill_name, groupLabel: b.skill_name,
           sub: pair ? breakShort(pair) : "ยังไม่ตั้งเวลาพัก",
           subBg: t ? BREAK_COLORS[Math.max(0, firsts.indexOf(t)) % BREAK_COLORS.length] : "#eef1f6",
           subFg: t ? "#16204a" : "#5a6482",
@@ -203,7 +203,7 @@ export default function LayoutPage() {
           focus={filtered} focusKey={`${mapSrc}|${mapOn.join(",")}`} shot={shot}
         >
           {placed.length === 0 ? (
-            <p className="text-[14px] text-muted">ยังไม่มีคนที่จองเข้าคลังนี้ในวัน/กะนี้ · จองแล้วจะขึ้นเป็นตัวคนบนแผนที่ สีตามตำแหน่งงาน</p>
+            <p className="text-[14px] text-muted">ยังไม่มีคนที่จองเข้าคลังนี้ในวัน/กะนี้ · จองแล้วจะขึ้นเป็นป้ายรูปการ์ตูนพร้อมชื่อบนแผนที่ สีตามตำแหน่งงาน</p>
           ) : (
             <div className="space-y-2">
               <div className="flex items-center gap-2 overflow-x-auto pb-1">
