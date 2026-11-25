@@ -14,10 +14,10 @@ import { useOptions } from "@/lib/useOptions";
 import { todayIso } from "@/lib/shifts";
 import { shortDay, thaiDate } from "@/lib/format";
 import { isGlobal, ROLE_RANK } from "@/lib/types";
-import { addDays, loadPullConfig, loadWorkloads, volumesFor, type WorkloadRow } from "@/lib/pull-data";
+import { addDays, loadPool, loadPullConfig, loadWorkloads, volumesFor, type WorkloadRow } from "@/lib/pull-data";
 import {
-  SHIFT_LABEL, activeTasks, formatTyping, hoursOf, num, parseVolume, readiness, requirementRows, skillRequirements, skillStyle, totalRequired, typeVolume,
-  type PullConfig, type PullShift, type WorkloadType,
+  SHIFT_LABEL, activeTasks, formatTyping, hoursOf, num, parseVolume, readiness, requirementRows, skillRequirements, skillStyle, staffShortage, totalRequired, typeVolume,
+  type PoolPerson, type PullConfig, type PullShift, type WorkloadType,
 } from "@/lib/pull";
 
 type Msg = { tone: "success" | "error" | "warning"; text: string } | null;
@@ -73,6 +73,27 @@ export default function WorkloadPage() {
       live = false;
     };
   }, [demo, wh, from, to, today]);
+
+  // คนที่มีในกะนี้ (ใช้เตือนเมื่อกำลังคนไม่พอกับยอดงาน) · โหลดไม่ได้ก็ไม่เตือน ไม่ขวางการกรอก
+  const poolKey = `${wh}|${date}|${shift}`;
+  const [poolOf, setPoolOf] = useState<{ key: string; pool: PoolPerson[] } | null>(null);
+  const pool = poolOf?.key === poolKey ? poolOf.pool : null;
+  useEffect(() => {
+    if (!wh) return;
+    let live = true;
+    const key = `${wh}|${date}|${shift}`;
+    (async () => {
+      try {
+        const p = demo ? demo.previewPullPool(wh, date, shift) : await loadPool(wh, date, shift);
+        if (live) setPoolOf({ key, pool: p });
+      } catch {
+        // โหลดไม่ได้ = ไม่เตือน (ไม่ขวางการกรอกยอดงาน)
+      }
+    })();
+    return () => {
+      live = false;
+    };
+  }, [demo, wh, date, shift]);
 
   const isManager = isGlobal(profile.role) || (ROLE_RANK[profile.role] >= ROLE_RANK.supervisor && myWarehouseIds.includes(wh));
   const canEdit = date >= today || isManager;
@@ -141,7 +162,7 @@ export default function WorkloadPage() {
         <div className="mb-4"><Alert tone="info">วันที่ผ่านไปแล้ว ดูได้อย่างเดียว (แก้ย้อนหลังได้เฉพาะแอดมินคลัง)</Alert></div>
       )}
 
-      <WorkloadForm key={`${wh}-${date}-${shift}-${version}`} cfg={cfg} wh={wh} date={date} shift={shift} saved={saved} canEdit={canEdit} unitLabel={unitLabel} onSave={save} />
+      <WorkloadForm key={`${wh}-${date}-${shift}-${version}`} cfg={cfg} wh={wh} date={date} shift={shift} saved={saved} pool={pool} canEdit={canEdit} unitLabel={unitLabel} onSave={save} />
 
       <PlanStrip
         cfg={cfg}
@@ -163,9 +184,9 @@ export default function WorkloadPage() {
 const TYPE_ICON = (t: WorkloadType): IconName => (/เช็ค|ตรวจ/.test(t.name) ? "clipboard" : /โหลด/.test(t.name) ? "truck" : /จ่าย|หยิบ/.test(t.name) ? "cart" : /เติม/.test(t.name) ? "forklift" : "box");
 
 function WorkloadForm({
-  cfg, wh, date, shift, saved, canEdit, unitLabel, onSave,
+  cfg, wh, date, shift, saved, pool, canEdit, unitLabel, onSave,
 }: {
-  cfg: PullConfig; wh: string; date: string; shift: PullShift; saved: Record<string, number>; canEdit: boolean; unitLabel: (v: string) => string;
+  cfg: PullConfig; wh: string; date: string; shift: PullShift; saved: Record<string, number>; pool: PoolPerson[] | null; canEdit: boolean; unitLabel: (v: string) => string;
   onSave: (v: Record<string, number | null>) => Promise<boolean>;
 }) {
   const types = cfg.types.filter((t) => t.warehouse_id === wh && t.is_active).sort((a, b) => a.sort_order - b.sort_order);
@@ -190,6 +211,8 @@ function WorkloadForm({
   const reqs = skillRequirements(cfg, wh, requirementRows(cfg, wh, date, shift, volumes));
   const total = totalRequired(reqs);
   const hours = hoursOf(cfg, wh, shift, date)?.hours;
+  const lack = pool ? staffShortage(reqs, pool) : null;
+  const lackOf = new Map((lack?.rows ?? []).map((r) => [r.skill, r]));
 
   async function submit() {
     if (bad.length) return;
@@ -261,13 +284,30 @@ function WorkloadForm({
             วิธีคำนวณ <Icon name="next" size={18} />
           </Link>
         </div>
+        {lack && lack.short > 0 && (
+          <div className="mt-3">
+            <Alert tone="error">
+              <b>กำลังคนไม่พอ</b> · ต้องการ {lack.need} คน แต่จัดคนที่พร้อมในกะนี้ลงได้ {lack.fill} คน · <b>ขาด {lack.short} คน</b>
+              {lack.rows.some((x) => x.short > 0) && <> ({lack.rows.filter((x) => x.short > 0).map((x) => `${x.skill} ขาด ${x.short}`).join(", ")})</>}
+              {" "}· พิจารณาขอคนจากคลังอื่น ปรับกะ หรือเลื่อนงาน
+            </Alert>
+          </div>
+        )}
         <ul className="mt-3 space-y-2.5">
           {reqs.map((r) => {
             const st = skillStyle(r.skill_name);
+            const l = lackOf.get(r.skill_name);
             return (
-              <li key={r.skill_name} className="flex items-center gap-3 rounded-2xl p-3 ring-1 ring-line" style={{ background: st.tint }}>
+              <li key={r.skill_name} className={`flex flex-wrap items-center gap-3 rounded-2xl p-3 ring-1 ${l && l.short > 0 ? "ring-2 ring-bad" : "ring-line"}`} style={{ background: st.tint }}>
                 <SkillIcon name={r.skill_name} size={44} />
-                <span className="min-w-0 flex-1 text-[16px] leading-snug font-bold break-words text-ink">{r.skill_name}</span>
+                <span className="min-w-0 flex-1 text-[16px] leading-snug font-bold break-words text-ink">
+                  {r.skill_name}
+                  {l && (
+                    <span className={`block text-[13px] font-semibold ${l.short > 0 ? "text-bad" : "text-muted"}`}>
+                      มีคนพร้อม {l.have} คน{l.short > 0 ? ` · ไม่พอ ขาด ${l.short} คน` : ""}
+                    </span>
+                  )}
+                </span>
                 {r.complete ? (
                   <span className="flex shrink-0 items-baseline gap-1.5 border-l border-line pl-3">
                     <span className="text-[14px] text-muted">ต้องการ</span>

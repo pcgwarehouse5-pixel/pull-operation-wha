@@ -6,16 +6,17 @@ import { useMemo } from "react";
 import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
 import { useApp } from "@/components/AuthProvider";
-import { Alert, Card, Loading } from "@/components/ui";
+import { Alert, Loading } from "@/components/ui";
 import { Icon, type IconName } from "@/components/Icon";
 import { BoardBar, ProgressBar, SkillIcon } from "@/components/pull/PullUI";
 import { usePullSelection } from "@/components/pull/usePullSelection";
 import { usePullBoard } from "@/components/pull/usePullBoard";
+import { LeftoverStaff } from "@/components/pull/LeftoverStaff";
 import { todayIso } from "@/lib/shifts";
 import { shortDay } from "@/lib/format";
 import { isGlobal } from "@/lib/types";
 import { addDays } from "@/lib/pull-data";
-import { SHIFT_LABEL, skillStyle, summarize } from "@/lib/pull";
+import { SHIFT_LABEL, skillStyle, staffShortage, summarize } from "@/lib/pull";
 
 export default function PullBoardPage() {
   const { profile, warehouses, myWarehouseIds } = useApp();
@@ -39,6 +40,8 @@ export default function PullBoardPage() {
   if (!sel.wh) return <AppShell title="สรุปกำลังพล" minRole="supervisor" wide>{bar}<Alert tone="warning">คุณยังไม่มีคลังที่ดูแล</Alert></AppShell>;
 
   const s = data ? summarize(data.reqs, data.pool, data.bookings) : null;
+  const lack = data ? staffShortage(data.reqs, data.pool) : null;
+  const lackOf = new Map((lack?.rows ?? []).map((r) => [r.skill, r]));
   const missingAll = !!data && data.reqs.length > 0 && data.reqs.every((q) => q.missing === "ยังไม่กรอกยอดงาน");
 
   return (
@@ -62,6 +65,14 @@ export default function PullBoardPage() {
               <Alert tone="warning">
                 ยังไม่ได้กรอกยอดงานของ {shortDay(sel.date)} {SHIFT_LABEL[sel.shift]} จึงยังไม่มีจำนวนที่ต้องการ (ยังดึงคนได้){" "}
                 <Link href="/pull/workload" className="font-semibold underline">กรอกปริมาณงาน</Link>
+              </Alert>
+            </div>
+          )}
+          {lack && lack.short > 0 && (
+            <div className="mb-4">
+              <Alert tone="error">
+                <b>กำลังคนไม่พอ</b> · ต้องการ {lack.need} คน แต่คนที่พร้อมในกะนี้ (รวมที่จองแล้ว) จัดลงได้ {lack.fill} คน · <b>ขาด {lack.short} คน</b>
+                {lack.rows.some((x) => x.short > 0) && <> ({lack.rows.filter((x) => x.short > 0).map((x) => `${x.skill} ขาด ${x.short}`).join(", ")})</>}
               </Alert>
             </div>
           )}
@@ -94,6 +105,9 @@ export default function PullBoardPage() {
                     <div className="px-4 pt-2 pb-3">
                       <ProgressBar booked={r.booked} need={r.need} />
                       {r.need === null && q?.missing && <p className="mt-1 text-[13px] font-semibold text-[#8a6500]">{q.missing}</p>}
+                      {(lackOf.get(r.skill)?.short ?? 0) > 0 && (
+                        <p className="mt-1.5 flex items-center gap-1 text-[14px] font-bold text-bad"><Icon name="alert" size={18} /> กำลังคนไม่พอ ขาด {lackOf.get(r.skill)!.short} คน</p>
+                      )}
                     </div>
                   </Link>
                 </li>
@@ -101,51 +115,7 @@ export default function PullBoardPage() {
             })}
           </ul>
 
-          <Card className="mt-4">
-            <h2 className="flex items-center gap-2 text-xl font-bold text-brand"><Icon name="chart" size={24} /> สรุปกำลังคนตามตำแหน่ง</h2>
-            <div className="-mx-1 mt-3 overflow-x-auto px-1">
-              <table className="w-full min-w-[44rem] text-[15px]">
-                <thead>
-                  <tr className="bg-sky text-ink">
-                    <th className="rounded-l-xl px-3 py-2.5 text-center">ลำดับ</th>
-                    <th className="px-3 py-2.5 text-left">ตำแหน่ง</th>
-                    <th className="px-3 py-2.5">กำลังคนทั้งหมด (คน)</th>
-                    <th className="px-3 py-2.5">ต้องการ (คน)</th>
-                    <th className="px-3 py-2.5">จองแล้ว (คน)</th>
-                    <th className="px-3 py-2.5">รอจอง (คน)</th>
-                    <th className="px-3 py-2.5">คนเหลือ (คน)</th>
-                    <th className="rounded-r-xl px-3 py-2.5">อัตราการจอง</th>
-                  </tr>
-                </thead>
-                <tbody className="text-center tabular-nums">
-                  {s.rows.map((r, i) => (
-                    <tr key={r.skill} className="border-b border-line">
-                      <td className="px-3 py-2">{i + 1}</td>
-                      <td className="px-3 py-2 text-left"><span className="flex items-center gap-2"><SkillIcon name={r.skill} size={28} />{r.skill}</span></td>
-                      <td className="px-3 py-2 font-semibold">{r.total}</td>
-                      <td className="px-3 py-2 font-semibold text-brand">{r.need ?? "—"}</td>
-                      <td className="px-3 py-2 font-semibold text-ok">{r.booked}</td>
-                      <td className="px-3 py-2 font-semibold text-[#e5484d]">{r.waiting ?? "—"}</td>
-                      <td className="px-3 py-2 font-semibold text-[#2563eb]">{r.left}</td>
-                      <td className="px-3 py-2"><Rate value={r.rate} /></td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot className="text-center font-bold tabular-nums">
-                  <tr className="bg-[#eef3fc]">
-                    <td colSpan={2} className="rounded-l-xl px-3 py-3 text-lg text-ink">รวมทั้งหมด</td>
-                    <td className="px-3 py-3 text-2xl text-[#2563eb]">{s.total}</td>
-                    <td className="px-3 py-3 text-2xl text-brand">{s.need ?? "—"}</td>
-                    <td className="px-3 py-3 text-2xl text-ok">{s.booked}</td>
-                    <td className="px-3 py-3 text-2xl text-[#e5484d]">{s.waiting ?? "—"}</td>
-                    <td className="px-3 py-3 text-2xl text-[#2563eb]">{s.left}</td>
-                    <td className="rounded-r-xl px-3 py-3"><Rate value={s.rate} /></td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-            <p className="mt-2 text-[13px] text-muted">กำลังคนทั้งหมดต่อตำแหน่ง: คนที่มีหลายทักษะนับในทุกตำแหน่งที่ทำได้ · ยอดรวมด้านบนนับคนละ 1 ครั้ง</p>
-          </Card>
+          <LeftoverStaff key={`${sel.date}-${sel.shift}`} pool={data.pool} date={sel.date} shift={sel.shift} canEditDate={sel.date >= today} />
         </>
       )}
     </AppShell>
@@ -174,14 +144,3 @@ function Stat({ label, value, color }: { label: string; value: number | null; co
   );
 }
 
-function Rate({ value }: { value: number | null }) {
-  if (value === null) return <span className="text-muted">—</span>;
-  return (
-    <span className="flex items-center gap-2">
-      <span className="h-2.5 flex-1 overflow-hidden rounded-full bg-[#e3e7ef]">
-        <span className={`block h-full rounded-full ${value >= 100 ? "bg-ok" : value >= 50 ? "bg-ok/80" : "bg-[#e5484d]"}`} style={{ width: `${value}%` }} />
-      </span>
-      <span className="w-11 text-right font-semibold">{value}%</span>
-    </span>
-  );
-}

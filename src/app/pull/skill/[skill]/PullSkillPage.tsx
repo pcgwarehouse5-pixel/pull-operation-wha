@@ -2,7 +2,7 @@
 
 // หน้าดึงกำลังคนทีละตำแหน่ง (ไฟล์ "Pull-Operation Operation & Dashboard" หน้า 2)
 // เลือกพนักงานที่ "พร้อม" เข้าตำแหน่ง ดูต้องการ / จองแล้ว / ขาด แล้วกดบันทึกการจอง
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
 import { useApp } from "@/components/AuthProvider";
@@ -18,7 +18,8 @@ import { todayIso } from "@/lib/shifts";
 import { shortDay } from "@/lib/format";
 import { isGlobal } from "@/lib/types";
 import { addDays } from "@/lib/pull-data";
-import { STATUS_LABEL, hhmm, type Booking, type PoolPerson, type PoolStatus } from "@/lib/pull";
+import { STATUS_LABEL, hhmm, staffShortage, type Booking, type PoolPerson, type PoolStatus } from "@/lib/pull";
+import { JOB, jobPositions, positionOptions, visiblePool } from "@/lib/pull-filter";
 
 type Conflict = { user_id: string; name?: string; reason: string };
 const ORDER: Record<PoolStatus, number> = { ready: 0, booked_here: 1, busy: 2, unavailable: 3 };
@@ -46,13 +47,25 @@ export default function PullSkillPage({ skill }: { skill: string }) {
 
   const [pending, setPending] = useState<string[]>([]);
   const [q, setQ] = useState("");
-  const [src, setSrc] = useState("");
+  // ตั้งต้นที่คลังของผู้ใช้ และตำแหน่งของงานที่กำลังดึง (เปลี่ยนเป็น "ทุกคลัง/ทุกตำแหน่ง" ได้)
+  const [src, setSrc] = useState(profile.warehouse_id ?? "");
+  const [pos, setPos] = useState<string>(JOB);
+  const [skillPos, setSkillPos] = useState<string[] | null>(null);
   const [status, setStatus] = useState<PoolStatus | "">("");
   const [scope, setScope] = useState<"skill" | "all">("skill");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const [conflicts, setConflicts] = useState<Conflict[]>([]);
   const [cancelling, setCancelling] = useState<Booking | null>(null);
+
+  // ตำแหน่งที่งานนี้สังกัด (จากหน้าทักษะ) · โหมดตัวอย่างใช้ตำแหน่งของคนที่มีทักษะนี้แทน
+  useEffect(() => {
+    if (demo) return;
+    let live = true;
+    sb().from("skills").select("position").eq("name", skill).eq("is_active", true)
+      .then(({ data: r }) => { if (live) setSkillPos([...new Set((r ?? []).map((x: { position: string }) => x.position))]); });
+    return () => { live = false; };
+  }, [demo, skill]);
 
   const canEdit = sel.date >= today;
   const changeSel = (fn: () => void) => {
@@ -78,13 +91,15 @@ export default function PullSkillPage({ skill }: { skill: string }) {
   const short = need === null ? null : Math.max(0, need - booked);
   const byId = new Map(data.pool.map((p) => [p.user_id, p]));
   const selectable = (p: PoolPerson) => canEdit && p.status === "ready" && p.skills.includes(skill) && !!req;
-  const sources = [...new Map(data.pool.map((p) => [p.warehouse_id, p.warehouse_code])).entries()];
-
-  const list = data.pool
-    .filter((p) => (scope === "all" || p.skills.includes(skill)) && (!src || p.warehouse_id === src) && (!status || p.status === status))
-    .filter((p) => `${p.name} ${p.nickname ?? ""} ${p.employee_code}`.toLowerCase().includes(q.trim().toLowerCase()))
-    .sort((a, b) => ORDER[a.status] - ORDER[b.status] || (a.start_min ?? 9999) - (b.start_min ?? 9999) || a.employee_code.localeCompare(b.employee_code));
-  const totalWithSkill = data.pool.filter((p) => p.skills.includes(skill)).length;
+  const sources = [...new Map(data.pool.map((p) => [p.warehouse_id, p.warehouse_code])).entries()].sort((a, b) => a[1].localeCompare(b[1], "th", { numeric: true }));
+  const whFilter = sources.some(([id]) => id === src) ? src : "";
+  const jobPos = jobPositions(skillPos, data.pool, skill);
+  const posOpts = positionOptions(data.pool, { skill, scope, wh: whFilter });
+  const posFilter = pos === JOB && !jobPos.length ? "" : pos;
+  const vis = visiblePool(data.pool, { skill, scope, wh: whFilter, pos: posFilter, jobPos, status, q });
+  const list = vis.shown.sort((a, b) => ORDER[a.status] - ORDER[b.status] || (a.start_min ?? 9999) - (b.start_min ?? 9999) || a.employee_code.localeCompare(b.employee_code));
+  const totalWithSkill = data.pool.filter((p) => p.status !== "unavailable" && p.skills.includes(skill)).length;
+  const lack = req && need ? staffShortage([req], data.pool).rows[0] : undefined;
 
   const toggle = (p: PoolPerson) => {
     if (!selectable(p)) return;
@@ -164,6 +179,13 @@ export default function PullSkillPage({ skill }: { skill: string }) {
             ยังไม่มีจำนวนที่ต้องการ ({req.missing}) · ยังดึงคนได้ <Link href="/pull/workload" className="underline">กรอกปริมาณงาน</Link>
           </p>
         )}
+        {lack && lack.short > 0 && (
+          <div className="mt-3">
+            <Alert tone="error">
+              <b>กำลังคนไม่พอ</b> · ต้องการ {lack.need} คน แต่มีคนที่มีทักษะนี้และพร้อมในกะนี้ (รวมที่จองแล้ว) {lack.have} คน · ขาด {lack.short} คน
+            </Alert>
+          </div>
+        )}
         {!canEdit && <p className="mt-3 text-[14px] font-semibold text-muted">วันที่ผ่านไปแล้ว ดูได้อย่างเดียว</p>}
       </Card>
 
@@ -173,7 +195,7 @@ export default function PullSkillPage({ skill }: { skill: string }) {
         <Card>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="flex items-center gap-2 text-lg font-bold text-brand">
-              <Icon name="users" size={24} /> รายชื่อพนักงาน <span className="font-semibold text-muted">(มีทักษะนี้ {totalWithSkill} คน)</span>
+              <Icon name="users" size={24} /> รายชื่อพนักงาน <span className="font-semibold text-muted">(มีทักษะนี้ในกะนี้ {totalWithSkill} คน)</span>
             </h2>
             <label className="relative w-full sm:w-64">
               <span className="sr-only">ค้นหาชื่อพนักงาน</span>
@@ -181,11 +203,18 @@ export default function PullSkillPage({ skill }: { skill: string }) {
               <input ref={searchRef} className={`${inputCls} pl-10`} placeholder="ค้นหาชื่อ รหัส" value={q} onChange={(e) => setQ(e.target.value)} />
             </label>
           </div>
-          <div className="mt-3 grid grid-cols-3 gap-2">
-            <select className={inputCls} value={src} onChange={(e) => setSrc(e.target.value)} aria-label="คลังต้นทาง">
+          <div className="mt-3 grid grid-cols-2 gap-2 xl:grid-cols-4">
+            <select className={inputCls} value={whFilter} onChange={(e) => setSrc(e.target.value)} aria-label="คลังต้นทาง">
               <option value="">ทุกคลัง</option>
               {sources.map(([id, code]) => (
-                <option key={id} value={id}>{code}</option>
+                <option key={id} value={id}>คลัง {code}</option>
+              ))}
+            </select>
+            <select className={inputCls} value={posFilter} onChange={(e) => setPos(e.target.value)} aria-label="ตำแหน่ง">
+              {jobPos.length > 0 && <option value={JOB}>ตำแหน่งที่ดึง: {jobPos.join(", ")}</option>}
+              <option value="">ทุกตำแหน่ง</option>
+              {posOpts.map((o) => (
+                <option key={o.position} value={o.position}>{o.position} ({o.count})</option>
               ))}
             </select>
             <select className={inputCls} value={status} onChange={(e) => setStatus(e.target.value as PoolStatus | "")} aria-label="สถานะ">
@@ -193,7 +222,6 @@ export default function PullSkillPage({ skill }: { skill: string }) {
               <option value="ready">พร้อม</option>
               <option value="booked_here">จองแล้ว</option>
               <option value="busy">ติดภารกิจ</option>
-              <option value="unavailable">ไม่พร้อม</option>
             </select>
             <select className={inputCls} value={scope} onChange={(e) => setScope(e.target.value as "skill" | "all")} aria-label="ทักษะ">
               <option value="skill">มีทักษะนี้</option>
@@ -234,9 +262,19 @@ export default function PullSkillPage({ skill }: { skill: string }) {
                 </li>
               );
             })}
-            {list.length === 0 && <li className="py-8 text-center text-muted">ไม่พบพนักงานตามเงื่อนไข</li>}
+            {list.length === 0 && (
+              <li className="py-8 text-center text-muted">
+                ไม่พบพนักงานตามเงื่อนไข
+                {(whFilter || posFilter) && (
+                  <button type="button" className="mt-2 block w-full font-semibold text-brand underline" onClick={() => { setSrc(""); setPos(""); }}>ดูทุกคลัง ทุกตำแหน่ง</button>
+                )}
+              </li>
+            )}
           </ul>
-          <p className="mt-2 text-[13px] text-muted">พร้อม = เข้ากะนี้ตามตารางกะ ไม่ได้ลา และยังไม่ถูกจอง · 1 คนจองได้ 1 คลังต่อวัน</p>
+          <p className="mt-2 text-[13px] text-muted">
+            พร้อม = เข้ากะนี้ตามตารางกะ ไม่ได้ลา และยังไม่ถูกจอง · 1 คนจองได้ 1 คลังต่อวัน
+            {vis.hidden > 0 && <> · ไม่แสดงคนที่ไม่พร้อมในกะนี้ (ลา วันหยุด เข้าอีกกะ) {vis.hidden} คน</>}
+          </p>
         </Card>
 
         <Card className="lg:sticky lg:top-4">

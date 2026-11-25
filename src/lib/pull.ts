@@ -350,6 +350,44 @@ export function summarize(reqs: SkillReq[], pool: PoolPerson[], bookings: Bookin
   };
 }
 
+export type ShortageRow = { skill: string; need: number; have: number; short: number };
+export type Shortage = { rows: ShortageRow[]; need: number; fill: number; short: number };
+
+/**
+ * กำลังคนพอไหม ณ คลังปลายทาง/วัน/กะ (เฉพาะทักษะที่คำนวณได้แล้ว)
+ * have = คนที่มีทักษะนั้นและ "พร้อม" หรือจองเข้าคลังนี้แล้ว · คนหลายทักษะนับในทุกทักษะ
+ * fill = จำนวนตำแหน่งที่จัดคนลงได้จริง โดย 1 คนลงได้ 1 ตำแหน่ง (จับคู่ให้ได้มากที่สุด) → short = ขาดรวม
+ */
+export function staffShortage(reqs: SkillReq[], pool: PoolPerson[]): Shortage {
+  const avail = pool.filter((p) => p.status === "ready" || p.status === "booked_here");
+  const known = reqs.filter((r) => r.complete && (r.required ?? 0) > 0);
+  // คนที่จองเป็นทักษะไว้แล้วนับเฉพาะทักษะที่จอง
+  const can = (p: PoolPerson, skill: string) => (p.status === "booked_here" ? p.booked_skill === skill : p.skills.includes(skill));
+  const rows = known.map((r) => {
+    const need = r.required ?? 0;
+    const have = avail.filter((p) => can(p, r.skill_name)).length;
+    return { skill: r.skill_name, need, have, short: Math.max(0, need - have) };
+  });
+  // จับคู่ตำแหน่ง ↔ คน (Kuhn)
+  const slots = known.flatMap((r) => Array.from({ length: r.required ?? 0 }, () => r.skill_name));
+  const owner = new Map<string, number>();
+  const tryFill = (i: number, seen: Set<string>): boolean => {
+    for (const p of avail) {
+      if (seen.has(p.user_id) || !can(p, slots[i])) continue;
+      seen.add(p.user_id);
+      const o = owner.get(p.user_id);
+      if (o === undefined || tryFill(o, seen)) {
+        owner.set(p.user_id, i);
+        return true;
+      }
+    }
+    return false;
+  };
+  let fill = 0;
+  for (let i = 0; i < slots.length; i++) if (tryFill(i, new Set())) fill++;
+  return { rows, need: slots.length, fill, short: slots.length - fill };
+}
+
 /** เวลาเข้างานจากนาที (480 → 08:00) */
 export function hhmm(min: number | null | undefined): string {
   if (min === null || min === undefined) return "—";

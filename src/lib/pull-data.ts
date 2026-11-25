@@ -133,3 +133,19 @@ export async function loadNetwork(from: string, to: string, shift: PullShift | "
     lent_out: Number(r.lent_out),
   }));
 }
+
+/** หมายเหตุ "คนที่เหลือ" ของวัน/กะ (ทุกคลังเห็น) · user_id → หมายเหตุ */
+export type LeftoverNote = { user_id: string; note: string; updated_at: string };
+export async function loadLeftoverNotes(date: string, shift: PullShift): Promise<Map<string, LeftoverNote>> {
+  const list = await fetchAll<LeftoverNote>((f, t) =>
+    sb().from("pull_leftover_notes").select("user_id, note, updated_at").eq("work_date", date).eq("shift", shift).order("user_id").range(f, t),
+  );
+  return new Map(list.map((n) => [n.user_id, n]));
+}
+
+/** ใส่/แก้/ลบ (ข้อความว่าง) หมายเหตุให้หลายคนพร้อมกัน */
+export async function saveLeftoverNotes(date: string, shift: PullShift, users: string[], note: string): Promise<number> {
+  const { data, error } = await sb().rpc("set_pull_leftover_notes", { p_date: date, p_shift: shift, p_users: users, p_note: note });
+  if (error) throw error;
+  return data as number;
+}
