@@ -16,7 +16,7 @@ import { shortDay, thaiDate } from "@/lib/format";
 import { isGlobal, ROLE_RANK } from "@/lib/types";
 import { addDays, loadPullConfig, loadWorkloads, volumesFor, type WorkloadRow } from "@/lib/pull-data";
 import {
-  SHIFT_LABEL, activeTasks, caretAfterDigits, formatTyping, hoursOf, num, parseVolume, readiness, requirementRows, skillRequirements, skillStyle, totalRequired,
+  SHIFT_LABEL, activeTasks, formatTyping, hoursOf, num, parseVolume, readiness, requirementRows, skillRequirements, skillStyle, totalRequired, typeVolume,
   type PullConfig, type PullShift, type WorkloadType,
 } from "@/lib/pull";
 
@@ -227,12 +227,11 @@ function WorkloadForm({
                       disabled={!canEdit}
                       placeholder="ยังไม่กรอก"
                       onChange={(e) => {
-                        // ใส่คอมมาคั่นหลักพันขณะพิมพ์ แล้ววางเคอร์เซอร์หลังตัวเลขตัวเดิม
+                        // ใส่คอมมาคั่นหลักพันขณะพิมพ์ แล้ววางเคอร์เซอร์หลังตัวเลขที่เพิ่งพิมพ์ (ไม่ให้เด้งไปหน้าสุดจนเลขกลับหลัง)
                         const el = e.target;
-                        const digits = el.value.slice(0, el.selectionStart ?? el.value.length).replace(/[^d.]/g, "").length;
-                        const next = formatTyping(el.value);
-                        caret.current = { id: t.id, pos: caretAfterDigits(next, digits) };
-                        setVals((v) => ({ ...v, [t.id]: next }));
+                        const next = typeVolume(el.value, el.selectionStart ?? el.value.length);
+                        caret.current = { id: t.id, pos: next.caret };
+                        setVals((v) => ({ ...v, [t.id]: next.text }));
                       }}
                     />
                     <span className="w-14 shrink-0 text-[17px] font-semibold text-ink">{unitLabel(t.unit)}</span>

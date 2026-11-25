@@ -95,3 +95,51 @@ test("ช่องยอดงานมีคอมมาคั่นหลั�
   assert.equal(caretAfterDigits("1,300", 4), 5);
   assert.equal(caretAfterDigits("1,300", 0), 0);
 });
+
+test("พิมพ์ยอดงานทีละตัว: ตัวเลขเรียงถูก ไม่กลับหลัง และเคอร์เซอร์อยู่ถูกที่", async () => {
+  const { typeVolume, parseVolume } = await import("../src/lib/pull.ts");
+  // จำลองช่องกรอก: พิมพ์/ลบที่ตำแหน่งเคอร์เซอร์ แล้วจัดรูปเหมือนในหน้าจอ
+  const field = (text = "", caret = text.length) => ({
+    text, caret,
+    type(chars) {
+      for (const ch of chars) {
+        const r = typeVolume(this.text.slice(0, this.caret) + ch + this.text.slice(this.caret), this.caret + 1);
+        this.text = r.text;
+        this.caret = r.caret;
+      }
+      return this;
+    },
+    back(n = 1) {
+      for (let i = 0; i < n; i++) {
+        if (!this.caret) break;
+        const r = typeVolume(this.text.slice(0, this.caret - 1) + this.text.slice(this.caret), this.caret - 1);
+        this.text = r.text;
+        this.caret = r.caret;
+      }
+      return this;
+    },
+    at(pos) { this.caret = pos; return this; },
+  });
+  assert.equal(field().type("12345").text, "12,345", "เดิมขึ้น 54,321");
+  assert.equal(field().type("1300").text, "1,300");
+  assert.equal(field().type("1234567").text, "1,234,567");
+  const f = field().type("12345");
+  assert.equal(f.caret, f.text.length, "เคอร์เซอร์อยู่ท้ายหลังพิมพ์ต่อกัน");
+  assert.equal(field().type("1234.56").text, "1,234.56");
+  assert.equal(field().type("1234.567").text, "1,234.56", "ทศนิยมไม่เกิน 2 ตำแหน่ง");
+  assert.equal(field().type(".5").text, "0.5");
+  assert.equal(field().type(".5").caret, 3);
+  assert.equal(field().type("007").text, "7");
+  assert.equal(field().type("0").text, "0", "ไม่มีงานใส่ 0 ได้");
+  assert.equal(field().type("12a3").text, "123", "ตัวอักษรอื่นถูกตัดทิ้ง");
+  // แก้กลางตัวเลข: แทรก 5 หลังเลข 1 ใน 1,300
+  const mid = field("1,300").at(1).type("5");
+  assert.equal(mid.text, "15,300");
+  assert.equal(mid.caret, 2);
+  // ลบทีละตัวจากท้าย
+  assert.equal(field().type("12345").back(1).text, "1,234");
+  assert.equal(field().type("12345").back(2).text, "123");
+  assert.equal(field().type("1000").back(4).text, "");
+  // ค่าที่ได้อ่านกลับเป็นตัวเลขที่พิมพ์จริง
+  for (const s of ["5", "48", "550", "3200", "12345", "250000", "1234567", "99.5"]) assert.equal(parseVolume(field().type(s).text).value, Number(s), s);
+});

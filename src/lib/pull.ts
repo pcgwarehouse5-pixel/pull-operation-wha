@@ -261,6 +261,17 @@ export function formatTyping(text: string): string {
   return dec === null ? withCommas : `${withCommas || "0"}.${dec}`;
 }
 
+/**
+ * พิมพ์ในช่องยอดงาน: จัดรูปคอมมา แล้วคืนตำแหน่งเคอร์เซอร์ที่ถูกต้อง (หลังตัวเลขที่เพิ่งพิมพ์)
+ * raw = ค่าในช่องหลังพิมพ์ · caret = ตำแหน่งเคอร์เซอร์ตอนนั้น
+ */
+export function typeVolume(raw: string, caret: number): { text: string; caret: number } {
+  const text = formatTyping(raw);
+  // นับตัวเลขก่อนเคอร์เซอร์หลังจัดรูปแบบเดียวกัน (ตัดศูนย์นำหน้า / .5 → 0.5 ให้ตรงกัน)
+  const before = formatTyping(raw.slice(0, Math.max(0, caret))).replace(/[^\d.]/g, "").length;
+  return { text, caret: Math.min(caretAfterDigits(text, before), text.length) };
+}
+
 /** ตำแหน่งเคอร์เซอร์หลังจัดรูป: วางหลังตัวเลขตัวที่ n เท่าเดิม */
 export function caretAfterDigits(formatted: string, digitsBefore: number): number {
   if (digitsBefore <= 0) return 0;
