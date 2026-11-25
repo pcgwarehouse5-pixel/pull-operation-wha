@@ -25,7 +25,7 @@ const CATEGORIES: { key: string; label: string; hint: string }[] = [
   { key: "ot_reason", label: "เหตุผล OT", hint: "ตัวเลือกเหตุผลตอนขอ OT" },
   { key: "pull_unit", label: "หน่วยนับปริมาณงาน", hint: "หน่วยของยอดงานและ Productivity ใน Pull Operation (ค่าในระบบ เช่น pallet ห้ามแก้หลังใช้งาน)" },
   { key: "pull_cancel_reason", label: "เหตุผลยกเลิกจอง (Pull)", hint: "ตัวเลือกตอนยกเลิกการจองคนในหน้าดึงคน" },
-  { key: "pull_break_time", label: "เวลาพัก (Pull)", hint: "เวลาพักที่เลือกได้ในหน้าผังตำแหน่งพนักงาน ค่าในระบบเป็นเวลา HH:MM เช่น 12:00 (เพิ่มเวลาพักของกะดึกได้)" },
+  { key: "pull_break_time", label: "เวลาพัก (Pull)", hint: "เวลาพักรอบแรกที่เลือกได้ในหน้าผังตำแหน่งพนักงาน (รหัส = เวลา HH:MM เช่น 12:00) แยกผลัดเช้า/ดึก พร้อมเวลาพักรอบ 2 ที่คู่กัน" },
   { key: "kpi_category", label: "หัวข้อ KPI", hint: "หัวข้อประเมินรายเดือน" },
   { key: "subcontractor_company", label: "บริษัทรับเหมา", hint: "บริษัทต้นสังกัดของแรงงานรับเหมา" },
 ];
@@ -64,7 +64,7 @@ export default function SettingsPage() {
   }, [load]);
 
   const openNew = () =>
-    setForm({ value: "", label: "", sort_order: String((rows?.length ?? 0) + 1), is_active: true, start_time: "", end_time: "", bg: "#3b82f6", extra: {} });
+    setForm({ value: "", label: "", sort_order: String((rows?.length ?? 0) + 1), is_active: true, start_time: "", end_time: "", bg: "#3b82f6", extra: cat === "pull_break_time" ? { shift: "morning" } : {} });
   const openEdit = (o: DropdownOption) =>
     setForm({
       id: o.id,
@@ -135,6 +135,13 @@ export default function SettingsPage() {
                     {isShift && o.extra.start_time ? (
                       <p className="text-[14px] text-muted">เวลา {String(o.extra.start_time)} - {String(o.extra.end_time)}</p>
                     ) : null}
+                    {cat === "pull_break_time" && (
+                      <p className="text-[14px] text-muted">
+                        {o.extra.shift === "night" ? "ผลัดดึก" : o.extra.shift === "morning" ? "ผลัดเช้า" : "ทุกผลัด"}
+                        {o.extra.second ? ` · รอบ 2 พัก ${String(o.extra.second)}` : " · ไม่มีรอบ 2"}
+                        {o.extra.second_note ? ` (${String(o.extra.second_note)})` : ""}
+                      </p>
+                    )}
                   </div>
                   {!o.is_active && <Badge tone="red">ปิดใช้งาน</Badge>}
                   <Button size="sm" variant="secondary" onClick={() => openEdit(o)}>แก้ไข</Button>
@@ -156,12 +163,18 @@ function OptionForm({ category, categoryLabel, isShift, initial, preview, onClos
   const [err, setErr] = useState("");
   const set = (k: keyof Form, v: string | boolean) => setF((x) => ({ ...x, [k]: v }));
   const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
+  // เวลาพัก (Pull): ผลัด + เวลาพักรอบ 2 ที่คู่กับรอบแรก
+  const isBreak = category === "pull_break_time";
+  const brk = { shift: String(f.extra.shift ?? ""), second: String(f.extra.second ?? ""), note: String(f.extra.second_note ?? "") };
+  const setExtra = (k: string, v: string) => setF((x) => ({ ...x, extra: { ...x.extra, [k]: v || undefined } }));
 
   async function save() {
     if (!f.value.trim() || !f.label.trim()) return setErr("กรุณาใส่รหัสและชื่อที่แสดง");
     const sort = Number(f.sort_order);
     if (!Number.isInteger(sort)) return setErr("ลำดับต้องเป็นตัวเลข");
     if (isShift && (f.start_time || f.end_time) && (!TIME.test(f.start_time) || !TIME.test(f.end_time))) return setErr("เวลาต้องเป็นแบบ 08:00");
+    if (isBreak && !TIME.test(f.value.trim())) return setErr("รหัสต้องเป็นเวลาพักรอบแรกแบบ 11:00");
+    if (isBreak && brk.second && !TIME.test(brk.second)) return setErr("เวลาพักรอบ 2 ต้องเป็นแบบ 16:30");
     const extra = isShift
       ? { ...f.extra, bg: f.bg, text: "#fff", ...(f.start_time ? { start_time: f.start_time, end_time: f.end_time } : { start_time: undefined, end_time: undefined }) }
       : f.extra;
@@ -206,6 +219,26 @@ function OptionForm({ category, categoryLabel, isShift, initial, preview, onClos
             <Field label="สี">
               <input type="color" className={`${inputCls} p-1`} value={f.bg} onChange={(e) => set("bg", e.target.value)} />
             </Field>
+          </div>
+        )}
+        {isBreak && (
+          <div className="space-y-3 rounded-xl bg-paper p-3">
+            <Field label="ใช้กับผลัด">
+              <select className={inputCls} value={brk.shift} onChange={(e) => setExtra("shift", e.target.value)}>
+                <option value="morning">ผลัดเช้า</option>
+                <option value="night">ผลัดดึก</option>
+                <option value="">ทุกผลัด</option>
+              </select>
+            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="เวลาพักรอบ 2" hint="ว่าง = พักรอบเดียว">
+                <input type="time" className={inputCls} value={brk.second} onChange={(e) => setExtra("second", e.target.value)} />
+              </Field>
+              <Field label="หมายเหตุรอบ 2" hint="เช่น ก่อนเริ่ม OT">
+                <input className={inputCls} value={brk.note} maxLength={40} onChange={(e) => setExtra("second_note", e.target.value)} />
+              </Field>
+            </div>
+            <p className="text-[13px] text-muted">หัวหน้าเลือกเวลาพักรอบแรกครั้งเดียว ระบบแสดงและแจ้งพนักงานทั้ง 2 เวลา</p>
           </div>
         )}
         <Field label="ลำดับการแสดง">

@@ -24,6 +24,7 @@ import { placePeople, skillAnchors, type HistoryRow } from "@/lib/warehouse3d/pl
 import type { Move, PersonObj } from "@/lib/warehouse3d/scene";
 import { Warehouse3D } from "@/components/pull/Warehouse3D";
 import { WorkerIcon } from "@/components/pull/WorkerIcon";
+import { breakPair, breakShort, breakSlots, type BreakSlot } from "@/lib/break-times";
 
 const BREAK_COLORS = ["#facc15", "#fb923c", "#ef4444", "#38bdf8", "#a78bfa", "#34d399"];
 const GROUP_ICON: Record<string, IconName> = { RT: "forklift", Checker: "clipboard", OP: "trolley", Picker: "cart", CT: "box", โหลดสินค้า: "truck", อื่นๆ: "users" };
@@ -50,8 +51,11 @@ export default function LayoutPage() {
   const [mapOn, setMapOn] = useState<string[]>([]);
   const [hist, setHist] = useState<HistoryRow[]>([]);
 
-  const breaks = (opts.pull_break_time ?? []).filter((o) => o.is_active).map((o) => o.value);
-  const breakColor = (t: string | null) => (t ? BREAK_COLORS[Math.max(0, breaks.indexOf(t)) % BREAK_COLORS.length] : null);
+  /* เวลาพัก 2 รอบของผลัดที่เลือก: เลือกรอบแรก ระบบรู้รอบ 2 เอง (ตั้งค่าตัวเลือก → เวลาพัก (Pull)) */
+  const breaks = useMemo(() => breakSlots(opts.pull_break_time, sel.shift), [opts.pull_break_time, sel.shift]);
+  const breakIndex = (t: string | null) => (t ? breaks.findIndex((b) => b.first === t) : -1);
+  const breakColor = (t: string | null) => (t ? BREAK_COLORS[Math.max(0, breakIndex(t)) % BREAK_COLORS.length] : null);
+  const pairOf = (t: string | null | undefined): BreakSlot | null => breakPair(opts.pull_break_time, sel.shift, t);
   const whCode = whs.find((w) => w.id === sel.wh)?.code ?? "";
   const canEdit = sel.date >= today;
   const mapKey = warehouseMapKey(whCode);
@@ -86,22 +90,22 @@ export default function LayoutPage() {
   const mapPeople = useMemo<PersonObj[]>(() => {
     if (!data) return [];
     const who = new Map(data.pool.map((p) => [p.user_id, p]));
-    const brk = (opts.pull_break_time ?? []).filter((o) => o.is_active).map((o) => o.value);
+    const firsts = breakSlots(opts.pull_break_time, sel.shift).map((x) => x.first);
     return data.bookings
       .filter((b) => mapPos[b.id] && (mapOn.length === 0 || mapOn.includes(b.skill_name)))
       .filter((b) => mapSrc === "ทั้งหมด" || who.get(b.user_id)?.warehouse_code === mapSrc)
       .map((b) => {
-        const p = who.get(b.user_id), t = hm(b.break_time);
-        /* ป้ายบนแผนที่: ชื่อเล่น + เวลาพัก (สีเดียวกับการ์ด) */
+        const p = who.get(b.user_id), t = hm(b.break_time), pair = breakPair(opts.pull_break_time, b.shift, b.break_time);
+        /* ป้ายบนแผนที่: ชื่อเล่น + เวลาพัก 2 รอบ (สีเดียวกับการ์ด) */
         return {
           id: b.id, x: mapPos[b.id].x, y: mapPos[b.id].y, color: skillStyle(b.skill_name).color,
           label: p?.nickname || p?.name.split(" ")[0] || "พนักงาน", group: b.skill_name, groupLabel: b.skill_name,
-          sub: t ? `พัก ${t}` : "ยังไม่ตั้งเวลาพัก",
-          subBg: t ? BREAK_COLORS[Math.max(0, brk.indexOf(t)) % BREAK_COLORS.length] : "#eef1f6",
+          sub: pair ? breakShort(pair) : "ยังไม่ตั้งเวลาพัก",
+          subBg: t ? BREAK_COLORS[Math.max(0, firsts.indexOf(t)) % BREAK_COLORS.length] : "#eef1f6",
           subFg: t ? "#16204a" : "#5a6482",
         };
       });
-  }, [data, mapPos, mapSrc, mapOn, opts.pull_break_time]);
+  }, [data, mapPos, mapSrc, mapOn, opts.pull_break_time, sel.shift]);
 
   const bar = (
     <BoardBar
@@ -286,10 +290,10 @@ export default function LayoutPage() {
               </span>
               <h2 className="text-3xl font-bold text-brand">{group}</h2>
               <div className="ml-auto flex flex-wrap items-center gap-2">
-                <span className="text-[14px] font-semibold text-muted">เวลาพัก</span>
+                <span className="text-[14px] font-semibold text-muted">เวลาพัก 2 รอบ</span>
                 {breaks.map((b) => (
-                  <span key={b} className="flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-[14px] font-semibold ring-1 ring-line">
-                    <span className="h-3.5 w-3.5 rounded-full" style={{ background: breakColor(b)! }} /> พัก {b}
+                  <span key={b.first} className="num flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-[14px] font-semibold ring-1 ring-line" title={b.note ? `รอบ 2 ${b.note}` : undefined}>
+                    <span className="h-3.5 w-3.5 rounded-full" style={{ background: breakColor(b.first)! }} /> {breakShort(b)}
                   </span>
                 ))}
                 {breaks.length === 0 && <span className="text-[13px] text-muted">ยังไม่ได้ตั้งเวลาพัก (ตั้งค่าตัวเลือก → เวลาพัก)</span>}
@@ -305,7 +309,12 @@ export default function LayoutPage() {
           )}
 
           {shown.map((s) => {
-            const people = placed.filter((p) => p.booking.skill_name === s).sort((a, b) => (a.booking.break_time ?? "99").localeCompare(b.booking.break_time ?? "99"));
+            // เรียงตามลำดับเวลาพักของผลัด (ผลัดดึก 23:30 มาก่อน 00:00) · ยังไม่ตั้งอยู่ท้าย
+            const order = (t: string | null) => {
+              const i = breakIndex(hm(t));
+              return i < 0 ? (t ? 900 : 999) : i;
+            };
+            const people = placed.filter((p) => p.booking.skill_name === s).sort((a, b) => order(a.booking.break_time) - order(b.booking.break_time));
             if (!people.length) return null;
             const st = skillStyle(s);
             return (
@@ -317,6 +326,7 @@ export default function LayoutPage() {
                   {people.map((p) => {
                     const t = hm(p.booking.break_time);
                     const col = breakColor(t);
+                    const pair = pairOf(p.booking.break_time);
                     const other = p.person && p.person.warehouse_id !== sel.wh;
                     return (
                       <li key={p.booking.id}>
@@ -326,15 +336,22 @@ export default function LayoutPage() {
                           onClick={() => setEditing(p)}
                           className="flex w-full flex-col items-center overflow-hidden rounded-2xl bg-white text-center shadow-[0_2px_10px_rgba(17,28,65,0.08)] ring-1 ring-line transition active:scale-[0.98] enabled:hover:ring-2 enabled:hover:ring-brand/40 disabled:cursor-default"
                           style={{ backgroundImage: `linear-gradient(to bottom, ${st.color}26, #ffffff 58%)` }}
-                          aria-label={`${p.person?.name ?? "พนักงาน"} เวลาพัก ${t ?? "ยังไม่ตั้ง"}`}
+                          aria-label={`${p.person?.name ?? "พนักงาน"} เวลาพัก ${pair ? `${pair.first}${pair.second ? ` และ ${pair.second}` : ""}` : "ยังไม่ตั้ง"}`}
                         >
                           <span className="mt-3 rounded-full bg-white p-[3px] shadow-[0_4px_14px_rgba(17,28,65,0.18)]">
                             <WorkerIcon color={st.color} seed={p.booking.user_id} size={84} />
                           </span>
                           <span className="mt-2 w-full truncate px-2 text-[18px] leading-tight font-bold text-ink">{p.person?.nickname || p.person?.name.split(" ")[0] || "พนักงาน"}</span>
                           <span className="w-full truncate px-2 text-[12px] text-muted">{p.person?.employee_code}{other ? ` · มาจาก ${p.person?.warehouse_code}` : ""}</span>
-                          <span className="mt-2 w-full py-1.5 text-[15px] font-bold" style={{ background: col ?? "#eef1f6", color: col ? "#16204a" : "#5a6482" }}>
-                            {t ? `พัก ${t}` : "ยังไม่ตั้งเวลาพัก"}
+                          <span className="num mt-2 flex w-full flex-col py-1.5 leading-tight font-bold" style={{ background: col ?? "#eef1f6", color: col ? "#16204a" : "#5a6482" }}>
+                            {pair ? (
+                              <>
+                                <span className="text-[15px]">{breakShort(pair)}</span>
+                                {pair.note && <span className="text-[11px] font-semibold opacity-80">รอบ 2 {pair.note}</span>}
+                              </>
+                            ) : (
+                              <span className="text-[15px]">ยังไม่ตั้งเวลาพัก</span>
+                            )}
                           </span>
                         </button>
                       </li>
@@ -363,14 +380,39 @@ export default function LayoutPage() {
 
       {editing && (
         <Modal title={`เวลาพัก · ${editing.person?.name ?? "พนักงาน"}`} onClose={() => setEditing(null)}>
-          <p className="text-muted">{editing.booking.skill_name}</p>
-          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {breaks.map((b) => (
-              <button key={b} type="button" onClick={() => setBreak(editing, b)} className={`flex min-h-14 items-center justify-center gap-2 rounded-xl font-bold ring-1 ${hm(editing.booking.break_time) === b ? "bg-sky ring-brand" : "bg-white ring-line"}`}>
-                <span className="h-4 w-4 rounded-full" style={{ background: breakColor(b)! }} /> พัก {b}
-              </button>
-            ))}
+          <p className="text-muted">{editing.booking.skill_name} · {sel.shiftLabel(sel.shift).split(" ")[0]}</p>
+          <p className="mt-1 text-[14px] text-muted">เลือกเวลาพักรอบแรก ระบบใส่เวลาพักรอบ 2 ให้อัตโนมัติ และแจ้งพนักงานทั้ง 2 เวลา</p>
+          <div className="mt-3 grid gap-2">
+            {breaks.map((b) => {
+              const on = hm(editing.booking.break_time) === b.first;
+              return (
+                <button
+                  key={b.first}
+                  type="button"
+                  onClick={() => setBreak(editing, b.first)}
+                  aria-pressed={on}
+                  className={`num flex min-h-16 items-center gap-3 rounded-xl px-3 text-left ring-1 ${on ? "bg-sky ring-2 ring-brand" : "bg-white ring-line"}`}
+                >
+                  <span className="h-4 w-4 shrink-0 rounded-full" style={{ background: breakColor(b.first)! }} />
+                  <span className="min-w-0 flex-1 leading-tight">
+                    <span className="block text-[18px] font-bold text-ink">พัก {b.first}</span>
+                    {b.second && (
+                      <span className="block text-[14px] font-semibold text-muted">
+                        และ {b.second}
+                        {b.note ? ` (${b.note})` : ""}
+                      </span>
+                    )}
+                  </span>
+                  {on && <Icon name="check" size={20} className="shrink-0 text-brand" />}
+                </button>
+              );
+            })}
           </div>
+          {editing.booking.break_time && breakIndex(hm(editing.booking.break_time)) < 0 && (
+            <p className="mt-2 rounded-lg bg-[#fff6d6] px-3 py-2 text-[14px] font-semibold text-[#8a6500]">
+              ตอนนี้ตั้งไว้ พัก {hm(editing.booking.break_time)} ซึ่งไม่ใช่เวลาพักของผลัดนี้ กรุณาเลือกใหม่
+            </p>
+          )}
           {breaks.length === 0 && <p className="mt-2 text-[14px] text-muted">ยังไม่มีรายการเวลาพัก แอดมินเพิ่มได้ที่ ตั้งค่าตัวเลือก → เวลาพัก (Pull)</p>}
           <div className="mt-4 flex justify-between gap-2">
             <Button variant="ghost" onClick={() => setBreak(editing, null)} disabled={!editing.booking.break_time}>ล้างเวลาพัก</Button>

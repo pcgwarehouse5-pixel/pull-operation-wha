@@ -93,7 +93,7 @@ export function MySummary() {
                   {cur.pos.away && <span className="ml-1 font-semibold text-[#b45309]">· {t("mp.away", { wh: cur.pos.to_code })}</span>}
                 </p>
                 <div className="mt-1.5">
-                  <BreakPill time={cur.pos.break_time} size="sm" />
+                  <BreakPill time={cur.pos.break_time} shift={cur.pos.shift} size="sm" />
                 </div>
               </div>
             </div>

@@ -439,6 +439,8 @@ export const my: Record<MsgKey, string> = {
   "mp.lastNight": "လက်ရှိ လုပ်နေသော ညအဆိုင်း",
   "mp.position": "နေရာ",
   "mp.breakAt": "{t} နာရီ နား",
+  "mp.breakTwo": "{a} နှင့် {b} နာရီ နား",
+  "mp.breakSecondNote": "ဒုတိယအကြိမ် {n}",
   "mp.noBreak": "နားချိန် မသတ်မှတ်ရသေးပါ",
   "mp.away": "{wh} တွင် ကူညီရန် — ဤဂိုဒေါင်တွင် သတင်းပို့ပါ",
   "mp.notYet": "ယနေ့ ခေါင်းဆောင်က နေရာ မချရသေးပါ",

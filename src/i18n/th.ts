@@ -438,6 +438,8 @@ export const th = {
   "mp.lastNight": "กะดึกที่กำลังทำอยู่",
   "mp.position": "ตำแหน่ง",
   "mp.breakAt": "พัก {t} น.",
+  "mp.breakTwo": "พัก {a} และ {b} น.",
+  "mp.breakSecondNote": "รอบ 2 {n}",
   "mp.noBreak": "ยังไม่ได้ตั้งเวลาพัก",
   "mp.away": "ไปช่วยงานที่ {wh} ไปรายงานตัวที่คลังนี้",
   "mp.notYet": "หัวหน้ายังไม่ได้จัดตำแหน่งวันนี้",

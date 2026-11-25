@@ -4,7 +4,9 @@
 import { Icon } from "@/components/Icon";
 import { SkillIcon } from "@/components/pull/PullUI";
 import { useI18n } from "@/i18n";
-import { breakHm, type MyPos, type ShiftTime } from "@/lib/my-position";
+import { type MyPos, type ShiftTime } from "@/lib/my-position";
+import { breakPair } from "@/lib/break-times";
+import { useOptions } from "@/lib/useOptions";
 
 function ShiftLine({ pos, shift }: { pos: MyPos; shift?: ShiftTime }) {
   const { t, fmt } = useI18n();
@@ -17,13 +19,19 @@ function ShiftLine({ pos, shift }: { pos: MyPos; shift?: ShiftTime }) {
   );
 }
 
-export function BreakPill({ time, size = "lg" }: { time: string | null; size?: "lg" | "sm" }) {
+/** เวลาพักของพนักงาน: รอบแรกที่หัวหน้าเลือก + รอบ 2 ที่คู่กัน (ตามตัวเลือกของผลัดนั้น) */
+export function BreakPill({ time, shift, size = "lg" }: { time: string | null; shift: string; size?: "lg" | "sm" }) {
   const { t } = useI18n();
-  const hm = breakHm(time);
+  const opts = useOptions(["pull_break_time"]);
+  const pair = breakPair(opts.pull_break_time, shift, time);
   const big = size === "lg";
-  return hm ? (
-    <span className={`inline-flex items-center gap-2 rounded-2xl bg-[#facc15] font-bold text-[#16204a] ${big ? "px-4 py-2.5 text-[24px]" : "px-2.5 py-1 text-[14px]"}`}>
-      <Icon name="clock" size={big ? 24 : 16} /> <span className="num">{t("mp.breakAt", { t: hm })}</span>
+  return pair ? (
+    <span className={`inline-flex flex-col rounded-2xl bg-[#facc15] font-bold text-[#16204a] ${big ? "px-4 py-2.5" : "px-2.5 py-1"}`}>
+      <span className={`inline-flex items-center gap-2 ${big ? "text-[24px]" : "text-[14px]"}`}>
+        <Icon name="clock" size={big ? 24 : 16} />
+        <span className="num">{pair.second ? t("mp.breakTwo", { a: pair.first, b: pair.second }) : t("mp.breakAt", { t: pair.first })}</span>
+      </span>
+      {big && pair.second && pair.note && <span className="pl-8 text-[14px] font-semibold opacity-80">{t("mp.breakSecondNote", { n: pair.note })}</span>}
     </span>
   ) : (
     <span className={`inline-flex items-center gap-1.5 rounded-2xl bg-paper font-semibold text-muted ring-1 ring-line ${big ? "px-4 py-2.5 text-[16px]" : "px-2.5 py-1 text-[13px]"}`}>
@@ -57,7 +65,7 @@ export function PositionHero({ pos, shift, label }: { pos: MyPos; shift?: ShiftT
           </p>
         )}
         <div className="mt-4">
-          <BreakPill time={pos.break_time} />
+          <BreakPill time={pos.break_time} shift={pos.shift} />
         </div>
       </div>
     </div>
@@ -75,7 +83,7 @@ export function PositionRow({ pos, shift }: { pos: MyPos; shift?: ShiftTime }) {
         <span className="block truncate text-[14px] text-ink">{pos.skill_name}</span>
         <span className="mt-1 flex flex-wrap items-center gap-2">
           <ShiftLine pos={pos} shift={shift} />
-          <BreakPill time={pos.break_time} size="sm" />
+          <BreakPill time={pos.break_time} shift={pos.shift} size="sm" />
         </span>
       </span>
       <span className={`shrink-0 rounded-xl px-3 py-1.5 text-lg font-bold ${pos.away ? "bg-[#f59e0b] text-white" : "bg-brand text-white"}`}>{pos.to_code}</span>
