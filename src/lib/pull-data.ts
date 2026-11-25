@@ -10,7 +10,8 @@ export async function loadPullConfig(): Promise<PullConfig> {
   const [skills, pullSkills, types, tasks, rates, hours, counts] = await Promise.all([
     fetchAll<{ name: string; position: string }>((f, t) => sb().from("skills").select("name, position").eq("is_active", true).order("name").order("position").range(f, t)),
     fetchAll<PullSkillRow>((f, t) => sb().from("pull_skills").select("warehouse_id, skill_name, sort_order").order("warehouse_id").order("sort_order").range(f, t)),
-    fetchAll<WorkloadType>((f, t) => sb().from("pull_workload_types").select("*").order("sort_order").order("name").range(f, t)),
+    // ประเภทงานที่ลบแล้วเก็บไว้เป็นประวัติ ไม่แสดงในหน้าใด
+    fetchAll<WorkloadType>((f, t) => sb().from("pull_workload_types").select("*").is("deleted_at", null).order("sort_order").order("name").range(f, t)),
     fetchAll<PullTask>((f, t) => sb().from("pull_tasks").select("id, warehouse_id, workload_type_id, skill_name, is_active").order("id").range(f, t)),
     fetchAll<TaskRate>((f, t) => sb().from("pull_task_rates").select("task_id, warehouse_id, effective_from, per_hour, note, created_at").order("task_id").order("effective_from").range(f, t)),
     fetchAll<ShiftHours>((f, t) => sb().from("pull_shift_hours").select("warehouse_id, shift, effective_from, hours, note, created_at").order("warehouse_id").order("effective_from").range(f, t)),

@@ -2,6 +2,7 @@
 
 // ขั้นที่ 3 ผูกประเภทงานกับทักษะ: งานแต่ละประเภท ใช้คนทักษะไหน นับด้วยหน่วยอะไร
 // Productivity ตั้งเป็นหน่วยเดียวกับประเภทงานเสมอ ระบบจึงกันกรอกผิดหน่วยให้
+// ลบประเภทงานได้ (เก็บประวัติ: ยอดงานเดิมไม่หาย แค่ไม่แสดงและไม่ใช้คำนวณ)
 import { useState } from "react";
 import { Alert, Button, Card, Field, Modal, inputCls } from "@/components/ui";
 import { Icon } from "@/components/Icon";
@@ -18,6 +19,7 @@ export function WorkloadMapping({
   units,
   canEdit,
   onSave,
+  onDelete,
   onGoSkills,
 }: {
   cfg: PullConfig;
@@ -26,9 +28,20 @@ export function WorkloadMapping({
   units: DropdownOption[];
   canEdit: boolean;
   onSave: (f: TypeForm) => Promise<boolean>;
+  onDelete: (t: WorkloadType) => Promise<boolean>;
   onGoSkills: () => void;
 }) {
   const [form, setForm] = useState<TypeForm | null>(null);
+  // ลบแบบเก็บประวัติ: ถามยืนยันพร้อมบอกผลที่ตามมาก่อนทุกครั้ง
+  const askDelete = async (t: WorkloadType) => {
+    const ok = window.confirm(
+      `ลบประเภทงาน “${t.name}”?\n\n` +
+        "• จะหายจากหน้ากรอกยอดงาน และไม่นำไปคำนวณคนอีก\n" +
+        "• ยอดงานที่เคยบันทึกไว้ยังเก็บในประวัติ ไม่ถูกลบ\n" +
+        "• ถ้าจะใช้อีก ให้เพิ่มประเภทงานใหม่ แล้วตั้ง Productivity ใหม่",
+    );
+    if (ok && (await onDelete(t))) setForm(null);
+  };
   const unitLabel = (v: string) => units.find((u) => u.value === v)?.label ?? v;
   const types = cfg.types.filter((t) => t.warehouse_id === wh).sort((a, b) => Number(b.is_active) - Number(a.is_active) || a.sort_order - b.sort_order);
   const pulled = cfg.pullSkills.filter((s) => s.warehouse_id === wh).sort((a, b) => a.sort_order - b.sort_order).map((s) => s.skill_name);
@@ -80,9 +93,14 @@ export function WorkloadMapping({
                       {!t.is_active && <span className="text-[13px] text-muted">ปิดใช้งาน (ไม่นำไปคำนวณ)</span>}
                     </span>
                     {canEdit && (
-                      <Button variant="ghost" size="sm" onClick={() => edit(t)} aria-label={`แก้ไข ${t.name}`}>
-                        แก้ไข
-                      </Button>
+                      <span className="flex shrink-0 flex-row gap-1 lg:flex-col">
+                        <Button variant="ghost" size="sm" onClick={() => edit(t)} aria-label={`แก้ไข ${t.name}`}>
+                          แก้ไข
+                        </Button>
+                        <Button variant="ghost" size="sm" className="!text-bad" onClick={() => askDelete(t)} aria-label={`ลบ ${t.name}`}>
+                          <Icon name="trash" size={18} /> ลบ
+                        </Button>
+                      </span>
                     )}
                   </div>
                   <Icon name="arrow" size={22} className="mx-auto hidden text-muted lg:block" />
@@ -137,6 +155,14 @@ export function WorkloadMapping({
           onSave={async (f) => {
             if (await onSave(f)) setForm(null);
           }}
+          onDelete={
+            form.id
+              ? () => {
+                  const t = types.find((x) => x.id === form.id);
+                  if (t) void askDelete(t);
+                }
+              : undefined
+          }
           onGoSkills={onGoSkills}
         />
       )}
@@ -144,7 +170,7 @@ export function WorkloadMapping({
   );
 }
 
-function TypeEditor({ form, pulled, units, locked, onClose, onSave, onGoSkills }: { form: TypeForm; pulled: string[]; units: DropdownOption[]; locked: boolean; onClose: () => void; onSave: (f: TypeForm) => Promise<void>; onGoSkills: () => void }) {
+function TypeEditor({ form, pulled, units, locked, onClose, onSave, onDelete, onGoSkills }: { form: TypeForm; pulled: string[]; units: DropdownOption[]; locked: boolean; onClose: () => void; onSave: (f: TypeForm) => Promise<void>; onDelete?: () => void; onGoSkills: () => void }) {
   const [f, setF] = useState(form);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -211,7 +237,12 @@ function TypeEditor({ form, pulled, units, locked, onClose, onSave, onGoSkills }
           </label>
         </div>
         {err && <Alert tone="error">{err}</Alert>}
-        <div className="flex justify-end gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {onDelete && (
+            <Button variant="ghost" className="mr-auto !text-bad" onClick={onDelete} disabled={busy}>
+              <Icon name="trash" size={18} /> ลบประเภทงานนี้
+            </Button>
+          )}
           <Button variant="ghost" onClick={onClose} disabled={busy}>ยกเลิก</Button>
           <Button onClick={submit} disabled={busy}>{busy ? "กำลังบันทึก…" : "บันทึก"}</Button>
         </div>

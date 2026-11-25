@@ -76,6 +76,45 @@ test("ประเภทงาน: หน่วยต้องมีในรา
   assert.equal(after[0].is_active, true);
 });
 
+test("ลบประเภทงาน: เก็บประวัติ ยอดงานเดิมไม่หาย ไม่ใช้คำนวณอีก สร้างชื่อเดิมใหม่ได้", async () => {
+  const { db, type, tasks } = await configured();
+  // มียอดงานและ Productivity ที่บันทึกไว้แล้ว
+  await as(db, U.sup5, () => db.query(`select public.save_pull_workloads($1, public.pull_today(), 'morning', $2)`, [WH5, JSON.stringify([{ type_id: type, volume: 400 }])]));
+  await as(db, U.admin5, () => db.query(`select public.set_pull_rates($1, public.pull_today(), $2, null)`, [WH5, JSON.stringify([{ task_id: tasks["RT รับ(Domestics)"], per_hour: 30 }])]));
+  const del = (uid, id = type) => as(db, uid, () => db.query(`select public.delete_pull_workload_type($1)`, [id]));
+
+  await assert.rejects(del(U.sup5), /ไม่มีสิทธิ์/, "หัวหน้างานลบไม่ได้");
+  await assert.rejects(del(U.admin32), /ไม่มีสิทธิ์/, "แอดมินคลังอื่นลบไม่ได้");
+  await assert.rejects(del(U.emp5), /ไม่มีสิทธิ์/);
+  await del(U.admin5);
+
+  const t = await q1(db, `select is_active, deleted_at is not null as deleted, deleted_by::text from public.pull_workload_types where id = $1`, [type]);
+  assert.equal(t.deleted, true, "ลบแบบเก็บประวัติ แถวยังอยู่");
+  assert.equal(t.is_active, false);
+  assert.equal(t.deleted_by, U.admin5);
+  assert.deepEqual((await rows(db, `select is_active from public.pull_tasks where workload_type_id = $1`, [type])).map((r) => r.is_active), [false, false], "ทักษะที่ผูกไว้ปิดตาม");
+  assert.equal((await rows(db, `select 1 from public.pull_workloads where workload_type_id = $1`, [type])).length, 1, "ยอดงานเดิมยังอยู่");
+  assert.equal((await rows(db, `select 1 from public.pull_task_rates where task_id = $1`, [tasks["RT รับ(Domestics)"]])).length, 1, "Productivity เดิมยังอยู่");
+  assert.ok((await rows(db, `select 1 from public.audit_logs where table_name = 'pull_workload_types' and action = 'update'`)).length >= 1, "บันทึกประวัติการลบ");
+
+  // ใช้ประเภทงานที่ลบแล้วไม่ได้อีก
+  await assert.rejects(del(U.admin5), /ไม่พบประเภทงาน/, "ลบซ้ำ");
+  await assert.rejects(as(db, U.sup5, () => db.query(`select public.save_pull_workloads($1, public.pull_today(), 'morning', $2)`, [WH5, JSON.stringify([{ type_id: type, volume: 500 }])])), /ไม่พบประเภทงาน/);
+  await assert.rejects(as(db, U.admin5, () => db.query(`select public.save_pull_workload_type($1, $2, 'งานรับ', 'pallet', 1, true)`, [type, WH5])), /ไม่พบประเภทงาน/, "แก้กลับไม่ได้");
+  await assert.rejects(as(db, U.admin5, () => db.query(`select public.set_pull_type_skills($1, $2)`, [type, ["RT รับ(Domestics)"]])), /ไม่พบประเภทงาน/);
+  const req = await as(db, U.sup5, () => rows(db, `select skill_name, required from public.pull_requirements($1, public.pull_today(), 'morning')`, [WH5]));
+  assert.ok(req.every((r) => r.required === null), "ไม่นำยอดของประเภทงานที่ลบไปคำนวณ");
+
+  // สร้างประเภทงานชื่อเดิมใหม่ได้ (ชื่อห้ามซ้ำเฉพาะที่ยังไม่ลบ)
+  const again = await as(db, U.admin5, async () => (await q1(db, `select public.save_pull_workload_type(null, $1, 'งานรับ', 'pallet', 1, true) as id`, [WH5])).id);
+  assert.notEqual(again, type);
+  await assert.rejects(as(db, U.admin5, () => db.query(`select public.save_pull_workload_type(null, $1, 'งานรับ', 'pallet', 1, true)`, [WH5])), /มีประเภทงานชื่อนี้/);
+  // คนไม่ล็อกอินเรียกไม่ได้
+  await db.exec("set role anon");
+  await assert.rejects(db.query(`select public.delete_pull_workload_type($1)`, [again]), /permission denied/);
+  await db.exec("reset role");
+});
+
 test("Productivity: บันทึกพร้อมวันที่เริ่มใช้ ค่าใช้ตามวันที่ และห้ามย้อนหลัง", async () => {
   const { db, tasks } = await configured();
   const t = await today(db);

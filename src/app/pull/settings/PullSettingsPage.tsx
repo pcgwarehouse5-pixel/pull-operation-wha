@@ -197,6 +197,17 @@ export default function PullSettingsPage() {
                   },
                 )
               }
+              onDelete={(t: WorkloadType) =>
+                run(
+                  `ลบ “${t.name}” แล้ว (ยอดงานที่เคยบันทึกยังเก็บในประวัติ)`,
+                  () => rpc("delete_pull_workload_type", { p_id: t.id }),
+                  (c) => ({
+                    ...c,
+                    types: c.types.filter((x) => x.id !== t.id),
+                    tasks: c.tasks.map((k) => (k.workload_type_id === t.id ? { ...k, is_active: false } : k)),
+                  }),
+                )
+              }
             />
           )}
 
