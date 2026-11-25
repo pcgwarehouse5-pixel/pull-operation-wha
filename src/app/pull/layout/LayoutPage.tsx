@@ -1,8 +1,8 @@
 "use client";
 
 // ผังตำแหน่งพนักงาน (Warehouse Team Layout) สำหรับประชุมก่อนเริ่มงาน (ไฟล์ "Pull-Operation Operation & Dashboard" หน้า 3)
-// การ์ดชื่อ + ตัวย่อแทนรูป แยกตามทักษะ พร้อมเวลาพัก · ด้านบนมีแผนที่คลัง 3D ของคลังที่เลือก (ถ้ามีผัง: WH5 / WH32)
-// บนแผนที่: คนที่จองแล้วเป็นกล่องสีตามตำแหน่ง กรองตามคลังต้นทาง/ตำแหน่งได้ · หัวหน้าลากวางแล้วบันทึกลงระบบ (set_pull_positions)
+// การ์ดชื่อ + ไอคอนคน (หมวกนิรภัย/เสื้อกั๊กสีตามตำแหน่ง) แยกตามทักษะ พร้อมเวลาพัก · ด้านบนมีแผนที่คลัง 3D ของคลังที่เลือก (ถ้ามีผัง: WH5 / WH32)
+// บนแผนที่: คนที่จองแล้วเป็นตัวคน 3D สีตามตำแหน่ง กรองตามคลังต้นทาง/ตำแหน่งได้ · หัวหน้าลากวางแล้วบันทึกลงระบบ (set_pull_positions)
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
@@ -23,12 +23,10 @@ import { WAREHOUSE_MAPS, warehouseMapKey } from "@/lib/warehouse3d/maps";
 import { placePeople, skillAnchors, type HistoryRow } from "@/lib/warehouse3d/placement";
 import type { Move, PersonObj } from "@/lib/warehouse3d/scene";
 import { Warehouse3D } from "@/components/pull/Warehouse3D";
+import { WorkerIcon } from "@/components/pull/WorkerIcon";
 
 const BREAK_COLORS = ["#facc15", "#fb923c", "#ef4444", "#38bdf8", "#a78bfa", "#34d399"];
 const GROUP_ICON: Record<string, IconName> = { RT: "forklift", Checker: "clipboard", OP: "trolley", Picker: "cart", CT: "box", โหลดสินค้า: "truck", อื่นๆ: "users" };
-const AV = ["#7c3aed", "#2563eb", "#0f8b8d", "#e5484d", "#e8930c", "#1e8e5a", "#db2777"];
-const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => [...w][0]).join("");
-const avColor = (id: string) => AV[[...id].reduce((n, c) => n + c.charCodeAt(0), 0) % AV.length];
 const hm = (t: string | null) => (t ? t.slice(0, 5) : null);
 
 type Placed = { booking: Booking; person: PoolPerson | undefined };
@@ -200,7 +198,7 @@ export default function LayoutPage() {
           focus={filtered} focusKey={`${mapSrc}|${mapOn.join(",")}`} shot={shot}
         >
           {placed.length === 0 ? (
-            <p className="text-[14px] text-muted">ยังไม่มีคนที่จองเข้าคลังนี้ในวัน/กะนี้ · จองแล้วจะขึ้นเป็นกล่องบนแผนที่ตามตำแหน่งงาน</p>
+            <p className="text-[14px] text-muted">ยังไม่มีคนที่จองเข้าคลังนี้ในวัน/กะนี้ · จองแล้วจะขึ้นเป็นตัวคนบนแผนที่ สีตามตำแหน่งงาน</p>
           ) : (
             <div className="space-y-2">
               <div className="flex items-center gap-2 overflow-x-auto pb-1">
@@ -326,13 +324,14 @@ export default function LayoutPage() {
                           type="button"
                           disabled={!canEdit}
                           onClick={() => setEditing(p)}
-                          className="flex w-full flex-col items-center overflow-hidden rounded-2xl bg-[#fffbea] text-center ring-1 ring-[#f3e3a1] disabled:cursor-default"
+                          className="flex w-full flex-col items-center overflow-hidden rounded-2xl bg-white text-center shadow-[0_2px_10px_rgba(17,28,65,0.08)] ring-1 ring-line transition active:scale-[0.98] enabled:hover:ring-2 enabled:hover:ring-brand/40 disabled:cursor-default"
+                          style={{ backgroundImage: `linear-gradient(to bottom, ${st.color}26, #ffffff 58%)` }}
                           aria-label={`${p.person?.name ?? "พนักงาน"} เวลาพัก ${t ?? "ยังไม่ตั้ง"}`}
                         >
-                          <span className="mt-3 flex h-16 w-16 items-center justify-center rounded-full text-xl font-bold text-white ring-4 ring-white" style={{ background: avColor(p.booking.user_id) }}>
-                            {initials(p.person?.name ?? "?")}
+                          <span className="mt-3 rounded-full bg-white p-[3px] shadow-[0_4px_14px_rgba(17,28,65,0.18)]">
+                            <WorkerIcon color={st.color} seed={p.booking.user_id} size={84} />
                           </span>
-                          <span className="mt-2 w-full truncate px-2 text-[17px] font-bold text-ink">{p.person?.nickname || p.person?.name.split(" ")[0] || "พนักงาน"}</span>
+                          <span className="mt-2 w-full truncate px-2 text-[18px] leading-tight font-bold text-ink">{p.person?.nickname || p.person?.name.split(" ")[0] || "พนักงาน"}</span>
                           <span className="w-full truncate px-2 text-[12px] text-muted">{p.person?.employee_code}{other ? ` · มาจาก ${p.person?.warehouse_code}` : ""}</span>
                           <span className="mt-2 w-full py-1.5 text-[15px] font-bold" style={{ background: col ?? "#eef1f6", color: col ? "#16204a" : "#5a6482" }}>
                             {t ? `พัก ${t}` : "ยังไม่ตั้งเวลาพัก"}

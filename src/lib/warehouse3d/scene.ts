@@ -9,7 +9,7 @@ import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { WAREHOUSE_MAPS } from "./maps";
 import type { ViewMode, WhMap } from "./types";
 
-/** กล่องพนักงานบนแผนที่ (หน้าผังตำแหน่ง) · x/y = พิกัดผัง */
+/** ตัวคนบนแผนที่ (หน้าผังตำแหน่ง) · x/y = พิกัดผัง */
 export type PersonObj = {
   id: string;
   x: number;
@@ -31,15 +31,15 @@ export type Warehouse3D = {
   show(key: string): void;
   view(mode?: ViewMode): void;
   lock(on: boolean): boolean;
-  /** วางกล่องพนักงาน (แทนชุดเดิมทั้งหมด) */
+  /** วางตัวคน (แทนชุดเดิมทั้งหมด) */
   setPeople(list: PersonObj[]): void;
-  /** โหมดจัดตำแหน่ง: ลากกล่อง/ป้ายชื่อ/ป้ายกลุ่มได้ */
+  /** โหมดจัดตำแหน่ง: ลากตัวคน/ป้ายชื่อ/ป้ายกลุ่มได้ */
   setEditing(on: boolean): void;
   /** ลากวางเสร็จ → ตำแหน่งใหม่ของคนที่ย้าย */
   onMove: ((moves: Move[]) => void) | null;
   /** แตะป้ายชื่อ (ไม่ได้ลาก) */
   onTap: ((id: string) => void) | null;
-  /** ซูมกล้องพอดีกล่องที่แสดงอยู่ (true) หรือกลับทั้งคลัง (false) */
+  /** ซูมกล้องพอดีตัวคนที่แสดงอยู่ (true) หรือกลับทั้งคลัง (false) */
   focus(on: boolean): void;
   /** ภาพแผนที่ความละเอียดสูง + ป้ายชื่อ + หัวกระดาษ (PNG) */
   snapshot(shot: Shot): Promise<Blob | null>;
@@ -64,7 +64,7 @@ export function createWarehouse3D(el: HTMLElement, opt: { mobile: boolean; font?
   const FONT = opt.font || "'IBM Plex Sans Thai Looped', sans-serif";
   let LOCKED = true;
   let EDIT = false;
-  /* โฟกัส = กล้องซูมพอดีกล่องพนักงานที่แสดงอยู่ (ใช้ตอนกรองทีละตำแหน่ง) */
+  /* โฟกัส = กล้องซูมพอดีตัวคนที่แสดงอยู่ (ใช้ตอนกรองทีละตำแหน่ง) */
   let FOCUS = false;
   let cur: string | null = null;
   let VMODE: ViewMode = "3d";
@@ -130,7 +130,7 @@ export function createWarehouse3D(el: HTMLElement, opt: { mobile: boolean; font?
   const applyLock = () => {
     controls.enabled = !LOCKED;
     /* ล็อกอยู่ = ปล่อยให้เลื่อนหน้าเว็บผ่านแผนที่ได้ (มือถือ) */
-    /* โหมดจัดตำแหน่ง = แผนที่รับนิ้วเองทั้งหมด (ลากกล่องบนมือถือได้) */
+    /* โหมดจัดตำแหน่ง = แผนที่รับนิ้วเองทั้งหมด (ลากตัวคนบนมือถือได้) */
     canvas.style.touchAction = LOCKED && !EDIT ? "pan-y" : "none";
   };
   applyLock();
@@ -763,7 +763,7 @@ export function createWarehouse3D(el: HTMLElement, opt: { mobile: boolean; font?
     const [x0, y0, x1, y1] = focus ? peopleArea(full) : full, W = x1 - x0, D = y1 - y0, cx = (x0 + x1) / 2, cz = (y0 + y1) / 2;
     const top = VMODE === "top", front = VMODE === "front";
     const dir = top ? new THREE.Vector3(0, 1, 0.001) : front ? new THREE.Vector3(0, 0.4, 0.92).normalize() : camera.aspect < 1 ? new THREE.Vector3(0, 0.86, 0.5).normalize() : new THREE.Vector3(0, 0.62, 0.78).normalize();
-    /* โฟกัส: เผื่อความสูงให้ป้ายชื่อ+เวลาพักเหนือกล่อง */
+    /* โฟกัส: เผื่อความสูงให้ป้ายชื่อ+เวลาพักเหนือหัว */
     const hh = focus ? boxH() + unit() * 9 : (M.rackH || 70) * 1.15, pts: THREE.Vector3[] = [];
     for (const x of [x0, x1]) for (const z of [y0, y1]) for (const y of [0, hh]) pts.push(new THREE.Vector3(x, y, z));
     const tgt = new THREE.Vector3(cx, 0, cz);
@@ -787,22 +787,86 @@ export function createWarehouse3D(el: HTMLElement, opt: { mobile: boolean; font?
     camera.lookAt(controls.target); controls.update(); needs = true;
   }
 
-  /* ---------- กล่องพนักงาน + ป้ายชื่อ + ลากวาง ---------- */
+  /* ---------- ตัวคน + ป้ายชื่อ + ลากวาง ---------- */
   const layer = document.createElement("div");
   layer.style.cssText = "position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:1";
   el.appendChild(layer);
   const peopleRoot = new THREE.Group();
   scene.add(peopleRoot);
-  const personGeo = new THREE.BoxGeometry(1, 1, 1);
+  /* ตัวคนงาน 3D (สูงราว 4.8 ม. ในผัง ให้เห็นชัดจากมุมไกล): หมวกนิรภัย + เสื้อกั๊กสีตามตำแหน่ง แถบสะท้อนแสง
+     กางเกง/แขนเสื้อกรมท่า · วงแหวนสีบนพื้นช่วยให้เห็นจากมุมบน · รูปทรงสร้างครั้งเดียว ทุกคนใช้ร่วมกัน (วาดเร็ว) */
+  const FIG = (() => {
+    const at = (g: THREE.BufferGeometry, x: number, y: number, rz = 0, rx = 0) => {
+      if (rx) g.rotateX(rx);
+      if (rz) g.rotateZ(rz);
+      return g.translate(x, y, 0);
+    };
+    const merge = (list: THREE.BufferGeometry[]) => {
+      const g = mergeGeometries(list)!;
+      list.forEach((x) => x.dispose());
+      return g;
+    };
+    return {
+      vest: merge([
+        at(new THREE.CapsuleGeometry(0.82, 0.75, 6, 18), 0, 2.45),
+        at(new THREE.SphereGeometry(0.72, 22, 10, 0, Math.PI * 2, 0, Math.PI / 2), 0, 4.2),
+        at(new THREE.CylinderGeometry(0.8, 0.8, 0.1, 26), 0, 4.22),
+      ]),
+      cloth: merge([
+        at(new THREE.CapsuleGeometry(0.34, 1.0, 4, 12), -0.42, 0.88),
+        at(new THREE.CapsuleGeometry(0.34, 1.0, 4, 12), 0.42, 0.88),
+        at(new THREE.CapsuleGeometry(0.25, 1.05, 4, 12), -1.02, 2.5, -0.2),
+        at(new THREE.CapsuleGeometry(0.25, 1.05, 4, 12), 1.02, 2.5, 0.2),
+      ]),
+      skin: at(new THREE.SphereGeometry(0.66, 22, 16), 0, 3.98),
+      stripe: merge([at(new THREE.TorusGeometry(0.85, 0.075, 8, 32), 0, 2.15, 0, Math.PI / 2), at(new THREE.TorusGeometry(0.86, 0.075, 8, 32), 0, 2.75, 0, Math.PI / 2)]),
+      ring: at(new THREE.RingGeometry(1.25, 1.75, 44), 0, 0.25, 0, -Math.PI / 2), // ยกพ้นเส้น/โซนที่ทาบนพื้น
+    };
+  })();
+  const SKIN = [0xf3c9a4, 0xe8b38a, 0xd69a6f, 0xf6d2b3];
+  const clothMat = stdMat({ color: 0x24305c, roughness: 0.75, metalness: 0.02 });
+  const stripeMat = stdMat({ color: 0xf5f8fc, roughness: 0.25, metalness: 0.35, emissive: 0x2a3440 });
+  const ringMat = (color: string) => {
+    const k = "ring" + color;
+    let m = matCache.get(k);
+    if (!m) {
+      m = new THREE.MeshBasicMaterial({ color: new THREE.Color(color), transparent: true, opacity: 0.85, depthWrite: false });
+      m.userData.shared = true;
+      matCache.set(k, m);
+    }
+    return m;
+  };
+  function makeFigure(id: string, color: string) {
+    const g = new THREE.Group();
+    const seed = [...id].reduce((n, c) => n + c.charCodeAt(0), 0);
+    const part = (geo: THREE.BufferGeometry, mat: THREE.Material, shadow: boolean) => {
+      const m = new THREE.Mesh(geo, mat);
+      m.castShadow = shadow;
+      m.userData.person = id;
+      g.add(m);
+      return m;
+    };
+    g.userData.ring = part(FIG.ring, ringMat(color), false);
+    g.userData.vest = part(FIG.vest, personMat(color), true);
+    part(FIG.cloth, clothMat, true);
+    part(FIG.skin, stdMat({ color: SKIN[seed % SKIN.length], roughness: 0.8, metalness: 0 }), true);
+    part(FIG.stripe, stripeMat, false);
+    return g;
+  }
+  function recolorFigure(g: THREE.Group, color: string) {
+    (g.userData.vest as THREE.Mesh).material = personMat(color);
+    (g.userData.ring as THREE.Mesh).material = ringMat(color);
+  }
   const ray = new THREE.Raycaster(), v2 = new THREE.Vector2();
   type Box = { x: number; y: number; w: number; h: number } | null;
-  type Obj = { p: PersonObj; mesh: THREE.Mesh; tag: HTMLButtonElement; nm: HTMLSpanElement; sb: HTMLSpanElement; box: Box };
+  type Obj = { p: PersonObj; mesh: THREE.Group; tag: HTMLButtonElement; nm: HTMLSpanElement; sb: HTMLSpanElement; box: Box };
   type Grp = { key: string; tag: HTMLButtonElement; ids: string[]; color: string; box: Box };
   let OBJS = new Map<string, Obj>();
   let GRPS = new Map<string, Grp>();
   let drag: { ids: string[]; start: THREE.Vector3; orig: Map<string, { x: number; y: number }>; tap?: string; sx: number; sy: number; moved: boolean; pid: number } | null = null;
   const unit = () => (cur ? MAPS[cur].pxm : 6.6);
-  const boxH = () => unit() * 3.2;
+  const FIG_SCALE = 1.3; // ขยายตัวคนให้ใหญ่กว่าจริง มองเห็นชัดทั้งคลัง
+  const boxH = () => unit() * 4.95 * FIG_SCALE; // ความสูงตัวคน (ถึงยอดหมวก) · ป้ายชื่ออยู่เหนือจุดนี้
   const personMat = (color: string) => stdMat({ color: new THREE.Color(color).getHex(), roughness: 0.55, metalness: 0.05 });
 
   const chip = (bg: string, fg: string, border: string, size: number) => {
@@ -824,7 +888,7 @@ export function createWarehouse3D(el: HTMLElement, opt: { mobile: boolean; font?
     b.append(nm, sb);
     return { b, nm, sb };
   };
-  /* พื้นที่ที่ครอบกล่องที่แสดงอยู่ (เผื่อขอบ · อย่างน้อย ~30 ม. ไม่ให้ซูมใกล้เกิน) */
+  /* พื้นที่ที่ครอบตัวคนที่แสดงอยู่ (เผื่อขอบ · อย่างน้อย ~30 ม. ไม่ให้ซูมใกล้เกิน) */
   function peopleArea(full: number[]): [number, number, number, number] {
     const xs = [...OBJS.values()].map((o) => o.p.x), ys = [...OBJS.values()].map((o) => o.p.y);
     let a = Math.min(...xs), b = Math.max(...xs), c = Math.min(...ys), d = Math.max(...ys);
@@ -846,9 +910,7 @@ export function createWarehouse3D(el: HTMLElement, opt: { mobile: boolean; font?
     for (const p of list) {
       let o = OBJS.get(p.id);
       if (!o) {
-        const mesh = new THREE.Mesh(personGeo, personMat(p.color));
-        mesh.castShadow = true;
-        mesh.userData.person = p.id;
+        const mesh = makeFigure(p.id, p.color);
         peopleRoot.add(mesh);
         const { b: tag, nm, sb } = personChip(p.color);
         tag.addEventListener("pointerdown", (e) => startDrag(e, [p.id], p.id));
@@ -856,7 +918,7 @@ export function createWarehouse3D(el: HTMLElement, opt: { mobile: boolean; font?
         o = { p, mesh, tag, nm, sb, box: null };
         OBJS.set(p.id, o);
       } else if (o.p.color !== p.color) {
-        o.mesh.material = personMat(p.color);
+        recolorFigure(o.mesh, p.color);
         o.tag.style.borderColor = p.color;
       }
       /* กำลังลากคนนี้อยู่ = คงตำแหน่งบนจอไว้ก่อน */
@@ -868,8 +930,8 @@ export function createWarehouse3D(el: HTMLElement, opt: { mobile: boolean; font?
       o.sb.style.color = p.subFg ?? "#16204a";
       o.tag.title = `${p.label}${p.sub ? ` · ${p.sub}` : ""} · ${p.groupLabel}`;
       styleEdit(o.tag);
-      o.mesh.scale.set(s * 2.2, boxH(), s * 2.2);
-      o.mesh.position.set(o.p.x, boxH() / 2, o.p.y);
+      o.mesh.scale.setScalar(s * FIG_SCALE);
+      o.mesh.position.set(o.p.x, 0, o.p.y);
     }
     /* ป้ายหัวกลุ่มตำแหน่ง: ลากป้ายนี้ = ย้ายทั้งกลุ่ม */
     const groups = new Map<string, { ids: string[]; label: string; color: string }>();
@@ -905,7 +967,7 @@ export function createWarehouse3D(el: HTMLElement, opt: { mobile: boolean; font?
     prj.set(x, y, z).project(camera);
     return { sx: ((prj.x + 1) / 2) * el.clientWidth, sy: ((1 - prj.y) / 2) * el.clientHeight, ok: prj.z < 1 && Math.abs(prj.x) < 1.1 && Math.abs(prj.y) < 1.1, z: prj.z };
   };
-  /* ป้ายชื่อ+เวลาพักรายคน: แสดงเมื่อคนบนแผนที่ไม่เกิน 16 คน (กรองแล้ว) หรือซูมใกล้พอ (กล่องห่างกันบนจอ ≥ 22px)
+  /* ป้ายชื่อ+เวลาพักรายคน: แสดงเมื่อคนบนแผนที่ไม่เกิน 16 คน (กรองแล้ว) หรือซูมใกล้พอ (ตัวคนห่างกันบนจอ ≥ 22px)
      ป้ายชนกัน → เลื่อนป้ายหลังขึ้นไปจนพ้น (ไม่ทับกันในภาพที่แคป) · ป้ายกลุ่มแสดงตลอด */
   /* ป้ายไม่ล้นขอบซ้าย/ขวาของแผนที่ (ภาพที่แคปเห็นครบ) */
   const clampX = (x: number, w: number) => Math.max(4, Math.min(x, el.clientWidth - w - 4));
@@ -987,7 +1049,7 @@ export function createWarehouse3D(el: HTMLElement, opt: { mobile: boolean; font?
       const o = OBJS.get(id);
       if (!o) continue;
       o.p = { ...o.p, x: Math.min(Math.max(s0.x + dx, x0), x1), y: Math.min(Math.max(s0.y + dz, y0), y1) };
-      o.mesh.position.set(o.p.x, boxH() / 2, o.p.y);
+      o.mesh.position.set(o.p.x, 0, o.p.y);
     }
     needs = true;
   }
@@ -1007,14 +1069,14 @@ export function createWarehouse3D(el: HTMLElement, opt: { mobile: boolean; font?
       api.onMove?.(moves);
     } else if (d.moved) {
       /* ถูกยกเลิกกลางทาง (เช่น มีสายเรียกเข้า) → กลับที่เดิม */
-      for (const [id, s0] of d.orig) { const o = OBJS.get(id); if (o) { o.p = { ...o.p, ...s0 }; o.mesh.position.set(s0.x, boxH() / 2, s0.y); } }
+      for (const [id, s0] of d.orig) { const o = OBJS.get(id); if (o) { o.p = { ...o.p, ...s0 }; o.mesh.position.set(s0.x, 0, s0.y); } }
     } else if (d.tap) api.onTap?.(d.tap);
   }
-  /* ลากที่ตัวกล่องในฉาก · ดักก่อนถึงตัวควบคุมกล้อง (capture) */
+  /* ลากที่ตัวคนในฉาก · ดักก่อนถึงตัวควบคุมกล้อง (capture) */
   const onCanvasDown = (e: PointerEvent) => {
     if (!EDIT || !OBJS.size || e.target !== canvas) return;
     aim(e.clientX, e.clientY);
-    const id = ray.intersectObjects(peopleRoot.children, false)[0]?.object.userData.person as string | undefined;
+    const id = ray.intersectObjects(peopleRoot.children, true)[0]?.object.userData.person as string | undefined;
     if (id) startDrag(e, [id], id);
   };
   el.addEventListener("pointerdown", onCanvasDown, { capture: true });
@@ -1162,7 +1224,7 @@ export function createWarehouse3D(el: HTMLElement, opt: { mobile: boolean; font?
       OBJS = new Map();
       GRPS = new Map();
       scene.remove(peopleRoot);
-      personGeo.dispose();
+      Object.values(FIG).forEach((g) => g.dispose());
       ro.disconnect(); io?.disconnect();
       controls.dispose();
       if (root) { scene.remove(root); disposeTree(root); root = null; }

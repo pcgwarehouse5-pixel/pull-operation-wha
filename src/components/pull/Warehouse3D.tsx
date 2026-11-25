@@ -2,7 +2,7 @@
 
 // แผนที่คลัง 3D บนหน้าผังตำแหน่ง · โหลดตัววาด 3D (three.js) แยกไฟล์เฉพาะตอนเปิดแผนที่ ไม่ทำให้หน้าอื่นช้า
 // ล็อกมุมกล้องเป็นค่าเริ่ม (เลื่อนหน้าเว็บผ่านแผนที่ได้บนมือถือ) · กด "หมุน/ซูมได้" ถึงลาก/หมุน/ซูม
-// คนที่จองแล้วขึ้นเป็นกล่องสีตามตำแหน่งงาน · กด "จัดตำแหน่ง" แล้วลากกล่อง/ป้ายชื่อ (รายคน) หรือป้ายกลุ่ม (ทั้งกลุ่ม)
+// คนที่จองแล้วขึ้นเป็นตัวคน 3D สีตามตำแหน่งงาน · กด "จัดตำแหน่ง" แล้วลากตัวคน/ป้ายชื่อ (รายคน) หรือป้ายกลุ่ม (ทั้งกลุ่ม)
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Icon } from "@/components/Icon";
 import { WAREHOUSE_MAPS } from "@/lib/warehouse3d/maps";
@@ -92,7 +92,7 @@ export function Warehouse3D({ mapKey, people = [], editable = false, onMove, onT
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state, mapKey]);
 
-  /* กล่องพนักงาน (หลังสร้างฉากคลังแล้ว) */
+  /* ตัวคนบนแผนที่ (หลังสร้างฉากคลังแล้ว) */
   useEffect(() => {
     if (state === "ready") eng.current?.setPeople(people);
   }, [state, mapKey, people]);
@@ -140,8 +140,8 @@ export function Warehouse3D({ mapKey, people = [], editable = false, onMove, onT
   const btn = (on: boolean) => `min-h-11 shrink-0 rounded-xl px-3 text-[15px] font-semibold ring-1 ${on ? "bg-brand text-white ring-brand" : "bg-white text-ink ring-line"}`;
   const hint = editOn
     ? touch
-      ? "จัดตำแหน่ง: ใช้นิ้วลากกล่องหรือป้ายชื่อ = ย้ายรายคน · ลากป้ายสี = ย้ายทั้งกลุ่ม · ระบบบันทึกให้ทันที"
-      : "จัดตำแหน่ง: ลากกล่องหรือป้ายชื่อ = ย้ายรายคน · ลากป้ายสี = ย้ายทั้งกลุ่ม · ระบบบันทึกให้ทันที"
+      ? "จัดตำแหน่ง: ใช้นิ้วลากตัวคนหรือป้ายชื่อ = ย้ายรายคน · ลากป้ายสี = ย้ายทั้งกลุ่ม · ระบบบันทึกให้ทันที"
+      : "จัดตำแหน่ง: ลากตัวคนหรือป้ายชื่อ = ย้ายรายคน · ลากป้ายสี = ย้ายทั้งกลุ่ม · ระบบบันทึกให้ทันที"
     : locked
       ? "มุมกล้องล็อกอยู่ · กด “หมุน/ซูมได้” เพื่อขยับแผนที่ · เลือกตำแหน่งแล้วจะเห็นชื่อ+เวลาพักรายคน"
       : touch
