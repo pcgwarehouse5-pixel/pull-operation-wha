@@ -5,7 +5,7 @@ import { placePeople, skillAnchors, personGap } from "../src/lib/warehouse3d/pla
 import { WAREHOUSE_MAPS } from "../src/lib/warehouse3d/maps.ts";
 
 const MAP = { bounds: [0, 0, 1000, 600], pxm: 5, zones: [{ r: [0, 500, 1000, 100], c: "#fff", t: "UNLOADING AREA" }] };
-const S = personGap(MAP); // 25
+const S = personGap(MAP); // 45
 
 test("ยังไม่เคยวาง: แต่ละตำแหน่งเรียงตามแนว UNLOADING AREA เป็นกลุ่ม ไม่ทับกัน", () => {
   const ppl = [
@@ -15,8 +15,8 @@ test("ยังไม่เคยวาง: แต่ละตำแหน่ง
   ];
   const p = placePeople(ppl, {}, MAP);
   // RT รับ กลุ่มแรก จุดกลาง x = 250, Picker กลุ่มที่สอง x = 750 · y = กลางโซน 550
-  assert.deepEqual(p.a, { x: 237.5, y: 550, auto: true });
-  assert.deepEqual(p.b, { x: 262.5, y: 550, auto: true });
+  assert.deepEqual(p.a, { x: 250 - S / 2, y: 550, auto: true });
+  assert.deepEqual(p.b, { x: 250 + S / 2, y: 550, auto: true });
   assert.deepEqual(p.c, { x: 750, y: 550, auto: true });
 });
 
@@ -67,5 +67,8 @@ test("ผัง WH5 / WH32: 30 คน 7 ตำแหน่งวางอัต�
     for (const v of Object.values(p)) assert.ok(v.x >= x0 && v.x <= x1 && v.y >= y0 && v.y <= y1, key);
     const keys = new Set(Object.values(p).map((v) => `${v.x.toFixed(1)},${v.y.toFixed(1)}`));
     assert.equal(keys.size, 30, `${key}: ไม่มีกล่องทับกัน`);
+    // ตัวคนขยาย 2 เท่า: ห่างกันอย่างน้อยระยะเว้นมาตรฐาน (ไม่ซ้อนกัน)
+    const pts = Object.values(p), gap = personGap(m);
+    for (let i = 0; i < pts.length; i++) for (let j = i + 1; j < pts.length; j++) assert.ok(Math.hypot(pts[i].x - pts[j].x, pts[i].y - pts[j].y) >= gap - 0.01, `${key}: ตัวคนชิดกันเกินไป`);
   }
 });

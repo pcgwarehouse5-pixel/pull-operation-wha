@@ -8,8 +8,8 @@ export type MapPerson = { id: string; skill: string; x: number | null; y: number
 export type Placed = Pt & { auto: boolean };
 export type HistoryRow = { skill_name: string; work_date: string; shift: string; map_x: number | null; map_y: number | null; map_at: string | null };
 
-/** ระยะห่างระหว่างกล่อง (หน่วยผัง) */
-export const personGap = (m: Pick<WhMap, "pxm">) => m.pxm * 5;
+/** ระยะห่างระหว่างตัวคน (หน่วยผัง) · ตัวคนขยาย 2 เท่า จึงเว้นกว้างขึ้นไม่ให้ทับกัน */
+export const personGap = (m: Pick<WhMap, "pxm">) => m.pxm * 9;
 
 /** จุดของแต่ละตำแหน่ง = จุดกึ่งกลางของคนตำแหน่งนั้นในรอบ (วัน+กะ) ล่าสุดที่เคยวางไว้ */
 export function skillAnchors(history: HistoryRow[]): Record<string, Pt> {
@@ -46,13 +46,18 @@ export function placePeople(people: MapPerson[], anchors: Record<string, Pt>, ma
   /* ตำแหน่งที่ยังไม่มีจุด: เรียงตามแนว UNLOADING AREA (หรือแถบล่างของอาคาร) */
   const zone = map.zones?.find((z) => /unloading/i.test(z.t ?? ""))?.r;
   const [zx, zy, zw, zh] = zone ?? [bx0, by1 - 120, bx1 - bx0, 120];
-  /* ช่องละกว้างอย่างน้อย ~27 ม. ถ้าตำแหน่งเยอะเกินแถวเดียว ขึ้นแถวใหม่ (ไม่ให้กลุ่มชิดกันจนป้ายทับ)
+  /* ช่องละกว้างอย่างน้อย ~45 ม. (หรือกว้างพอสำหรับกลุ่มใหญ่สุด) ถ้าตำแหน่งเยอะเกินแถวเดียว ขึ้นแถวใหม่ (ไม่ให้กลุ่มชิดกันจนป้ายทับ)
+     แถวไม่พอในโซน = ขยายขึ้นไปด้านบน (ตัวคนใหญ่ คลังเล็กอย่าง WH32 ต้องใช้พื้นที่มากกว่าแถบโซน)
      ทุกตำแหน่งมีช่องประจำตามลำดับ (แม้ถูกลากไปแล้ว) → กลุ่มอื่นไม่ขยับมาแทนที่ */
-  const cols = Math.max(1, Math.min(groups.length, Math.floor(zw / (map.pxm * 27)))), rowsN = Math.ceil(groups.length / cols);
+  const side = (n: number) => Math.ceil(Math.sqrt(n));
+  const big = Math.max(1, ...groups.map((g) => g.all.length));
+  const cellW = Math.max(map.pxm * 45, (side(big) + 1) * S), cellH = (Math.ceil(big / side(big)) + 1) * S;
+  const cols = Math.max(1, Math.min(groups.length, Math.floor(zw / cellW))), rowsN = Math.ceil(groups.length / cols);
+  const totalH = Math.min(by1 - by0, Math.max(zh, rowsN * cellH)), top = Math.max(by0, zy + zh - totalH);
   groups.forEach((g, k) => {
     if (g.base) return;
-    const c = k % cols, r = Math.floor(k / cols);
-    g.base = { x: zx + ((c + 0.5) * zw) / cols, y: zy + ((r + 0.5) * zh) / rowsN };
+    const c = k % cols, r = rowsN - 1 - Math.floor(k / cols); // แถวแรกอยู่ล่างสุด (ชิดโซน) แถวถัดไปขึ้นด้านบน
+    g.base = { x: zx + ((c + 0.5) * zw) / cols, y: top + ((r + 0.5) * totalH) / rowsN };
   });
   for (const g of groups) {
     for (const p of g.placed) out[p.id] = { x: p.x!, y: p.y!, auto: false };

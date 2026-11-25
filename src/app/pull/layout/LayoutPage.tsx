@@ -47,7 +47,7 @@ export default function LayoutPage() {
   const [msg, setMsg] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   /* ตัวกรองบนแผนที่: คลังต้นทางของพนักงาน · ตำแหน่งที่ซ่อน */
   const [mapSrc, setMapSrc] = useState("ทั้งหมด");
-  /* ตำแหน่งที่เลือกแสดง (ว่าง = ทุกตำแหน่ง) · แตะตำแหน่งแรก = แสดงเฉพาะตำแหน่งนั้น แตะเพิ่ม = เพิ่มเข้าไป */
+  /* ตำแหน่งที่ติ๊กเลือกแสดง (ไม่ติ๊กเลย = ทุกตำแหน่ง) · ใช้ทั้งบนแผนที่และการ์ดด้านล่าง (แคปไปประชุมได้ตรงกัน) */
   const [mapOn, setMapOn] = useState<string[]>([]);
   const [hist, setHist] = useState<HistoryRow[]>([]);
 
@@ -122,8 +122,9 @@ export default function LayoutPage() {
   const placed: Placed[] = data.bookings.map((b) => ({ booking: b, person: byId.get(b.user_id) }));
   const skills = [...new Set([...data.reqs.map((r) => r.skill_name), ...placed.map((p) => p.booking.skill_name)])];
   const groups = [...new Set(skills.map(skillGroup))];
-  const shown = skills.filter((s) => group === "ทั้งหมด" || skillGroup(s) === group);
-  const inGroup = placed.filter((p) => group === "ทั้งหมด" || skillGroup(p.booking.skill_name) === group);
+  const ticked = (s: string) => mapOn.length === 0 || mapOn.includes(s);
+  const shown = skills.filter((s) => (group === "ทั้งหมด" || skillGroup(s) === group) && ticked(s));
+  const inGroup = placed.filter((p) => (group === "ทั้งหมด" || skillGroup(p.booking.skill_name) === group) && ticked(p.booking.skill_name));
   const notPlaced = data.pool.filter((p) => p.warehouse_id === sel.wh && p.status === "ready");
   const starts = [...new Set(inGroup.map((p) => p.person?.start_min).filter((m): m is number => m !== null && m !== undefined))].sort((a, b) => a - b);
 
@@ -211,23 +212,33 @@ export default function LayoutPage() {
                   <button key={c} type="button" aria-pressed={mapSrc === c} className={chip(mapSrc === c)} onClick={() => setMapSrc(c)}>{c}</button>
                 ))}
               </div>
-              <div className="flex items-center gap-2 overflow-x-auto pb-1">
-                <span className="shrink-0 text-[14px] font-semibold text-ink">ตำแหน่ง</span>
-                <button type="button" aria-pressed={mapOn.length === 0} className={chip(mapOn.length === 0)} onClick={() => setMapOn([])}>
-                  ทุกตำแหน่ง
-                </button>
-                {mapSkills.map((s) => {
-                  const on = mapOn.includes(s);
-                  return (
-                    <button key={s} type="button" aria-pressed={on} className={`${chip(on)} flex items-center gap-1.5`} onClick={() => setMapOn(on ? mapOn.filter((x) => x !== s) : [...mapOn, s])}>
-                      <span className="h-3 w-3 rounded-sm" style={{ background: skillStyle(s).color }} /> {s}
-                      <span className="text-[12px] text-muted">{placed.filter((p) => p.booking.skill_name === s).length}</span>
-                    </button>
-                  );
-                })}
-              </div>
+              <fieldset className="rounded-2xl bg-paper p-2.5 ring-1 ring-line">
+                <legend className="sr-only">ติ๊กเลือกตำแหน่งที่จะแสดงในผัง</legend>
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <span className="text-[15px] font-bold text-ink">ติ๊กเลือกตำแหน่งที่จะแสดงในผัง</span>
+                  <span className="text-[13px] text-muted">{mapOn.length ? `เลือกไว้ ${mapOn.length} ตำแหน่ง` : "ยังไม่ติ๊ก = แสดงทุกตำแหน่ง"}</span>
+                  <span className="flex-1" />
+                  <button type="button" className="min-h-10 rounded-lg px-2 text-[14px] font-semibold text-brand underline disabled:text-muted disabled:no-underline" disabled={!mapOn.length} onClick={() => setMapOn([])}>
+                    ล้าง (แสดงทุกตำแหน่ง)
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {mapSkills.map((s) => {
+                    const on = mapOn.includes(s);
+                    const c = skillStyle(s).color;
+                    return (
+                      <label key={s} className={`flex min-h-12 cursor-pointer items-center gap-2 rounded-xl px-3 text-[15px] font-semibold ring-1 select-none ${on ? "bg-white text-ink ring-2" : "bg-white text-muted ring-line"}`} style={on ? { boxShadow: `inset 0 0 0 2px ${c}` } : undefined}>
+                        <input type="checkbox" aria-label={`แสดง ${s} ในผัง`} className="h-6 w-6 shrink-0 cursor-pointer" style={{ accentColor: c }} checked={on} onChange={() => setMapOn(on ? mapOn.filter((x) => x !== s) : [...mapOn, s])} />
+                        <span className="h-3.5 w-3.5 shrink-0 rounded-sm" style={{ background: c }} />
+                        <span className={on ? "text-ink" : ""}>{s}</span>
+                        <span className="rounded-full bg-paper px-2 text-[13px] text-muted">{placed.filter((p) => p.booking.skill_name === s).length}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </fieldset>
               <p className="flex flex-wrap items-center gap-x-3 text-[13px] text-muted">
-                แสดงบนแผนที่ {mapPeople.length} จาก {placed.length} คน{filtered ? " · ซูมเข้าหาตำแหน่งที่เลือกให้แล้ว" : " · แตะตำแหน่งเพื่อแสดงเฉพาะตำแหน่งนั้น (แตะเพิ่มได้)"}
+                แสดงบนแผนที่ {mapPeople.length} จาก {placed.length} คน{filtered ? " · ซูมเข้าหาตำแหน่งที่เลือกให้แล้ว · การ์ดด้านล่างแสดงเฉพาะตำแหน่งที่ติ๊กด้วย" : " · ติ๊กตำแหน่งเพื่อแสดงเฉพาะตำแหน่งนั้น (ติ๊กได้หลายตำแหน่ง)"}
                 {canEdit && mapPeople.length > 0 && (
                   <button type="button" onClick={resetMap} className="min-h-10 font-semibold text-brand underline">↺ จัดเรียงใหม่อัตโนมัติ</button>
                 )}

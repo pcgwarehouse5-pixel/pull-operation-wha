@@ -157,9 +157,14 @@ export function createWarehouse3D(el: HTMLElement, opt: { mobile: boolean; font?
   sun.shadow.bias = -0.0005;
   scene.add(sun, sun.target);
 
+  /* ขนาดป้ายตามความกว้างแผนที่: จอกว้าง (แคปขึ้นบอร์ดประชุม) = เต็มขนาด · แท็บเล็ต/มือถือ ย่อลงให้ไม่บังแผนที่ */
+  let LK = 1;
   const sizeToEl = () => {
     const w = el.clientWidth, h = el.clientHeight;
     if (!w || !h) return false;
+    const k = w >= 1100 ? 1 : w >= 700 ? 0.8 : 0.6;
+    if (k !== LK) { LK = k; needs = true; }
+    el.style.setProperty("--lk", String(LK));
     const c = renderer.getSize(new THREE.Vector2());
     if (c.x !== w || c.y !== h) {
       renderer.setSize(w, h, false);
@@ -865,34 +870,35 @@ export function createWarehouse3D(el: HTMLElement, opt: { mobile: boolean; font?
   let GRPS = new Map<string, Grp>();
   let drag: { ids: string[]; start: THREE.Vector3; orig: Map<string, { x: number; y: number }>; tap?: string; sx: number; sy: number; moved: boolean; pid: number } | null = null;
   const unit = () => (cur ? MAPS[cur].pxm : 6.6);
-  const FIG_SCALE = 1.3; // ขยายตัวคนให้ใหญ่กว่าจริง มองเห็นชัดทั้งคลัง
+  const FIG_SCALE = 2.6; // ขยายตัวคนให้ใหญ่กว่าจริง (2 เท่าของรุ่นแรก) มองเห็นชัดเวลาแคปขึ้นบอร์ดประชุม
   const boxH = () => unit() * 4.95 * FIG_SCALE; // ความสูงตัวคน (ถึงยอดหมวก) · ป้ายชื่ออยู่เหนือจุดนี้
   const personMat = (color: string) => stdMat({ color: new THREE.Color(color).getHex(), roughness: 0.55, metalness: 0.05 });
 
   const chip = (bg: string, fg: string, border: string, size: number) => {
     const b = document.createElement("button");
     b.type = "button";
-    b.style.cssText = `position:absolute;left:0;top:0;pointer-events:auto;white-space:nowrap;font:700 ${size}px/1.25 ${FONT};color:${fg};background:${bg};border:2px solid ${border};border-radius:10px;padding:2px 7px;box-shadow:0 2px 8px rgba(11,42,74,.22);user-select:none;-webkit-user-select:none`;
+    b.style.cssText = `position:absolute;left:0;top:0;pointer-events:auto;white-space:nowrap;font:700 calc(var(--lk,1)*${size}px)/1.25 ${FONT};color:${fg};background:${bg};border:3px solid ${border};border-radius:14px;padding:3px calc(var(--lk,1)*12px);box-shadow:0 3px 12px rgba(11,42,74,.25);user-select:none;-webkit-user-select:none`;
     return b;
   };
-  /* ป้ายรายคน 2 บรรทัด: ชื่อ · แถบเวลาพัก (สีตามเวลาพัก) · ขนาดตายตัวให้ภาพที่บันทึกตรงกับบนจอ */
-  const NAME_PX = 14, SUB_PX = 12;
+  /* ป้ายรายคน 2 บรรทัด: ชื่อ · แถบเวลาพัก (สีตามเวลาพัก) · ขนาดตายตัวให้ภาพที่บันทึกตรงกับบนจอ
+     ขนาด 2 เท่าของรุ่นแรก (อ่านออกเมื่อแคปขึ้นบอร์ดประชุม) · ภาพที่บันทึกใช้ค่าชุดเดียวกัน */
+  const NAME_PX = 28, NAME_LH = 34, SUB_PX = 22, SUB_LH = 30, TAG_PAD = 5, TAG_GAP = 3, TAG_BORDER = 3, GROUP_PX = 24;
   const personChip = (border: string) => {
     const b = document.createElement("button");
     b.type = "button";
-    b.style.cssText = `position:absolute;left:0;top:0;pointer-events:auto;white-space:nowrap;display:flex;flex-direction:column;align-items:center;gap:2px;padding:3px 6px 4px;background:#fff;border:2px solid ${border};border-radius:10px;box-shadow:0 2px 8px rgba(11,42,74,.22);user-select:none;-webkit-user-select:none;font-family:${FONT}`;
+    b.style.cssText = `position:absolute;left:0;top:0;pointer-events:auto;white-space:nowrap;display:flex;flex-direction:column;align-items:center;gap:calc(var(--lk,1)*${TAG_GAP}px);padding:calc(var(--lk,1)*${TAG_PAD}px) calc(var(--lk,1)*10px);background:#fff;border:${TAG_BORDER}px solid ${border};border-radius:calc(var(--lk,1)*16px);box-shadow:0 3px 12px rgba(11,42,74,.25);user-select:none;-webkit-user-select:none;font-family:${FONT}`;
     const nm = document.createElement("span");
-    nm.style.cssText = `font:700 ${NAME_PX}px/18px ${FONT};color:#16204a`;
+    nm.style.cssText = `font:700 calc(var(--lk,1)*${NAME_PX}px)/calc(var(--lk,1)*${NAME_LH}px) ${FONT};color:#16204a`;
     const sb = document.createElement("span");
-    sb.style.cssText = `font:700 ${SUB_PX}px/16px ${FONT};padding:0 6px;border-radius:6px`;
+    sb.style.cssText = `font:700 calc(var(--lk,1)*${SUB_PX}px)/calc(var(--lk,1)*${SUB_LH}px) ${FONT};padding:0 calc(var(--lk,1)*10px);border-radius:calc(var(--lk,1)*10px)`;
     b.append(nm, sb);
     return { b, nm, sb };
   };
-  /* พื้นที่ที่ครอบตัวคนที่แสดงอยู่ (เผื่อขอบ · อย่างน้อย ~30 ม. ไม่ให้ซูมใกล้เกิน) */
+  /* พื้นที่ที่ครอบตัวคนที่แสดงอยู่ (เผื่อขอบ · อย่างน้อย ~45 ม. ไม่ให้ซูมใกล้เกิน) */
   function peopleArea(full: number[]): [number, number, number, number] {
     const xs = [...OBJS.values()].map((o) => o.p.x), ys = [...OBJS.values()].map((o) => o.p.y);
     let a = Math.min(...xs), b = Math.max(...xs), c = Math.min(...ys), d = Math.max(...ys);
-    const pad = Math.max(unit() * 9, Math.max(b - a, d - c) * 0.14), minS = unit() * 30;
+    const pad = Math.max(unit() * 14, Math.max(b - a, d - c) * 0.16), minS = unit() * 45;
     a -= pad; b += pad; c -= pad; d += pad;
     if (b - a < minS) { const m = (a + b) / 2; a = m - minS / 2; b = m + minS / 2; }
     if (d - c < minS * 0.6) { const m = (c + d) / 2; c = m - minS * 0.3; d = m + minS * 0.3; }
@@ -944,7 +950,7 @@ export function createWarehouse3D(el: HTMLElement, opt: { mobile: boolean; font?
     for (const [key, g] of groups) {
       let t = GRPS.get(key);
       if (!t) {
-        const tag = chip(g.color, "#ffffff", "#ffffff", 13);
+        const tag = chip(g.color, "#ffffff", "#ffffff", GROUP_PX);
         tag.addEventListener("pointerdown", (e) => { const now = GRPS.get(key); if (now) startDrag(e, now.ids); });
         layer.appendChild(tag);
         t = { key, tag, ids: g.ids, color: g.color, box: null };
@@ -1094,16 +1100,16 @@ export function createWarehouse3D(el: HTMLElement, opt: { mobile: boolean; font?
     const scale = Math.min(4, Math.max(2, 1800 / W));
     const out = document.createElement("canvas"), m = out.getContext("2d")!;
     /* จัดรายการตำแหน่งเป็นแถว (ตัดบรรทัดตามความกว้าง) */
-    m.font = `600 15px ${FONT}`;
+    m.font = `600 22px ${FONT}`;
     const rows: { label: string; color: string; x: number }[][] = [[]];
     let cx = 14;
     for (const it of shot.legend) {
-      const w = 20 + m.measureText(it.label).width + 18;
+      const w = 28 + m.measureText(it.label).width + 24;
       if (cx + w > W - 14 && rows.at(-1)!.length) { rows.push([]); cx = 14; }
       rows.at(-1)!.push({ ...it, x: cx });
       cx += w;
     }
-    const headH = 14 + 26 + (shot.legend.length ? rows.length * 24 : 0) + 8, footH = 26;
+    const headH = 16 + 40 + (shot.legend.length ? rows.length * 34 : 0) + 10, footH = 30;
     out.width = Math.round(W * scale);
     out.height = Math.round((headH + H + footH) * scale);
     m.scale(scale, scale);
@@ -1111,17 +1117,17 @@ export function createWarehouse3D(el: HTMLElement, opt: { mobile: boolean; font?
     m.fillRect(0, 0, W, headH + H + footH);
     m.textBaseline = "middle";
     m.fillStyle = "#1b2a5c";
-    m.font = `700 20px ${FONT}`;
-    m.fillText(shot.title, 14, 14 + 12);
-    m.font = `600 15px ${FONT}`;
+    m.font = `700 30px ${FONT}`;
+    m.fillText(shot.title, 14, 16 + 18);
+    m.font = `600 22px ${FONT}`;
     rows.forEach((row, i) => {
-      const y = 14 + 26 + i * 24 + 10;
+      const y = 16 + 40 + i * 34 + 14;
       for (const it of row) {
         m.fillStyle = it.color;
-        rr(m, it.x, y - 7, 14, 14, 3);
+        rr(m, it.x, y - 10, 20, 20, 4);
         m.fill();
         m.fillStyle = "#16204a";
-        m.fillText(it.label, it.x + 20, y);
+        m.fillText(it.label, it.x + 28, y);
       }
     });
     /* แผนที่: วาดใหม่ที่ความละเอียดสูงชั่วคราว แล้วคืนค่าเดิม */
@@ -1139,51 +1145,52 @@ export function createWarehouse3D(el: HTMLElement, opt: { mobile: boolean; font?
     m.rect(0, headH, W, H);
     m.clip();
     m.translate(0, headH);
-    const shadow = (on: boolean) => { m.shadowColor = on ? "rgba(11,42,74,.22)" : "transparent"; m.shadowBlur = on ? 8 : 0; m.shadowOffsetY = on ? 2 : 0; };
+    const shadow = (on: boolean) => { m.shadowColor = on ? "rgba(11,42,74,.25)" : "transparent"; m.shadowBlur = on ? 12 : 0; m.shadowOffsetY = on ? 3 : 0; };
     const people = [...OBJS.values()].filter((o) => o.box && o.tag.style.display !== "none").sort((a, b) => b.box!.y - a.box!.y);
     for (const o of people) {
       const b = o.box!, mid = b.x + b.w / 2;
       shadow(true);
-      rr(m, b.x + 1, b.y + 1, b.w - 2, b.h - 2, 10);
+      rr(m, b.x + TAG_BORDER / 2, b.y + TAG_BORDER / 2, b.w - TAG_BORDER, b.h - TAG_BORDER, 16 * LK);
       m.fillStyle = "#ffffff";
       m.fill();
       shadow(false);
-      m.lineWidth = 2;
+      m.lineWidth = TAG_BORDER;
       m.strokeStyle = o.p.color;
       m.stroke();
       m.textAlign = "center";
-      m.font = `700 ${NAME_PX}px ${FONT}`;
+      m.font = `700 ${NAME_PX * LK}px ${FONT}`;
       m.fillStyle = "#16204a";
-      m.fillText(o.p.label, mid, b.y + 2 + 3 + 9);
+      const top = b.y + TAG_BORDER + TAG_PAD * LK;
+      m.fillText(o.p.label, mid, top + (NAME_LH * LK) / 2);
       if (o.p.sub) {
-        m.font = `700 ${SUB_PX}px ${FONT}`;
-        const tw = m.measureText(o.p.sub).width + 12, ty = b.y + 2 + 3 + 18 + 2;
-        rr(m, mid - tw / 2, ty, tw, 16, 6);
+        m.font = `700 ${SUB_PX * LK}px ${FONT}`;
+        const tw = m.measureText(o.p.sub).width + 20 * LK, ty = top + (NAME_LH + TAG_GAP) * LK;
+        rr(m, mid - tw / 2, ty, tw, SUB_LH * LK, 10 * LK);
         m.fillStyle = o.p.subBg ?? "#eef1f6";
         m.fill();
         m.fillStyle = o.p.subFg ?? "#16204a";
-        m.fillText(o.p.sub, mid, ty + 8);
+        m.fillText(o.p.sub, mid, ty + (SUB_LH * LK) / 2);
       }
     }
     for (const g of GRPS.values()) {
       if (!g.box || g.tag.style.display === "none") continue;
       const b = g.box;
       shadow(true);
-      rr(m, b.x + 1, b.y + 1, b.w - 2, b.h - 2, 10);
+      rr(m, b.x + 1.5, b.y + 1.5, b.w - 3, b.h - 3, 14);
       m.fillStyle = g.color;
       m.fill();
       shadow(false);
-      m.lineWidth = 2;
+      m.lineWidth = 3;
       m.strokeStyle = "#ffffff";
       m.stroke();
       m.textAlign = "center";
-      m.font = `700 13px ${FONT}`;
+      m.font = `700 ${GROUP_PX * LK}px ${FONT}`;
       m.fillStyle = "#ffffff";
       m.fillText(g.tag.textContent ?? "", b.x + b.w / 2, b.y + b.h / 2);
     }
     m.restore();
     m.textAlign = "left";
-    m.font = `500 12px ${FONT}`;
+    m.font = `500 15px ${FONT}`;
     m.fillStyle = "#5a6482";
     const when = new Date().toLocaleString("th-TH", { timeZone: "Asia/Bangkok", dateStyle: "medium", timeStyle: "short" });
     m.fillText(`WHA Workforce · บันทึกภาพเมื่อ ${when} น. · ผังโดยประมาณจากแบบ Layout คลัง`, 14, headH + H + footH / 2);
