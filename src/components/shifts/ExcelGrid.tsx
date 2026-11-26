@@ -2,6 +2,7 @@
 
 // ตารางกะแบบ Excel: ลากเลือก / Shift+คลิก / ลูกศร / พิมพ์เวลา / Ctrl+C Ctrl+X Ctrl+V (วางจาก Excel ได้) /
 // ลากจุดมุมเพื่อเติม / ลากขอบเพื่อย้าย (Ctrl = คัดลอก) / Delete / Ctrl+Z Ctrl+Y / คลิกขวา
+// หมายเหตุรายช่องแบบ Excel: คลิกขวา → เพิ่ม/แก้หมายเหตุ (หรือ Shift+F2) · ช่องที่มีหมายเหตุมีมุมแดง ชี้เมาส์แล้วเห็นข้อความ
 // กลุ่มตามตำแหน่ง: พับ/กาง และลากหัวกลุ่มเพื่อเรียงลำดับ · ลากจุด ⋮⋮ หน้าชื่อเพื่อเรียงคนในกลุ่ม (ใช้ได้ทั้งเมาส์และนิ้ว)
 // บนจอสัมผัส: แตะช่องเพื่อเลือกกะจากรายการ (ลากคลุมช่วงชนกับการเลื่อนจอ)
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -40,6 +41,10 @@ type Props = {
   leaves: Map<string, DayLeave>;
   /** รหัสประเภทลา → ชื่อ */
   leaveLabels: Map<string, string>;
+  /** หมายเหตุรายช่อง · key = keyOf(user_id, date) */
+  notes?: Map<string, string>;
+  /** บันทึกหมายเหตุ (ข้อความว่าง = ลบ) · ไม่ส่ง = ดูหมายเหตุได้อย่างเดียว */
+  onNote?: (emp: Emp, date: string, note: string) => Promise<boolean>;
 };
 
 type Drag = { kind: "select" } | { kind: "fill"; to: Pos } | { kind: "move"; grab: Pos; to: Pos; copy: boolean } | null;
@@ -66,11 +71,13 @@ type DayCellsProps = {
   absent?: Set<string>;
   leaves: Map<string, DayLeave>;
   leaveLabels: Map<string, string>;
+  noteDays: string; // วันที่มีหมายเหตุของแถวนี้ คั่นด้วยจุลภาค (ข้อความ → แถวที่ไม่เปลี่ยนไม่ต้องวาดใหม่)
 };
 
 /** ช่องกะของพนักงาน 1 แถว: วาดใหม่เฉพาะเมื่อข้อมูลของแถวนี้เปลี่ยน (คลัง 138 คนจะได้ไม่ต้องวาดทั้งตารางทุกครั้งที่แก้ 1 ช่อง) */
-const DayCells = memo(function DayCells({ empId, r, dates, row, changed, defs, holidayMap, absent, leaves, leaveLabels }: DayCellsProps) {
+const DayCells = memo(function DayCells({ empId, r, dates, row, changed, defs, holidayMap, absent, leaves, leaveLabels, noteDays }: DayCellsProps) {
   const changedDays = changed ? new Set(changed.split(",")) : null;
+  const noted = noteDays ? new Set(noteDays.split(",")) : null;
   const workDays = dates.filter((d) => worksOn(empId, d, row[d], defs, holidayMap, leaves)).length;
   return (
     <>
@@ -78,7 +85,7 @@ const DayCells = memo(function DayCells({ empId, r, dates, row, changed, defs, h
         const cell = row[d];
         const def = cell ? defs.get(cell.shift_code) : undefined;
         const lines = cellLines(cell, def);
-        const otDay = otDayKind(cell, def, holidayMap.has(d)); // มาทำงานวันหยุด = สีทั้งช่อง (แดง/ม่วง)
+        const otDay = otDayKind(cell, def, holidayMap.has(d)); // มาทำงานวันหยุด = เขียวสว่าง ตัวแดง ทั้งช่อง
         const color = otDay ? OT_DAY_COLOR[otDay] : { bg: def?.bg ?? "#94a3b8", text: def?.text ?? "#fff" };
         const isChanged = !!changedDays?.has(d);
         const lv = leaveOnDay(leaves, empId, d, cell, def, holidayMap.has(d));
@@ -117,6 +124,8 @@ const DayCells = memo(function DayCells({ empId, r, dates, row, changed, defs, h
               ) : (
                 "·"
               )}
+              {/* มีหมายเหตุ: มุมแดงขวาบนแบบ Excel (ชี้เมาส์เพื่ออ่าน) */}
+              {noted?.has(d) && <span aria-label="มีหมายเหตุ" className="pointer-events-none absolute top-0 right-0 h-0 w-0 rounded-tr-[4px] border-t-[12px] border-l-[12px] border-t-[#e11d48] border-l-transparent" />}
             </div>
           </td>
         );
@@ -153,6 +162,20 @@ export function ExcelGrid(p: Props) {
   const [drag, setDrag] = useState<Drag>(null);
   const [editing, setEditing] = useState<{ r: number; c: number; text: string } | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  /* หมายเหตุ: กล่องที่ขึ้นตอนชี้เมาส์ · กล่องพิมพ์หมายเหตุ */
+  const [hoverNote, setHoverNote] = useState<{ key: string; text: string; who: string; x: number; y: number; left: boolean } | null>(null);
+  const [noteEdit, setNoteEdit] = useState<{ emp: Emp; date: string; text: string; had: boolean; x: number; y: number } | null>(null);
+  const [noteBusy, setNoteBusy] = useState(false);
+  const noteDaysByUser = useMemo(() => {
+    const m = new Map<string, string[]>();
+    for (const k of p.notes?.keys() ?? []) {
+      const [u, d] = k.split("|");
+      const list = m.get(u);
+      if (list) list.push(d);
+      else m.set(u, [d]);
+    }
+    return new Map([...m].map(([u, ds]) => [u, ds.sort().join(",")]));
+  }, [p.notes]);
   const [dragGroup, setDragGroup] = useState<string | null>(null);
   const [empDrag, setEmpDrag] = useState<{ group: string; id: string; over: string } | null>(null);
   const sel = useMemo(() => norm(anchor, focus), [anchor, focus]);
@@ -406,6 +429,10 @@ export function ExcelGrid(p: Props) {
       setMenu(null);
       return setAnchor(focus);
     }
+    if (k === "F2" && e.shiftKey) {
+      e.preventDefault();
+      return openNote(focus.r, focus.c);
+    }
     if (k === "F2") {
       e.preventDefault();
       return startEdit();
@@ -464,6 +491,52 @@ export function ExcelGrid(p: Props) {
       if (clip.current) pasteText(clip.current.tsv);
       else p.onMessage("warning", "เบราว์เซอร์ไม่ให้อ่านคลิปบอร์ด กด Ctrl+V แทน");
     }
+  }
+
+  /* ---------- หมายเหตุรายช่อง ---------- */
+  function noteBox(r: number, c: number) {
+    const el = wrap.current?.querySelector(`[data-r="${r}"][data-c="${c}"]`) as HTMLElement | null;
+    const b = el?.getBoundingClientRect();
+    const W = 288, H = 230;
+    const x = b ? (b.right + 8 + W > document.documentElement.clientWidth ? Math.max(8, b.left - W - 8) : b.right + 8) : 40;
+    const y = b ? Math.max(8, Math.min(b.top, window.innerHeight - H - 8)) : 80;
+    return { x, y };
+  }
+  function openNote(r: number, c: number) {
+    const emp = rows[r], date = dates[c];
+    if (!emp || !date || !p.onNote) return;
+    setMenu(null);
+    setHoverNote(null);
+    const had = p.notes?.get(keyOf(emp.id, date)) ?? "";
+    setNoteEdit({ emp, date, text: had, had: !!had, ...noteBox(r, c) });
+  }
+  async function saveNote(text: string) {
+    if (!noteEdit || !p.onNote) return;
+    setNoteBusy(true);
+    const ok = await p.onNote(noteEdit.emp, noteEdit.date, text);
+    setNoteBusy(false);
+    if (ok) {
+      setNoteEdit(null);
+      scroller.current?.focus({ preventScroll: true });
+    }
+  }
+  /* ชี้เมาส์ที่ช่องที่มีหมายเหตุ → กล่องข้อความสีเหลืองข้างช่อง (แบบ Excel) */
+  function onCellHover(e: React.MouseEvent) {
+    if (drag || noteEdit || !p.notes?.size) return;
+    const td = (e.target as Element).closest("td[data-r]") as HTMLElement | null;
+    const r = Number(td?.dataset.r), c = Number(td?.dataset.c);
+    const emp = td ? rows[r] : undefined;
+    const date = td ? dates[c] : undefined;
+    const key = emp && date ? keyOf(emp.id, date) : "";
+    const text = key ? p.notes.get(key) : undefined;
+    if (!text || !emp || !date || !td) {
+      if (hoverNote) setHoverNote(null);
+      return;
+    }
+    if (hoverNote?.key === key) return;
+    const b = td.getBoundingClientRect();
+    const left = b.right + 260 > document.documentElement.clientWidth;
+    setHoverNote({ key, text, who: `${empName(emp)} · ${Number(date.slice(8))} ${thaiMonthShort(date.slice(0, 7))}`, x: left ? b.left - 6 : b.right + 6, y: b.top, left });
   }
 
   useEffect(() => {
@@ -713,6 +786,7 @@ export function ExcelGrid(p: Props) {
               absent={p.absent}
               leaves={p.leaves}
               leaveLabels={p.leaveLabels}
+              noteDays={noteDaysByUser.get(e.id) ?? ""}
             />
           </tr>,
         );
@@ -720,7 +794,7 @@ export function ExcelGrid(p: Props) {
     }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- วาดใหม่เมื่อข้อมูล/กลุ่มเปลี่ยนเท่านั้น
-  }, [groups, collapsed, grid, changedByUser, counts, defs, dates, rows, dragGroup, empDrag, p.onReorderEmps, holidayMap, p.absent, p.leaves, p.leaveLabels]);
+  }, [groups, collapsed, grid, changedByUser, counts, defs, dates, rows, dragGroup, empDrag, p.onReorderEmps, holidayMap, p.absent, p.leaves, p.leaveLabels, noteDaysByUser]);
 
   const allEmps = useMemo(() => groups.flatMap((g) => g.emps), [groups]);
   const S = boxes.sel;
@@ -747,7 +821,7 @@ export function ExcelGrid(p: Props) {
       aria-label="ตารางกะ (ใช้แป้นลูกศร พิมพ์เวลา Ctrl+C Ctrl+V ได้เหมือน Excel)"
     >
       <div ref={wrap} className="relative inline-block min-w-full align-top">
-        <table className="border-separate border-spacing-0 text-[13px]" onPointerDown={onCellPointerDown} onClick={onCellClick} onDoubleClick={onCellDoubleClick} onContextMenu={onContext}>
+        <table className="border-separate border-spacing-0 text-[13px]" onPointerDown={onCellPointerDown} onClick={onCellClick} onDoubleClick={onCellDoubleClick} onContextMenu={onContext} onMouseOver={onCellHover} onMouseLeave={() => setHoverNote(null)}>
           <thead>
             {multi && (
               <tr>
@@ -906,6 +980,23 @@ export function ExcelGrid(p: Props) {
               เลือกจากรายการ / ทำงานวันหยุด
             </MenuItem>
           )}
+          {sel.r0 === sel.r1 && sel.c0 === sel.c1 && p.onNote && rows[sel.r0] && dates[sel.c0] && (
+            <>
+              <MenuItem onClick={() => openNote(sel.r0, sel.c0)} keys="Shift+F2">
+                📝 {p.notes?.get(keyOf(rows[sel.r0].id, dates[sel.c0])) ? "แก้หมายเหตุ" : "เพิ่มหมายเหตุ"}
+              </MenuItem>
+              {!!p.notes?.get(keyOf(rows[sel.r0].id, dates[sel.c0])) && (
+                <MenuItem
+                  onClick={() => {
+                    setMenu(null);
+                    void p.onNote?.(rows[sel.r0], dates[sel.c0], "");
+                  }}
+                >
+                  <span className="text-bad">ลบหมายเหตุ</span>
+                </MenuItem>
+              )}
+            </>
+          )}
           <p className="mt-1 border-t border-line px-3 pt-1.5 pb-1 text-[12px] font-semibold text-muted">ใส่กะในช่องที่เลือก</p>
           <div className="flex max-h-40 flex-wrap gap-1 overflow-y-auto px-2 pb-2">
             {p.activeDefs.map((d) => (
@@ -923,6 +1014,72 @@ export function ExcelGrid(p: Props) {
                 {d.working && d.start !== null && d.end !== null ? cellLines({ shift_code: d.code, holiday_work: null, is_volunteer: false }, d)!.join("-") : d.label}
               </button>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* หมายเหตุตอนชี้เมาส์ (แบบ Excel) */}
+      {hoverNote && !menu && !noteEdit && (
+        <div
+          role="tooltip"
+          className="pointer-events-none fixed z-50 max-w-[16rem] rounded-md border border-[#e0c341] bg-[#fff9c4] px-2.5 py-1.5 text-[13px] leading-snug text-ink shadow-[0_6px_18px_rgba(17,28,65,0.22)]"
+          style={{ left: hoverNote.x, top: hoverNote.y, transform: hoverNote.left ? "translateX(-100%)" : undefined }}
+        >
+          <p className="text-[11px] font-bold text-[#8a6500]">📝 {hoverNote.who}</p>
+          <p className="break-words whitespace-pre-wrap">{hoverNote.text}</p>
+        </div>
+      )}
+
+      {/* กล่องพิมพ์หมายเหตุ · กันแป้นพิมพ์/คัดลอก-วางไม่ให้ไปทำงานกับตาราง */}
+      {noteEdit && (
+        <div
+          role="dialog"
+          aria-label={`หมายเหตุ ${empName(noteEdit.emp)} วันที่ ${Number(noteEdit.date.slice(8))}`}
+          className="fixed z-50 w-72 rounded-xl border border-[#e0c341] bg-[#fff9c4] p-2.5 shadow-[0_10px_30px_rgba(17,28,65,0.25)]"
+          style={{ left: noteEdit.x, top: noteEdit.y }}
+          onPointerDown={(e) => e.stopPropagation()}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === "Escape") {
+              setNoteEdit(null);
+              scroller.current?.focus({ preventScroll: true });
+            }
+            if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && noteEdit.text.trim()) void saveNote(noteEdit.text);
+          }}
+          onCopy={(e) => e.stopPropagation()}
+          onCut={(e) => e.stopPropagation()}
+          onPaste={(e) => e.stopPropagation()}
+        >
+          <p className="mb-1 text-[13px] font-bold text-[#6b4e00]">📝 หมายเหตุ · {empName(noteEdit.emp)} · {Number(noteEdit.date.slice(8))} {thaiMonthShort(noteEdit.date.slice(0, 7))}</p>
+          <textarea
+            autoFocus
+            maxLength={300}
+            value={noteEdit.text}
+            onChange={(e) => setNoteEdit({ ...noteEdit, text: e.target.value })}
+            placeholder="เช่น ขอสลับกะกับ… / ไปอบรม / รอเอกสาร"
+            className="block h-24 w-full resize-none rounded-lg border border-[#e0c341] bg-white px-2 py-1.5 text-[14px] text-ink outline-none focus:ring-2 focus:ring-[#e0c341]"
+            aria-label="ข้อความหมายเหตุ"
+          />
+          <div className="mt-1 flex items-center gap-1.5">
+            <span className="text-[11px] text-[#8a6500]">{noteEdit.text.length}/300 · Ctrl+Enter บันทึก</span>
+            <span className="flex-1" />
+            {noteEdit.had && (
+              <button type="button" disabled={noteBusy} onClick={() => void saveNote("")} className="min-h-9 rounded-lg px-2 text-[13px] font-semibold text-bad hover:bg-white/70">ลบ</button>
+            )}
+            <button
+              type="button"
+              disabled={noteBusy}
+              onClick={() => {
+                setNoteEdit(null);
+                scroller.current?.focus({ preventScroll: true });
+              }}
+              className="min-h-9 rounded-lg px-2 text-[13px] font-semibold text-ink hover:bg-white/70"
+            >
+              ยกเลิก
+            </button>
+            <button type="button" disabled={noteBusy || !noteEdit.text.trim()} onClick={() => void saveNote(noteEdit.text)} className="min-h-9 rounded-lg bg-brand px-3 text-[13px] font-semibold text-white disabled:opacity-50">
+              {noteBusy ? "กำลังบันทึก…" : "บันทึก"}
+            </button>
           </div>
         </div>
       )}
@@ -950,6 +1107,7 @@ export function GridHelp() {
     ["Delete", "ลบ"],
     ["Ctrl+Z", "ย้อนกลับ"],
     ["ดับเบิลคลิก / คลิกขวา", "เลือกจากรายการ"],
+    ["คลิกขวา → หมายเหตุ / Shift+F2", "ใส่หมายเหตุ (มุมแดง ชี้เพื่ออ่าน)"],
   ];
   return (
     <div className="mt-2 hidden flex-wrap gap-x-4 gap-y-1 px-1 text-[12.5px] text-muted lg:flex">

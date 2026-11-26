@@ -22,7 +22,7 @@ console.log(`ฟังก์ชัน ${fns.rows.length} ตัว | authenticat
 await c.end();
 // ลองอ่านผ่าน API ด้วยกุญแจสาธารณะโดยไม่ล็อกอิน
 const anon = createClient(e.NEXT_PUBLIC_SUPABASE_URL, e.NEXT_PUBLIC_SUPABASE_ANON_KEY, { auth: { persistSession: false } });
-for (const t of ["profiles", "warehouses", "audit_logs", "dropdown_options", "user_warehouses", "skills", "employee_skills", "headcount_budgets", "shift_schedules", "schedule_months", "holidays", "app_settings", "attendance_punches", "attendance_corrections", "leave_requests", "leave_approvals", "leave_quota_overrides", "ot_approvals", "notifications", "schedule_group_order", "pull_skills", "pull_workload_types", "pull_tasks", "pull_task_rates", "pull_shift_hours", "pull_workloads", "pull_bookings", "pull_leftover_notes"]) {
+for (const t of ["profiles", "warehouses", "audit_logs", "dropdown_options", "user_warehouses", "skills", "employee_skills", "headcount_budgets", "shift_schedules", "schedule_months", "holidays", "app_settings", "attendance_punches", "attendance_corrections", "leave_requests", "leave_approvals", "leave_quota_overrides", "ot_approvals", "notifications", "schedule_group_order", "pull_skills", "pull_workload_types", "pull_tasks", "pull_task_rates", "pull_shift_hours", "pull_workloads", "pull_bookings", "pull_leftover_notes", "shift_cell_notes"]) {
   const { data, error } = await anon.from(t).select("*").limit(1);
   const blocked = !!error || (data ?? []).length === 0;
   if (!blocked) bad++;

@@ -107,7 +107,7 @@ export default function MyShiftsPage() {
                 const r = mine.get(d);
                 const def = r ? defs.get(r.shift_code) : undefined;
                 const hol = holidayMap.get(d);
-                const otDay = otDayKind(r, def, !!hol); // มาทำงานวันหยุด: แดง = OFF, ม่วง = วันหยุดประจำปี
+                const otDay = otDayKind(r, def, !!hol); // มาทำงานวันหยุด (ได้ OT): เขียวสว่าง ตัวแดง
                 const color = otDay ? OT_DAY_COLOR[otDay] : { bg: def?.bg ?? "#94a3b8", text: def?.text ?? "#fff" };
                 return (
                   <button

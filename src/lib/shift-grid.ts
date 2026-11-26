@@ -188,8 +188,10 @@ export function mergeMembers(members: string[], groupIds: string[]): string[] {
 }
 
 // ---------- ทำงานวันหยุด (ได้ OT) ----------
-// สีช่องที่ได้ OT จากการมาทำงานวันหยุด (ทั้งช่อง) · OFF แดง = วันหยุดประจำสัปดาห์ · ม่วง = วันหยุดประจำปี/นักขัตฤกษ์
-export const OT_DAY_COLOR = { OFF: { bg: "#dc2626", text: "#fff" }, HOL: { bg: "#7c3aed", text: "#fff" } } as const;
+// สีช่องที่ได้ OT จากการมาทำงานวันหยุด (ทั้งช่อง): เขียวสว่าง ตัวอักษรแดง (ผู้ใช้กำหนด) ทั้งวัน OFF แดงและวันหยุดประจำปี
+//   แยกประเภทได้จากคำอธิบายเมื่อชี้ที่ช่อง · สีพื้นกับตัวอักษรตัดกันพออ่านง่าย (ความต่างสีราว 4.9 : 1)
+const OT_GREEN = { bg: "#7cfc00", text: "#c00000" } as const;
+export const OT_DAY_COLOR = { OFF: OT_GREEN, HOL: OT_GREEN } as const;
 export const WEEKLY_OFF = "OFF"; // รหัส OFF แดง (วันหยุดประจำสัปดาห์)
 export const HOLIDAY_CODE = "HOL";
 

@@ -95,6 +95,9 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
   // วันลาที่อนุมัติแล้ว: อ่านจากใบลาโดยตรง ไม่เขียนทับกะในตาราง ถ้ายกเลิกใบลา ช่องกลับเป็นกะเดิมเอง
   const [leaves, setLeaves] = useState<Map<string, DayLeave>>(new Map());
   const leaveReq = useRef(0);
+  // หมายเหตุรายช่อง (คลิกขวา → หมายเหตุ) · key = keyOf(user_id, date)
+  const [notes, setNotes] = useState<Map<string, string>>(new Map());
+  const noteReq = useRef(0);
   const leaveLabels = useMemo(
     () => new Map((demo ? demo.PREVIEW_LEAVE_TYPES : (opts.leave_type ?? [])).map((o) => [o.value, o.label])),
     [demo, opts.leave_type],
@@ -160,6 +163,27 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
         if (req === absReq.current && !soft) setAbsent(new Set());
       }
     })();
+    // หมายเหตุรายช่องโหลดแยก (ไม่ให้ตารางกะช้า) · โหมดตัวอย่างเก็บไว้ในหน้าจออย่างเดียว
+    const ntReq = ++noteReq.current;
+    if (!demo)
+      (async () => {
+        try {
+          const list = await fetchPagesFast<{ user_id: string; work_date: string; note: string }>((f, t) =>
+            sb()
+              .from("shift_cell_notes")
+              .select("user_id, work_date, note, profiles!inner()")
+              .eq("profiles.warehouse_id", wh)
+              .gte("work_date", from)
+              .lt("work_date", to)
+              .order("user_id")
+              .order("work_date")
+              .range(f, t),
+          );
+          if (ntReq === noteReq.current) setNotes((prev) => keepSameMap(prev, new Map(list.map((n) => [keyOf(n.user_id, n.work_date), n.note]))));
+        } catch {
+          if (ntReq === noteReq.current) setMsg({ tone: "warning", text: "โหลดหมายเหตุในตารางกะไม่สำเร็จ ลองรีเฟรชหน้า" });
+        }
+      })();
     // วันลาโหลดแยก: ถ้าโหลดไม่ได้ ตารางกะยังใช้ได้ แต่ต้องบอกผู้ใช้ เพราะช่องจะไม่ขึ้นว่าลา
     const lvReq = ++leaveReq.current;
     (async () => {
@@ -261,6 +285,30 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
   }, [nChanges]);
 
   const grid = useMemo(() => mergeGrid(base, pending), [base, pending]);
+  /* ใส่/แก้/ลบหมายเหตุของช่อง (บันทึกทันที ไม่ต้องกดบันทึกตารางกะ) */
+  const saveNote = useCallback(
+    async (emp: Emp, date: string, note: string) => {
+      const text = note.trim();
+      try {
+        if (!demo) {
+          const { error } = await sb().rpc("set_shift_cell_note", { p_user: emp.id, p_date: date, p_note: text });
+          if (error) throw error;
+        }
+        setNotes((m) => {
+          const n = new Map(m);
+          if (text) n.set(keyOf(emp.id, date), text);
+          else n.delete(keyOf(emp.id, date));
+          return n;
+        });
+        setMsg({ tone: "success", text: `${text ? "บันทึก" : "ลบ"}หมายเหตุ ${empName(emp)} วันที่ ${shortDay(date)} แล้ว${demo ? " (โหมดตัวอย่าง ไม่ได้บันทึกจริง)" : ""}` });
+        return true;
+      } catch (e) {
+        setMsg({ tone: "error", text: errText(e) });
+        return false;
+      }
+    },
+    [demo],
+  );
   const holidayMap = useMemo(() => new Map(holidays.map((h) => [h.holiday_date, h.name])), [holidays]);
   const dayInMonth = viewDates.includes(day) ? day : viewDates[0];
   const multiMonth = viewMonths.length > 1;
@@ -689,6 +737,8 @@ export default function ShiftsPage({ scope = "staff" }: { scope?: "staff" | "lea
                 onRedo={redo}
                 onOpenCell={(emp, date) => canEdit && setCellEdit({ emp, date })}
                 onMessage={(tone, text) => setMsg({ tone, text })}
+                notes={notes}
+                onNote={canEdit ? saveNote : undefined}
                 absent={absent}
                 leaves={leaves}
                 leaveLabels={leaveLabels}
