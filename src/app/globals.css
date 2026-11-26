@@ -151,3 +151,137 @@ html[lang="my"] :is(.leading-none, .leading-tight, .leading-snug) {
   max-height: 68vh;
   max-height: 68dvh;
 }
+
+/* ใบลงเวลา A4 ตามฟอร์มบริษัท (src/components/timesheet) · พิมพ์ผ่าน .ts-print-root ที่ต่อท้าย body */
+.ts-page {
+  width: 210mm;
+  height: 297mm;
+  box-sizing: border-box;
+  padding: 7mm;
+  overflow: hidden;
+  background: #fff;
+  color: #000;
+  font-family: var(--font-ts), Tahoma, "Leelawadee UI", sans-serif;
+  font-size: 9.5pt;
+  line-height: 1.25;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.ts-page p {
+  margin: 0;
+}
+.ts-c {
+  text-align: center;
+}
+.ts-b {
+  font-weight: 700;
+}
+.ts-row {
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+}
+.ts-blank {
+  display: inline-block;
+  flex-shrink: 0;
+  line-height: 1.35;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.ts-tbl {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+.ts-tbl th,
+.ts-tbl td {
+  border: 1px solid #000;
+  padding: 0 0.6mm;
+  text-align: center;
+  vertical-align: middle;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.ts-tbl td.ts-none {
+  border: none;
+}
+.ts-tbl td.ts-remark {
+  text-align: left;
+  font-size: 8pt;
+  white-space: normal;
+  line-height: 1.1;
+}
+.ts-mou .ts-tbl th {
+  font-size: 9.5pt;
+  line-height: 1.15;
+}
+.ts-off-mou td {
+  background: #d9d9d9;
+}
+.ts-foot td {
+  vertical-align: middle;
+}
+.ts-thai .ts-inner {
+  font-size: 8.5pt;
+}
+.ts-thai .ts-inner th {
+  font-weight: 400;
+  font-size: 7pt;
+  line-height: 1.15;
+}
+.ts-thai .ts-inner tr > :first-child {
+  border-left: none;
+}
+.ts-thai .ts-inner tr > :last-child {
+  border-right: none;
+}
+.ts-off-thai td {
+  background: #c4c4c4;
+}
+.ts-sign {
+  display: flex;
+  border-top: 1px solid #000;
+  font-size: 6.8pt;
+}
+.ts-sign > div {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 1.5mm;
+  padding-bottom: 1.5mm;
+  border-right: 1px solid #000;
+  text-align: center;
+}
+.ts-notes {
+  display: flex;
+  gap: 2mm;
+  padding: 1mm 1.5mm;
+  font-size: 6.5pt;
+  line-height: 1.55;
+}
+.ts-print-root {
+  display: none;
+}
+@media print {
+  @page ts {
+    size: A4;
+    margin: 0;
+  }
+  .ts-page {
+    page: ts;
+    break-after: page;
+  }
+  .ts-page:last-child {
+    break-after: auto;
+  }
+  body.ts-printing > *:not(.ts-print-root) {
+    display: none !important;
+  }
+  body.ts-printing .ts-print-root {
+    display: block;
+  }
+}
+.ts-mou {
+  font-family: Tahoma, var(--font-ts), "Leelawadee UI", sans-serif;
+}

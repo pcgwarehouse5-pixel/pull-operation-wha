@@ -12,9 +12,11 @@ import { useOptions } from "@/lib/useOptions";
 import { thaiDate } from "@/lib/format";
 import { isGlobal, isManager } from "@/lib/types";
 import { todayIso } from "@/lib/shifts";
+import { parseForm, type TimesheetForm } from "@/lib/timesheet";
+import { TimesheetFormFields } from "./TimesheetFormFields";
 
 type Setting = { key: string; effective_from: string; value: unknown; note: string | null; created_at: string };
-type Kind = "number" | "quota" | "types" | "rates" | "steps" | "dilrules" | "date" | "time";
+type Kind = "number" | "quota" | "types" | "rates" | "steps" | "dilrules" | "date" | "time" | "tsform";
 type Opt = { value: string; label: string };
 type Meta = { key: string; label: string; unit?: string; hint: string; kind: Kind; min?: number; max?: number; source?: "leave" | "employment" | "position"; group: string };
 type Rates = Record<string, { workday?: number; holiday_normal?: number; holiday_ot?: number }>;
@@ -48,6 +50,7 @@ const META: Meta[] = [
   { group: "Pull Operation", key: "pull.night_meeting", label: "เวลาประชุมเริ่มงาน รอบดึก", unit: "น.", hint: "ตั้งแต่ประชุมเช้าถึงก่อนเวลานี้ ระบบเลือกกะดึกวันนี้ให้ · ตั้งแต่เวลานี้ เลือกกะเช้าพรุ่งนี้", kind: "time" },
   { group: "Pull Operation", key: "pull.morning_from_hour", label: "กะเช้า: เวลาเข้างานตั้งแต่", unit: "นาฬิกา", hint: "รหัสกะที่เริ่มงานตั้งแต่เวลานี้ ถึงเวลาด้านล่าง นับเป็นกะเช้า (ใช้แยกคนในคลังกลางตามกะ)", kind: "number", min: 0, max: 23 },
   { group: "Pull Operation", key: "pull.morning_to_hour", label: "กะเช้า: เวลาเข้างานถึง (รวมทั้งชั่วโมงนั้น)", unit: "นาฬิกา", hint: "เช่น 13 = เข้างานถึง 13:59 ยังเป็นกะเช้า หลังจากนั้นเป็นกะดึก", kind: "number", min: 0, max: 23 },
+  { group: "ใบลงเวลา", key: "timesheet.form", label: "ข้อความในฟอร์มใบลงเวลา (MOU / คนไทย)", hint: "ใช้ตอนพิมพ์ใบลงเวลาในหน้ารายงาน · ชื่อบริษัท ชื่อฟอร์ม หมายเหตุท้ายฟอร์ม และ ฝ่าย/แผนก กับ UL ของแต่ละคลัง", kind: "tsform" },
   { group: "แจ้งเตือน", key: "notify.missing_in_minutes", label: "กะเริ่มแล้วกี่นาทียังไม่ลงเวลา จึงแจ้งเตือนพนักงาน", unit: "นาที", hint: "", kind: "number", min: 5, max: 240 },
   { group: "แจ้งเตือน", key: "notify.absent_streak_days", label: "ขาดงานติดต่อกันกี่วันทำงาน จึงแจ้งหัวหน้า/แอดมิน", unit: "วัน", hint: "เป็นการแจ้งให้ตรวจสอบเท่านั้น ไม่ได้ทำให้พ้นสภาพพนักงาน", kind: "number", min: 1, max: 14 },
   { group: "แจ้งเตือน", key: "notify.daily_hour", label: "เวลาส่งสรุปประจำวัน (ขาดงานติดต่อกัน / OT รออนุมัติ)", unit: "นาฬิกา", hint: "", kind: "number", min: 0, max: 23 },
@@ -77,6 +80,7 @@ export function RulesManager() {
         { key: "diligence.steps", effective_from: "2000-01-01", value: [300, 400, 500], note: null, created_at: "" },
         { key: "diligence.rules", effective_from: "2000-01-01", value: { absent: true, late: true, no_punch: true, leave_types: ["sick", "personal"] }, note: null, created_at: "" },
         { key: "travel.rate_per_day", effective_from: "2000-01-01", value: 30, note: null, created_at: "" },
+        { key: "timesheet.form", effective_from: "2000-01-01", value: demo.PREVIEW_TIMESHEET_FORM, note: null, created_at: "" },
       ]);
     }
     const { data, error } = await sb().from("app_settings").select("key, effective_from, value, note, created_at").order("key").order("effective_from", { ascending: false });
@@ -111,6 +115,11 @@ export function RulesManager() {
         return Object.entries(v as Rates)
           .map(([k, r]) => `${labelIn(list, k)}: วันทำงาน ${r.workday ?? "-"} / ทำงานวันหยุด ${r.holiday_normal ?? "-"} / OT วันหยุด ${r.holiday_ot ?? "-"}`)
           .join(" · ");
+      case "tsform": {
+        const f = parseForm(v);
+        const wh = Object.entries(f.wh).map(([k, w]) => `${k}: UL ${w.mou_ul || "-"} (MOU) / ${w.thai_ul || "-"} (คนไทย)`);
+        return [`MOU: ${f.mou.company || "-"}`, `คนไทย: ${f.thai.company || "-"}`, ...wh].join(" · ");
+      }
       case "dilrules": {
         const r = v as DilRules;
         const parts = [r.absent && "ขาด", r.late && "สาย", r.no_punch && "ลืมลงเวลา", ...(r.leave_types ?? []).map((x) => `ลา${labelIn(leaveTypes, x)}`)].filter(Boolean);
@@ -193,7 +202,8 @@ export function RulesManager() {
 }
 
 function EditSetting({ meta, current, options, leaveTypes, onClose, onSaved }: { meta: Meta; current: unknown; options: Opt[]; leaveTypes: Opt[]; onClose: () => void; onSaved: () => void }) {
-  const { demo } = useApp();
+  const { demo, warehouses } = useApp();
+  const [ts, setTs] = useState<TimesheetForm>(() => parseForm(meta.kind === "tsform" ? current : null));
   const [num, setNum] = useState(String(meta.kind === "number" || meta.kind === "date" || meta.kind === "time" ? (current ?? "") : ""));
   const [quota, setQuota] = useState<Record<string, string>>(() =>
     Object.fromEntries(options.map((t) => [t.value, String((current as Record<string, number> | undefined)?.[t.value] ?? "")])),
@@ -259,6 +269,11 @@ function EditSetting({ meta, current, options, leaveTypes, onClose, onSaved }: {
         }
         if (!out.default) return "ต้องมีค่าเริ่มต้น";
         return out;
+      }
+      case "tsform": {
+        if (!ts.mou.company.trim() || !ts.thai.company.trim()) return "ใส่ชื่อบริษัทของทั้ง 2 ฟอร์ม";
+        const clean = (n: string[]) => n.map((x) => x.trim()).filter(Boolean);
+        return { ...ts, mou: { ...ts.mou, notes: clean(ts.mou.notes) }, thai: { ...ts.thai, notes: clean(ts.thai.notes) } };
       }
       case "dilrules":
         return { absent: !!dil.absent, late: !!dil.late, no_punch: !!dil.no_punch, leave_types: dil.leave_types ?? [] };
@@ -366,6 +381,9 @@ function EditSetting({ meta, current, options, leaveTypes, onClose, onSaved }: {
               ),
             )}
           </div>
+        )}
+        {meta.kind === "tsform" && (
+          <TimesheetFormFields value={ts} onChange={setTs} warehouses={warehouses.filter((w) => w.is_active).map((w) => ({ code: w.code, name: w.name }))} />
         )}
         <Field label="เริ่มใช้ตั้งแต่วันที่" hint="วันก่อนหน้านี้ยังใช้ค่าเดิม (ไม่ย้อนแก้ข้อมูลเก่า)">
           <input type="date" className={inputCls} value={from} onChange={(e) => setFrom(e.target.value)} />

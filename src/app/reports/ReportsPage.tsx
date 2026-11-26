@@ -1,6 +1,6 @@
 "use client";
 
-// รายงาน (หัวหน้างานขึ้นไป): ภาพรวม / OT / เบี้ยขยัน / ค่าเดินทาง / การลา — ส่งออก CSV และพิมพ์ A4
+// รายงาน (หัวหน้างานขึ้นไป): ภาพรวม / OT / เบี้ยขยัน / ค่าเดินทาง / การลา / ใบลงเวลา — ส่งออก CSV และพิมพ์ A4
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { AppShell } from "@/components/AppShell";
 import { PageHelper } from "@/components/Puinun";
@@ -13,9 +13,10 @@ import { shortDay, thaiDate, thaiTime } from "@/lib/format";
 import { useOptions, labelOf } from "@/lib/useOptions";
 import { isGlobal } from "@/lib/types";
 import { addMonths, currentMonth, monthDates, thaiMonthLabel, todayIso } from "@/lib/shifts";
+import { TimesheetReport } from "@/components/timesheet/TimesheetReport";
 import { DAY_TYPE, fmtHours, otBuckets, rateLabel, ratesOf, type TeamOtRow } from "@/lib/ot";
 
-type Tab = "overview" | "ot" | "diligence" | "travel" | "leave";
+type Tab = "overview" | "ot" | "diligence" | "travel" | "leave" | "timesheet";
 type Person = { user_id: string; employee_code: string; first_name_th: string; last_name_th: string | null; nickname: string | null; position: string | null; salary_code?: string | null };
 type Period = { start: string; end: string };
 const fullName = (p: Person) => [p.first_name_th, p.last_name_th].filter(Boolean).join(" ");
@@ -30,6 +31,7 @@ export default function ReportsPage() {
   const [ym, setYm] = useState(currentMonth);
   const [period, setPeriod] = useState<Period | null>(null);
   const whName = visible.find((w) => w.id === wh)?.name ?? "";
+  const whCode = visible.find((w) => w.id === wh)?.code ?? "";
 
   // รอบเงินเดือนของเดือนที่เลือก (ตามวันตัดรอบในหน้าตั้งค่า)
   useEffect(() => {
@@ -57,7 +59,7 @@ export default function ReportsPage() {
   return (
     <AppShell title="รายงาน" minRole="supervisor" wide>
       <PageHelper pose="paper" title="รายงาน">
-        สรุปภาพรวม OT เบี้ยขยัน ค่าเดินทาง และการลา ส่งออก CSV หรือพิมพ์ A4
+        สรุปภาพรวม OT เบี้ยขยัน ค่าเดินทาง และการลา ส่งออก CSV หรือพิมพ์ A4 · แท็บ “ใบลงเวลา” พิมพ์ฟอร์มบริษัท (MOU ครึ่งเดือน / คนไทยเต็มเดือน)
       </PageHelper>
       <div className="mb-3 -mx-3 overflow-x-auto px-3 print:hidden">
         <div className="flex w-max gap-1.5" role="tablist">
@@ -68,6 +70,7 @@ export default function ReportsPage() {
               ["diligence", "เบี้ยขยัน"],
               ["travel", "ค่าเดินทาง"],
               ["leave", "สรุปการลา"],
+              ["timesheet", "ใบลงเวลา"],
             ] as const
           ).map(([k, l]) => (
             <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)} className={`min-h-11 rounded-full px-4 text-[15px] font-semibold whitespace-nowrap ${tab === k ? "bg-brand text-white" : "bg-white ring-1 ring-line"}`}>
@@ -93,7 +96,7 @@ export default function ReportsPage() {
           <Button variant="secondary" size="sm" aria-label="เดือนถัดไป" disabled={ym >= currentMonth()} onClick={() => setYm(addMonths(ym, 1))}>
             <Icon name="next" size={18} />
           </Button>
-          {period && (
+          {period && tab !== "timesheet" && (
             <span className="text-[14px] text-muted">
               รอบ {thai(period.start)} – {thai(period.end)}
               {range && range.end < period.end ? ` (ข้อมูลถึง ${thai(range.end)})` : ""}
@@ -103,11 +106,12 @@ export default function ReportsPage() {
       )}
 
       {tab === "overview" && <Overview />}
-      {tab !== "overview" && (!range || !wh) && <Loading />}
+      {tab !== "overview" && tab !== "timesheet" && (!range || !wh) && <Loading />}
       {tab === "ot" && range && wh && <OtReport wh={wh} whName={whName} range={range} period={period!} />}
       {tab === "diligence" && range && wh && <DiligenceReport wh={wh} whName={whName} month={`${ym}-01`} period={period!} />}
       {tab === "travel" && range && wh && <TravelReport wh={wh} whName={whName} range={range} period={period!} />}
       {tab === "leave" && range && wh && <LeaveReport wh={wh} whName={whName} period={period!} />}
+      {tab === "timesheet" && wh && <TimesheetReport key={`${wh}-${ym}`} wh={wh} whCode={whCode} ym={ym} />}
     </AppShell>
   );
 }

@@ -332,3 +332,17 @@ export function previewPullNetwork(from: string, to: string): import("./pull").N
   }
   return out;
 }
+
+// ใบลงเวลา (สมมติ): ข้อความหัวฟอร์ม + ข้อมูลพนักงานเพิ่มเติม (ไม่ใช่ข้อมูลจริง)
+export const PREVIEW_TIMESHEET_FORM = {
+  mou: { company: "[C00] บริษัท ตัวอย่าง จำกัด (MOU)", title: "แบบฟอร์มการบันทึกเวลาปฏิบัติงาน และ แบบขออนุมัติทำงานล่วงเวลา คนงาน", subject: "การบันทึกเวลาปฏิบัติงาน คนงาน", to: "ผู้จัดการโรงงาน/ผู้จัดการทั่วไป", notes: ["เซ็นเวลาเข้า - ออก ด้วยตัวเอง", "ห้ามลงรายชื่อแทนกันเด็ดขาด", "การทำงานล่วงเวลา 1 สัปดาห์ ไม่เกิน 36 ชั่วโมง"] },
+  thai: { company: "บริษัท ตัวอย่าง จำกัด [000]", title: "แบบฟอร์มการบันทึกเวลาปฏิบัติงาน และ แบบขออนุมัติทำงานล่วงเวลา ทำงานวันหยุด และล่วงเวลาวันหยุด", notes: ["รอบการทำงานปกติ (ตัวอย่างหมายเหตุ บรรทัดที่ 1)", "การทำงานล่วงเวลา 1 สัปดาห์ ไม่เกิน 36 ชั่วโมง"] },
+  wh: { WH5: { mou_dept: "คลังสินค้า5", mou_ul: "000", thai_dept: "แผนกคลังสินค้า 5", thai_ul: "000.000" } },
+};
+export function previewTimesheetPeople() {
+  return [
+    { id: "p1", employee_code: "D0001", title: "นาย", first_name_th: "ผู้ทดลอง", last_name_th: "ตัวอย่าง", position: "RT", salary_code: "S0001", employment_type: "monthly_employee" },
+    { id: "p2", employee_code: "D0002", title: "นาย", first_name_th: "ทดสอบ", last_name_th: "ตัวอย่าง", position: "Checker", salary_code: "S0002", employment_type: "mou" },
+    { id: "preview-me", employee_code: "DEMO01", title: null, first_name_th: "ผู้ใช้", last_name_th: "ตัวอย่าง", position: "RT", salary_code: null, employment_type: "mou" },
+  ];
+}
