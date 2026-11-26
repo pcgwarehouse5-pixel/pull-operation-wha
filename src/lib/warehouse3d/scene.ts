@@ -160,12 +160,12 @@ export function createWarehouse3D(el: HTMLElement, opt: { mobile: boolean; font?
   sun.shadow.bias = -0.0005;
   scene.add(sun, sun.target);
 
-  /* ขนาดป้ายตามความกว้างแผนที่: จอกว้าง (แคปขึ้นบอร์ดประชุม) = เต็มขนาด · แท็บเล็ต/มือถือ ย่อลงให้ไม่บังแผนที่ */
+  /* ขนาดป้ายตามความกว้างแผนที่: จอกว้าง (แคปขึ้นบอร์ดประชุม) = 80% ของขนาดฐาน (ผู้ใช้ขอย่อลง 20%) · แท็บเล็ต/มือถือ ย่อลงตามสัดส่วนเดิม ไม่ให้บังแผนที่ */
   let LK = 1;
   const sizeToEl = () => {
     const w = el.clientWidth, h = el.clientHeight;
     if (!w || !h) return false;
-    const k = w >= 1100 ? 1 : w >= 700 ? 0.8 : 0.6;
+    const k = (w >= 1100 ? 1 : w >= 700 ? 0.8 : 0.6) * 0.8;
     if (k !== LK) { LK = k; needs = true; }
     el.style.setProperty("--lk", String(LK));
     const c = renderer.getSize(new THREE.Vector2());
