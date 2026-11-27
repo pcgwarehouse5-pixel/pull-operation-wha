@@ -16,7 +16,7 @@ import { shortDay, thaiDate } from "@/lib/format";
 import { isGlobal, ROLE_RANK } from "@/lib/types";
 import { addDays, loadPool, loadPullConfig, loadWorkloads, volumesFor, type WorkloadRow } from "@/lib/pull-data";
 import {
-  SHIFT_LABEL, activeTasks, formatTyping, hoursOf, num, parseVolume, readiness, requirementRows, skillRequirements, skillStyle, staffShortage, totalRequired, typeVolume,
+  SHIFT_LABEL, activeTasks, formatTyping, hoursOf, inputTypes, num, parseVolume, readiness, requirementRows, skillRequirements, skillStyle, splitChildren, splitVolume, staffShortage, totalRequired, typeVolume,
   type PoolPerson, type PullConfig, type PullShift, type WorkloadType,
 } from "@/lib/pull";
 
@@ -189,7 +189,8 @@ function WorkloadForm({
   cfg: PullConfig; wh: string; date: string; shift: PullShift; saved: Record<string, number>; pool: PoolPerson[] | null; canEdit: boolean; unitLabel: (v: string) => string;
   onSave: (v: Record<string, number | null>) => Promise<boolean>;
 }) {
-  const types = cfg.types.filter((t) => t.warehouse_id === wh && t.is_active).sort((a, b) => a.sort_order - b.sort_order);
+  // กรอกเฉพาะยอดหลัก/งานที่กรอกเอง · งานที่แตกจากยอดหลักระบบคิดยอดให้ (แสดงใต้ยอดหลัก)
+  const types = inputTypes(cfg, wh, date);
   const tasks = activeTasks(cfg, wh);
   const initial = Object.fromEntries(types.map((t) => [t.id, saved[t.id] !== undefined ? formatTyping(String(saved[t.id])) : ""]));
   const [vals, setVals] = useState<Record<string, string>>(initial);
@@ -226,14 +227,16 @@ function WorkloadForm({
       <Card>
         <h2 className="text-xl font-bold text-brand">กรอกปริมาณงาน {shortDay(date)}</h2>
         <p className="text-[14px] text-muted">
-          {thaiDate(date)} · {SHIFT_LABEL[shift]} {num(hours)} ชม. · กรอกเฉพาะปริมาณงาน ระบบคำนวณจำนวนคนที่ต้องการให้อัตโนมัติ (ไม่มีงานให้ใส่ 0)
+          {thaiDate(date)} · {SHIFT_LABEL[shift]} {num(hours)} ชม. · กรอกเฉพาะปริมาณงาน ระบบแตกยอดและคำนวณจำนวนคนที่ต้องการให้อัตโนมัติ (ไม่มีงานให้ใส่ 0)
         </p>
         {types.length === 0 && <div className="mt-4"><Alert tone="warning">ยังไม่มีประเภทงานของคลังนี้ (ตั้งที่ ตั้งค่า Pull → ผูกประเภทงาน)</Alert></div>}
         <ul className="mt-4 space-y-3">
           {types.map((t) => {
             const st = skillStyle(t.name);
             const users = tasks.filter((k) => k.workload_type_id === t.id).map((k) => k.skill_name);
+            const kids = splitChildren(cfg, t.id, date);
             const invalid = !parsed[t.id].ok;
+            const src = parsed[t.id].value;
             return (
               <li key={t.id} className="rounded-2xl p-3 ring-1" style={{ background: st.tint, borderColor: st.color, boxShadow: `inset 0 0 0 1px ${st.color}33` }}>
                 <div className="flex flex-wrap items-center gap-3">
@@ -261,8 +264,37 @@ function WorkloadForm({
                   </div>
                 </div>
                 <p className="mt-1.5 pl-[3.75rem] text-[13px] text-muted">
-                  {invalid ? <span className="font-semibold text-bad">ใส่ตัวเลข 0 ขึ้นไป</span> : users.length ? `ใช้คำนวณ: ${users.join(", ")}` : "ยังไม่ได้ผูกทักษะ (ไม่นำไปคำนวณ)"}
+                  {invalid ? (
+                    <span className="font-semibold text-bad">ใส่ตัวเลข 0 ขึ้นไป</span>
+                  ) : kids.length ? (
+                    `ระบบแตกยอดให้ ${kids.length} งานด้านล่างอัตโนมัติ${users.length ? ` · ใช้คำนวณ: ${users.join(", ")}` : ""}`
+                  ) : users.length ? (
+                    `ใช้คำนวณ: ${users.join(", ")}`
+                  ) : (
+                    "ยังไม่ได้ผูกทักษะ (ไม่นำไปคำนวณ)"
+                  )}
                 </p>
+                {kids.length > 0 && (
+                  <ul className="mt-2 space-y-1.5 sm:pl-[3.75rem]" aria-label={`ยอดที่แตกจาก ${t.name}`}>
+                    {kids.map(({ type, split }) => {
+                      const out = src === null || invalid ? null : splitVolume(src, split);
+                      const who = tasks.filter((k) => k.workload_type_id === type.id).map((k) => k.skill_name);
+                      return (
+                        <li key={type.id} className="flex flex-wrap items-baseline gap-x-2 rounded-xl bg-white/80 px-3 py-2 ring-1 ring-line">
+                          <Icon name="arrow" size={16} className="shrink-0 self-center text-muted" />
+                          <span className="min-w-0 flex-1 text-[15px] font-semibold text-ink">{type.name}</span>
+                          <span className="text-[13px] text-muted">
+                            {num(split.share_pct)}%{split.divisor !== 1 ? ` ÷ ${num(split.divisor)}` : ""}
+                          </span>
+                          <span className="text-[16px] font-bold text-ink">
+                            {out === null ? "—" : num(out)} {unitLabel(type.unit)}
+                          </span>
+                          {who.length > 0 && <span className="w-full pl-6 text-[12px] text-muted">{who.join(", ")}</span>}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
               </li>
             );
           })}
@@ -336,7 +368,6 @@ function WorkloadForm({
 
 /** แผน 7 วัน: ดูว่าวัน/กะไหนกรอกยอดแล้ว และต้องการกี่คน กดเพื่อเลือก */
 function PlanStrip({ cfg, wh, today, loads, selected, onPick }: { cfg: PullConfig; wh: string; today: string; loads: WorkloadRow[]; selected: { date: string; shift: PullShift }; onPick: (d: string, s: PullShift) => void }) {
-  const types = cfg.types.filter((t) => t.warehouse_id === wh && t.is_active);
   const days = Array.from({ length: 7 }, (_, i) => addDays(today, i - 1));
   return (
     <Card className="mt-4">
@@ -358,6 +389,7 @@ function PlanStrip({ cfg, wh, today, loads, selected, onPick }: { cfg: PullConfi
                 <th className="text-left text-[14px] font-semibold text-ink">{SHIFT_LABEL[s]}</th>
                 {days.map((d) => {
                   const vols = volumesFor(loads, d, s);
+                  const types = inputTypes(cfg, wh, d);
                   const filled = types.filter((t) => vols[t.id] !== undefined).length;
                   const total = filled ? totalRequired(skillRequirements(cfg, wh, requirementRows(cfg, wh, d, s, vols))) : null;
                   const on = selected.date === d && selected.shift === s;

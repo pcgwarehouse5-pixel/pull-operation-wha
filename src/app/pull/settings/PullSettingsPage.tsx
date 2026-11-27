@@ -183,6 +183,9 @@ export default function PullSettingsPage() {
                     const { data, error } = await sb().rpc("save_pull_workload_type", { p_id: f.id, p_wh: curWh, p_name: f.name, p_unit: f.unit, p_sort: f.sort_order, p_active: f.is_active });
                     if (error) throw error;
                     await rpc("set_pull_type_skills", { p_type: data as string, p_skills: f.skills });
+                    if (f.split) {
+                      await rpc("set_pull_type_split", { p_type: data as string, p_from: f.split.from, p_source: f.split.source, p_share: f.split.share, p_divisor: f.split.divisor });
+                    }
                   },
                   (c) => {
                     const id = f.id ?? `demo-${Date.now()}`;
@@ -193,8 +196,22 @@ export default function PullSettingsPage() {
                       ...old.map((x) => ({ ...x, is_active: f.skills.includes(x.skill_name) })),
                       ...f.skills.filter((s) => !old.some((x) => x.skill_name === s)).map((s) => ({ id: `demo-${id}-${s}`, warehouse_id: curWh, workload_type_id: id, skill_name: s, is_active: true })),
                     ];
-                    return { ...c, types: [...c.types.filter((x) => x.id !== id), type], tasks };
+                    const sp = f.split;
+                    const splits = sp
+                      ? [
+                          ...(c.splits ?? []).filter((x) => !(x.type_id === id && x.effective_from === sp.from)),
+                          { type_id: id, warehouse_id: curWh, effective_from: sp.from, source_type_id: sp.source, share_pct: sp.share, divisor: sp.divisor, note: null, created_at: new Date().toISOString() },
+                        ]
+                      : c.splits;
+                    return { ...c, types: [...c.types.filter((x) => x.id !== id), type], tasks, splits };
                   },
+                )
+              }
+              onDeleteSplit={(typeId, from) =>
+                run(
+                  "ลบกฎแตกยอดที่ตั้งล่วงหน้าแล้ว",
+                  () => rpc("delete_pull_type_split", { p_type: typeId, p_from: from }),
+                  (c) => ({ ...c, splits: (c.splits ?? []).filter((x) => !(x.type_id === typeId && x.effective_from === from)) }),
                 )
               }
               onDelete={(t: WorkloadType) =>

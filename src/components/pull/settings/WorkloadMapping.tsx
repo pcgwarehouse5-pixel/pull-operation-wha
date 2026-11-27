@@ -3,14 +3,25 @@
 // ขั้นที่ 3 ผูกประเภทงานกับทักษะ: งานแต่ละประเภท ใช้คนทักษะไหน นับด้วยหน่วยอะไร
 // Productivity ตั้งเป็นหน่วยเดียวกับประเภทงานเสมอ ระบบจึงกันกรอกผิดหน่วยให้
 // ลบประเภทงานได้ (เก็บประวัติ: ยอดงานเดิมไม่หาย แค่ไม่แสดงและไม่ใช้คำนวณ)
+// แตกยอด (migration 0037): ประเภทงานคิดยอดจาก "ยอดหลัก" × % ÷ ตัวหาร ได้ เช่น ยอดจ่ายรวม (ชิ้น) 60% ÷ 32 = พาเลท
 import { useState } from "react";
 import { Alert, Button, Card, Field, Modal, inputCls } from "@/components/ui";
 import { Icon } from "@/components/Icon";
 import { SkillIcon, Toggle } from "@/components/pull/PullUI";
-import { num, rateOf, readiness, skillStyle, type PullConfig, type WorkloadType } from "@/lib/pull";
+import { latestSplit, num, parsePositive, rateOf, readiness, skillStyle, type PullConfig, type TypeSplit, type WorkloadType } from "@/lib/pull";
+import { thaiDate } from "@/lib/format";
 import type { DropdownOption } from "@/lib/types";
 
-export type TypeForm = { id: string | null; name: string; unit: string; sort_order: number; is_active: boolean; skills: string[] };
+/** กฎแตกยอดที่จะบันทึก (null = ไม่เปลี่ยน) · source = null คือกรอกเอง */
+export type SplitChange = { source: string | null; share: number | null; divisor: number | null; from: string };
+export type TypeForm = { id: string | null; name: string; unit: string; sort_order: number; is_active: boolean; skills: string[]; split: SplitChange | null };
+
+/** "ยอดจ่ายรวม 60% ÷ 32" */
+function splitText(cfg: PullConfig, s: TypeSplit): string {
+  if (!s.source_type_id) return "กรอกเอง";
+  const src = cfg.types.find((t) => t.id === s.source_type_id)?.name ?? "ยอดหลัก";
+  return `${src} ${num(s.share_pct)}%${s.divisor !== 1 ? ` ÷ ${num(s.divisor)}` : ""}`;
+}
 
 export function WorkloadMapping({
   cfg,
@@ -20,6 +31,7 @@ export function WorkloadMapping({
   canEdit,
   onSave,
   onDelete,
+  onDeleteSplit,
   onGoSkills,
 }: {
   cfg: PullConfig;
@@ -29,6 +41,7 @@ export function WorkloadMapping({
   canEdit: boolean;
   onSave: (f: TypeForm) => Promise<boolean>;
   onDelete: (t: WorkloadType) => Promise<boolean>;
+  onDeleteSplit: (typeId: string, from: string) => Promise<boolean>;
   onGoSkills: () => void;
 }) {
   const [form, setForm] = useState<TypeForm | null>(null);
@@ -51,8 +64,8 @@ export function WorkloadMapping({
   const edit = (t: WorkloadType | null) =>
     setForm(
       t
-        ? { id: t.id, name: t.name, unit: t.unit, sort_order: t.sort_order, is_active: t.is_active, skills: tasksOf(t).map((k) => k.skill_name) }
-        : { id: null, name: "", unit: units[0]?.value ?? "", sort_order: (types.at(-1)?.sort_order ?? 0) + 1, is_active: true, skills: [] },
+        ? { id: t.id, name: t.name, unit: t.unit, sort_order: t.sort_order, is_active: t.is_active, skills: tasksOf(t).map((k) => k.skill_name), split: null }
+        : { id: null, name: "", unit: units[0]?.value ?? "", sort_order: (types.at(-1)?.sort_order ?? 0) + 1, is_active: true, skills: [], split: null },
     );
 
   return (
@@ -90,7 +103,8 @@ export function WorkloadMapping({
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block text-[17px] leading-snug font-bold break-words text-ink">{t.name}</span>
-                      {!t.is_active && <span className="text-[13px] text-muted">ปิดใช้งาน (ไม่นำไปคำนวณ)</span>}
+                      {!t.is_active && <span className="block text-[13px] text-muted">ปิดใช้งาน (ไม่นำไปคำนวณ)</span>}
+                      <SplitBadge cfg={cfg} type={t} today={today} />
                     </span>
                     {canEdit && (
                       <span className="flex shrink-0 flex-row gap-1 lg:flex-col">
@@ -151,6 +165,10 @@ export function WorkloadMapping({
           pulled={pulled}
           units={units}
           locked={!!form.id && cfg.rates.some((x) => cfg.tasks.some((k) => k.id === x.task_id && k.workload_type_id === form.id))}
+          cfg={cfg}
+          wh={wh}
+          today={today}
+          onDeleteSplit={onDeleteSplit}
           onClose={() => setForm(null)}
           onSave={async (f) => {
             if (await onSave(f)) setForm(null);
@@ -170,18 +188,68 @@ export function WorkloadMapping({
   );
 }
 
-function TypeEditor({ form, pulled, units, locked, onClose, onSave, onDelete, onGoSkills }: { form: TypeForm; pulled: string[]; units: DropdownOption[]; locked: boolean; onClose: () => void; onSave: (f: TypeForm) => Promise<void>; onDelete?: () => void; onGoSkills: () => void }) {
+/** ป้ายใต้ชื่อประเภทงาน: แตกยอดจากไหน / เป็นยอดหลักของงานไหน / กฎที่ตั้งล่วงหน้า */
+function SplitBadge({ cfg, type, today }: { cfg: PullConfig; type: WorkloadType; today: string }) {
+  const mine = (cfg.splits ?? []).filter((s) => s.type_id === type.id);
+  const now = mine.filter((s) => s.effective_from <= today).sort((a, b) => b.effective_from.localeCompare(a.effective_from))[0];
+  const next = mine.filter((s) => s.effective_from > today).sort((a, b) => a.effective_from.localeCompare(b.effective_from))[0];
+  const kids = cfg.types.filter((t) => t.is_active && latestSplit(cfg, t.id)?.source_type_id === type.id);
+  return (
+    <>
+      {now?.source_type_id && <span className="mt-0.5 block text-[13px] font-semibold text-brand">แตกยอดจาก {splitText(cfg, now)}</span>}
+      {next && (
+        <span className="mt-0.5 block text-[13px] font-semibold text-[#8a6500]">
+          ตั้งแต่ {thaiDate(next.effective_from)}: {next.source_type_id ? `แตกยอดจาก ${splitText(cfg, next)}` : "กลับไปกรอกเอง"}
+        </span>
+      )}
+      {kids.length > 0 && <span className="mt-0.5 block text-[13px] font-semibold text-ok">ยอดหลัก · แตกให้ {kids.map((k) => k.name).join(", ")}</span>}
+    </>
+  );
+}
+
+function TypeEditor({
+  form, pulled, units, locked, cfg, wh, today, onClose, onSave, onDelete, onDeleteSplit, onGoSkills,
+}: {
+  form: TypeForm; pulled: string[]; units: DropdownOption[]; locked: boolean; cfg: PullConfig; wh: string; today: string;
+  onClose: () => void; onSave: (f: TypeForm) => Promise<void>; onDelete?: () => void; onDeleteSplit: (typeId: string, from: string) => Promise<boolean>; onGoSkills: () => void;
+}) {
   const [f, setF] = useState(form);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const extra = f.skills.filter((s) => !pulled.includes(s)); // ทักษะที่ผูกไว้แต่ปิดในขั้นที่ 1 แล้ว
 
+  // ---- ที่มาของยอด (แตกยอดจากยอดหลัก) ----
+  const splits = cfg.splits ?? [];
+  const latest = form.id ? latestSplit(cfg, form.id) : null;
+  const future = splits.filter((s) => s.type_id === form.id && s.effective_from > today).sort((a, b) => a.effective_from.localeCompare(b.effective_from));
+  const hasSplit = (id: string) => splits.some((s) => s.type_id === id && s.source_type_id);
+  const isSourceOf = form.id ? cfg.types.filter((t) => splits.some((s) => s.type_id === t.id && s.source_type_id === form.id)).map((t) => t.name) : [];
+  // ยอดหลักได้เฉพาะประเภทงานที่กรอกเอง (ไม่แตกต่อเป็นทอดๆ)
+  const sources = cfg.types.filter((t) => t.warehouse_id === wh && t.is_active && t.id !== form.id && !hasSplit(t.id)).sort((a, b) => a.sort_order - b.sort_order);
+  const [src, setSrc] = useState<string>(latest?.source_type_id ?? "");
+  const [share, setShare] = useState(latest?.share_pct ? String(latest.share_pct) : "100");
+  const [div, setDiv] = useState(latest?.divisor ? String(latest.divisor) : "1");
+  const [from, setFrom] = useState(today);
+  const srcType = cfg.types.find((t) => t.id === src);
+  const shareN = parsePositive(share, 100);
+  const divN = parsePositive(div, 100000);
+  const unitOf = (v?: string) => units.find((u) => u.value === v)?.label ?? v ?? "";
+
   async function submit() {
     if (!f.name.trim()) return setErr("กรุณาใส่ชื่อประเภทงาน");
     if (!f.unit) return setErr("กรุณาเลือกหน่วยนับ");
+    let split: SplitChange | null = null;
+    if (src) {
+      if (shareN === null) return setErr("สัดส่วนต้องมากกว่า 0 และไม่เกิน 100");
+      if (divN === null) return setErr("ตัวหารต้องมากกว่า 0 (ใส่ 1 ถ้าใช้ยอดเดิมไม่แปลงหน่วย)");
+      if (src !== latest?.source_type_id || shareN !== latest?.share_pct || divN !== latest?.divisor) split = { source: src, share: shareN, divisor: divN, from };
+    } else if (latest?.source_type_id) {
+      split = { source: null, share: null, divisor: null, from };
+    }
+    if (split && (!from || from < today)) return setErr("วันที่เริ่มใช้ต้องเป็นวันนี้หรือวันถัดไป");
     setErr("");
     setBusy(true);
-    await onSave({ ...f, name: f.name.trim(), skills: f.skills.filter((s) => pulled.includes(s)) });
+    await onSave({ ...f, name: f.name.trim(), skills: f.skills.filter((s) => pulled.includes(s)), split });
     setBusy(false);
   }
 
@@ -225,6 +293,56 @@ function TypeEditor({ form, pulled, units, locked, onClose, onSave, onDelete, on
             </div>
           )}
           {extra.length > 0 && <p className="mt-2 text-[14px] text-muted">ทักษะที่ปิดในขั้นที่ 1 แล้วจะถูกเอาออก: {extra.join(", ")}</p>}
+        </div>
+        <div className="rounded-2xl bg-paper p-3 ring-1 ring-line">
+          <p className="font-semibold text-ink">ที่มาของยอดงาน</p>
+          {isSourceOf.length > 0 ? (
+            <p className="mt-1 text-[14px] text-muted">เป็นยอดหลักที่หัวหน้ากรอก และแตกยอดให้: {isSourceOf.join(", ")}</p>
+          ) : (
+            <>
+              <select className={`${inputCls} mt-2`} value={src} onChange={(e) => setSrc(e.target.value)} aria-label="ที่มาของยอดงาน">
+                <option value="">หัวหน้ากรอกยอดเอง</option>
+                {sources.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    แตกยอดจาก “{t.name}” ({unitOf(t.unit)})
+                  </option>
+                ))}
+              </select>
+              {src && (
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <Field label="สัดส่วน (%)">
+                    <input className={inputCls} inputMode="decimal" value={share} onChange={(e) => setShare(e.target.value)} />
+                  </Field>
+                  <Field label="หารด้วย" hint="1 = ไม่แปลงหน่วย">
+                    <input className={inputCls} inputMode="decimal" value={div} onChange={(e) => setDiv(e.target.value)} />
+                  </Field>
+                  <p className="col-span-2 rounded-xl bg-white p-2 text-[14px] text-ink">
+                    ตัวอย่าง: {srcType?.name} 10,000 {unitOf(srcType?.unit)} × {num(shareN)}%{divN && divN !== 1 ? ` ÷ ${num(divN)}` : ""} ={" "}
+                    <b>
+                      {shareN !== null && divN !== null ? num((10000 * shareN) / 100 / divN) : "—"} {unitOf(f.unit)}
+                    </b>
+                  </p>
+                </div>
+              )}
+              {(src || latest?.source_type_id) && (
+                <div className="mt-3">
+                  <Field label="เริ่มใช้ตั้งแต่" hint="ยอดของวันก่อนหน้านี้คิดแบบเดิม">
+                    <input type="date" className={inputCls} value={from} min={today} onChange={(e) => setFrom(e.target.value)} />
+                  </Field>
+                </div>
+              )}
+            </>
+          )}
+          {future.map((s) => (
+            <div key={s.effective_from} className="mt-2 flex flex-wrap items-center gap-2 rounded-xl bg-[#fff6d6] p-2 text-[14px] text-[#8a6500]">
+              <span className="min-w-0 flex-1">
+                ตั้งล่วงหน้า: ตั้งแต่ {thaiDate(s.effective_from)} · {s.source_type_id ? `แตกยอดจาก ${splitText(cfg, s)}` : "กลับไปกรอกเอง"}
+              </span>
+              <Button variant="ghost" size="sm" className="!text-bad" disabled={busy} onClick={() => form.id && void onDeleteSplit(form.id, s.effective_from)}>
+                <Icon name="trash" size={16} /> ลบ
+              </Button>
+            </div>
+          ))}
         </div>
         <div className="flex flex-wrap items-center gap-4">
           <label className="flex items-center gap-2 font-semibold">

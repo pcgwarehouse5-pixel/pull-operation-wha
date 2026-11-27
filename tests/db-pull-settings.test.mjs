@@ -249,8 +249,16 @@ test("ค่าเริ่มต้นจาก Excel/แอปเดิม ใ
   assert.equal(await rate(WH32, "งานเช็คจ่าย Export", "เช็คจ่าย(Export)"), 700);
   const units = await rows(db, `select name, unit from public.pull_workload_types where warehouse_id = $1 order by sort_order`, [WH5]);
   assert.deepEqual(units.map((u) => `${u.name}:${u.unit}`), [
-    "งานรับ:pallet", "งานจ่าย พาเลทเต็ม:pallet", "งานเติม Pickface:pallet", "งานจ่าย Picker:piece",
+    "งานรับ:pallet", "ยอดจ่ายรวม:piece", "งานจ่าย พาเลทเต็ม:pallet", "งานเติม Pickface:pallet", "งานจ่าย Picker:piece",
     "งานโหลดสินค้า:piece", "งานเช็คจ่าย:piece", "งานจ่าย Ecommerce:piece",
+  ]);
+  // migration 0037: ยอดจ่ายรวม (ชิ้น) แตกยอดให้งานจ่าย เริ่ม 28 พ.ย. 2569
+  const splits = await rows(db, `select t.name, src.name as src, s.share_pct::float as share, s.divisor::float as div, s.effective_from::text as from
+    from public.pull_type_splits s join public.pull_workload_types t on t.id = s.type_id join public.pull_workload_types src on src.id = s.source_type_id
+    where s.warehouse_id = $1 order by t.sort_order`, [WH5]);
+  assert.deepEqual(splits.map((s) => `${s.name}<-${s.src}:${s.share}%/${s.div}@${s.from}`), [
+    "งานจ่าย พาเลทเต็ม<-ยอดจ่ายรวม:60%/32@2026-11-28", "งานเติม Pickface<-ยอดจ่ายรวม:40%/10@2026-11-28", "งานจ่าย Picker<-ยอดจ่ายรวม:40%/1@2026-11-28",
+    "งานโหลดสินค้า<-ยอดจ่ายรวม:100%/1@2026-11-28", "งานเช็คจ่าย<-ยอดจ่ายรวม:100%/1@2026-11-28",
   ]);
   assert.equal((await rows(db, `select 1 from public.pull_skills where warehouse_id = $1`, [WH5])).length, 13);
   assert.equal((await rows(db, `select 1 from public.pull_skills where warehouse_id = $1`, [WH32])).length, 9);

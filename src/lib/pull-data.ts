@@ -1,13 +1,13 @@
 // โหลดข้อมูล Pull Operation จาก Supabase (ใช้ร่วมกันทุกหน้าของ Pull)
 import { fetchAll, sb } from "./supabase";
 import { DEFAULT_MEETINGS, MEETING_KEYS, isHm, type Meetings } from "./pull";
-import type { Booking, NetRow, PoolPerson, PullConfig, PullShift, PullSkillRow, PullTask, ShiftHours, SkillCount, SkillReq, TaskRate, WorkloadType } from "./pull";
+import type { Booking, NetRow, PoolPerson, PullConfig, PullShift, PullSkillRow, PullTask, ShiftHours, SkillCount, SkillReq, TaskRate, TypeSplit, WorkloadType } from "./pull";
 import type { HistoryRow } from "./warehouse3d/placement";
 
 export type WorkloadRow = { warehouse_id: string; work_date: string; shift: PullShift; workload_type_id: string; volume: number };
 
 export async function loadPullConfig(): Promise<PullConfig> {
-  const [skills, pullSkills, types, tasks, rates, hours, counts] = await Promise.all([
+  const [skills, pullSkills, types, tasks, rates, hours, counts, splits] = await Promise.all([
     fetchAll<{ name: string; position: string }>((f, t) => sb().from("skills").select("name, position").eq("is_active", true).order("name").order("position").range(f, t)),
     fetchAll<PullSkillRow>((f, t) => sb().from("pull_skills").select("warehouse_id, skill_name, sort_order").order("warehouse_id").order("sort_order").range(f, t)),
     // ประเภทงานที่ลบแล้วเก็บไว้เป็นประวัติ ไม่แสดงในหน้าใด
@@ -16,6 +16,7 @@ export async function loadPullConfig(): Promise<PullConfig> {
     fetchAll<TaskRate>((f, t) => sb().from("pull_task_rates").select("task_id, warehouse_id, effective_from, per_hour, note, created_at").order("task_id").order("effective_from").range(f, t)),
     fetchAll<ShiftHours>((f, t) => sb().from("pull_shift_hours").select("warehouse_id, shift, effective_from, hours, note, created_at").order("warehouse_id").order("effective_from").range(f, t)),
     sb().rpc("pull_skill_counts"),
+    fetchAll<TypeSplit>((f, t) => sb().from("pull_type_splits").select("type_id, warehouse_id, effective_from, source_type_id, share_pct, divisor, note, created_at").order("type_id").order("effective_from").range(f, t)),
   ]);
   if (counts.error) throw counts.error;
   const skillPositions: Record<string, string[]> = {};
@@ -29,6 +30,7 @@ export async function loadPullConfig(): Promise<PullConfig> {
     rates: rates.map((r) => ({ ...r, per_hour: Number(r.per_hour) })),
     hours: hours.map((h) => ({ ...h, hours: Number(h.hours) })),
     counts: ((counts.data ?? []) as SkillCount[]).map((c) => ({ ...c, people: Number(c.people) })),
+    splits: splits.map((s) => ({ ...s, share_pct: s.share_pct === null ? null : Number(s.share_pct), divisor: s.divisor === null ? null : Number(s.divisor) })),
   };
 }
 

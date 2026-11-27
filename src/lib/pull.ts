@@ -41,6 +41,8 @@ export type PullTask = { id: string; warehouse_id: string; workload_type_id: str
 export type TaskRate = { task_id: string; warehouse_id: string; effective_from: string; per_hour: number; note: string | null; created_at: string };
 export type ShiftHours = { warehouse_id: string; shift: PullShift; effective_from: string; hours: number; note: string | null; created_at: string };
 export type SkillCount = { warehouse_id: string; skill_name: string; people: number };
+/** กฎแตกยอด (migration 0037): ยอดของประเภทงาน = ยอดหลัก × share_pct% ÷ divisor · source = null คือกลับไปกรอกเอง */
+export type TypeSplit = { type_id: string; warehouse_id: string; effective_from: string; source_type_id: string | null; share_pct: number | null; divisor: number | null; note: string | null; created_at: string };
 
 export type PullConfig = {
   skillNames: string[]; // ชื่อทักษะทั้งหมดที่เปิดใช้ (ไม่ซ้ำ)
@@ -51,6 +53,7 @@ export type PullConfig = {
   rates: TaskRate[];
   hours: ShiftHours[];
   counts: SkillCount[];
+  splits?: TypeSplit[];
 };
 
 type Dated = { effective_from: string };
@@ -90,6 +93,52 @@ export function activeTasks(cfg: PullConfig, wh: string) {
   return cfg.tasks.filter((k) => k.warehouse_id === wh && k.is_active && types.has(k.workload_type_id) && pulled.has(k.skill_name));
 }
 
+// ---------- แตกยอดอัตโนมัติ (สูตรเดียวกับ pull_volume_at ในฐานข้อมูล) ----------
+export type ActiveSplit = { source_type_id: string; share_pct: number; divisor: number; effective_from: string };
+
+/** กฎแตกยอดที่ใช้ ณ วันที่ (null = กรอกเอง) */
+export function splitOf(cfg: PullConfig, typeId: string, date: string): ActiveSplit | null {
+  const s = valueAt((cfg.splits ?? []).filter((x) => x.type_id === typeId), date);
+  if (!s || !s.source_type_id || !s.share_pct || !s.divisor) return null;
+  return { source_type_id: s.source_type_id, share_pct: s.share_pct, divisor: s.divisor, effective_from: s.effective_from };
+}
+
+/** กฎล่าสุดของประเภทงาน (รวมที่ตั้งล่วงหน้า และกฎ "กลับไปกรอกเอง") ไม่มี = null */
+export function latestSplit(cfg: PullConfig, typeId: string): TypeSplit | null {
+  return valueAt((cfg.splits ?? []).filter((x) => x.type_id === typeId), "9999-12-31");
+}
+
+/** ยอดที่แตกได้จากยอดหลัก: ยอดหลัก × % ÷ ตัวหาร */
+export function splitVolume(source: number, s: { share_pct: number; divisor: number }): number {
+  return (source * s.share_pct) / 100 / s.divisor;
+}
+
+/** ประเภทงานที่หัวหน้าต้องกรอกเอง ณ วันที่ (เปิดใช้อยู่และไม่ได้แตกจากยอดหลัก) */
+export function inputTypes(cfg: PullConfig, wh: string, date: string): WorkloadType[] {
+  return cfg.types.filter((t) => t.warehouse_id === wh && t.is_active && !splitOf(cfg, t.id, date)).sort((a, b) => a.sort_order - b.sort_order);
+}
+
+/** ประเภทงานที่แตกจากยอดหลักนี้ ณ วันที่ */
+export function splitChildren(cfg: PullConfig, sourceId: string, date: string): { type: WorkloadType; split: ActiveSplit }[] {
+  const out: { type: WorkloadType; split: ActiveSplit }[] = [];
+  for (const type of cfg.types) {
+    const split = type.is_active ? splitOf(cfg, type.id, date) : null;
+    if (split?.source_type_id === sourceId) out.push({ type, split });
+  }
+  return out.sort((a, b) => a.type.sort_order - b.type.sort_order);
+}
+
+/** ยอดงานที่ใช้คำนวณ: งานที่แตกจากยอดหลัก = ยอดหลัก × % ÷ ตัวหาร / อื่นๆ = ยอดที่กรอก · ยังไม่กรอก = null */
+export function effectiveVolumes(cfg: PullConfig, wh: string, date: string, raw: Record<string, number | null | undefined>): Record<string, number | null> {
+  const out: Record<string, number | null> = {};
+  for (const t of cfg.types.filter((x) => x.warehouse_id === wh)) {
+    const s = splitOf(cfg, t.id, date);
+    const v = s ? raw[s.source_type_id] : raw[t.id];
+    out[t.id] = v === undefined || v === null || !Number.isFinite(v) ? null : s ? splitVolume(v, s) : v;
+  }
+  return out;
+}
+
 export type Readiness = {
   skills: boolean;
   productivity: boolean;
@@ -106,7 +155,9 @@ export function readiness(cfg: PullConfig, wh: string, date: string): Readiness 
   const tasks = activeTasks(cfg, wh);
   const types = cfg.types.filter((t) => t.warehouse_id === wh && t.is_active);
   const skillsWithoutTask = pulled.filter((s) => !tasks.some((k) => k.skill_name === s));
-  const typesWithoutSkill = types.filter((t) => !tasks.some((k) => k.workload_type_id === t.id)).map((t) => t.name);
+  // ยอดหลักที่แตกไปให้งานอื่น ไม่ต้องผูกทักษะเอง
+  const isSource = (id: string) => types.some((x) => splitOf(cfg, x.id, date)?.source_type_id === id);
+  const typesWithoutSkill = types.filter((t) => !tasks.some((k) => k.workload_type_id === t.id) && !isSource(t.id)).map((t) => t.name);
   const tasksWithoutRate = tasks.filter((k) => !rateOf(cfg, k.id, date)).length;
   return {
     skills: pulled.length > 0,
@@ -197,9 +248,10 @@ export function ceilPeople(fte: number): number {
   return Math.max(0, Math.ceil(fte - 1e-9));
 }
 
-/** รายละเอียดทีละงาน ณ คลัง/วัน/กะ · volumes = ยอดงานต่อประเภทงาน (ไม่มี = ยังไม่กรอก) */
-export function requirementRows(cfg: PullConfig, wh: string, date: string, shift: PullShift, volumes: Record<string, number | null | undefined>): ReqRow[] {
+/** รายละเอียดทีละงาน ณ คลัง/วัน/กะ · raw = ยอดที่กรอกต่อประเภทงาน (ไม่มี = ยังไม่กรอก) · งานที่แตกจากยอดหลักคิดยอดให้เอง */
+export function requirementRows(cfg: PullConfig, wh: string, date: string, shift: PullShift, raw: Record<string, number | null | undefined>): ReqRow[] {
   const hours = hoursOf(cfg, wh, shift, date)?.hours ?? null;
+  const volumes = effectiveVolumes(cfg, wh, date, raw);
   const order = new Map(cfg.pullSkills.filter((s) => s.warehouse_id === wh).map((s) => [s.skill_name, s.sort_order]));
   const types = new Map(cfg.types.map((t) => [t.id, t]));
   return activeTasks(cfg, wh)

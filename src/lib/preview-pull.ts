@@ -13,11 +13,11 @@ import { requirementRows, skillRequirements } from "./pull";
 const W5 = "preview-wh-5";
 const W32 = "preview-wh-32";
 const CODE: Record<string, string> = { [W5]: "WH5", [W32]: "WH32" };
-const KEY = "wha-demo-pull-v1";
+const KEY = "wha-demo-pull-v2";
 const AT = "2026-11-01T00:00:00Z";
 
 // ---------- ตั้งค่า (ลอกจากเว็บจริง) ----------
-const T5 = { recv: "t5-recv", out: "t5-out", fill: "t5-fill", pick: "t5-pick", load: "t5-load", chk: "t5-chk", ecom: "t5-ecom" };
+const T5 = { recv: "t5-recv", total: "t5-total", out: "t5-out", fill: "t5-fill", pick: "t5-pick", load: "t5-load", chk: "t5-chk", ecom: "t5-ecom" };
 const T32 = { recv: "t32-recv", out: "t32-out", load: "t32-load", chk: "t32-chk" };
 
 export function previewPullConfig(): PullConfig {
@@ -82,9 +82,9 @@ export function previewPullConfig(): PullConfig {
       ...order(W32, ["OP ลากรับ", "RT รับ(Export)", "CT4F", "เช็ครับ(Export)", "RT จ่าย(Export)", "OP ลากจ่าย", "โหลดงาน", "CT โหลด Export", "เช็คจ่าย(Export)"]),
     ],
     types: [
-      type(T5.recv, W5, "งานรับ", "pallet", 1), type(T5.out, W5, "งานจ่าย พาเลทเต็ม", "pallet", 2), type(T5.fill, W5, "งานเติม Pickface", "pallet", 3),
-      type(T5.pick, W5, "งานจ่าย Picker", "piece", 4), type(T5.load, W5, "งานโหลดสินค้า", "piece", 5), type(T5.chk, W5, "งานเช็คจ่าย", "piece", 6),
-      type(T5.ecom, W5, "งานจ่าย Ecommerce", "piece", 7),
+      type(T5.recv, W5, "งานรับ", "pallet", 1), type(T5.total, W5, "ยอดจ่ายรวม", "piece", 2), type(T5.out, W5, "งานจ่าย พาเลทเต็ม", "pallet", 3), type(T5.fill, W5, "งานเติม Pickface", "pallet", 4),
+      type(T5.pick, W5, "งานจ่าย Picker", "piece", 5), type(T5.load, W5, "งานโหลดสินค้า", "piece", 6), type(T5.chk, W5, "งานเช็คจ่าย", "piece", 7),
+      type(T5.ecom, W5, "งานจ่าย Ecommerce", "piece", 8),
       type(T32.recv, W32, "งานรับ Export", "pallet", 1), type(T32.out, W32, "งานจ่าย Export", "pallet", 2), type(T32.load, W32, "งานโหลด Export", "piece", 3),
       type(T32.chk, W32, "งานเช็คจ่าย Export", "piece", 4),
     ],
@@ -92,6 +92,10 @@ export function previewPullConfig(): PullConfig {
     rates,
     hours: [...hours(W5, 10, 9.5), ...hours(W32, 9, 9.5)],
     counts,
+    // คลัง 5 กรอกยอดจ่ายรวมเป็นชิ้น แล้วแตกยอดให้งานจ่าย (เหมือน migration 0037)
+    splits: ([[T5.out, 60, 32], [T5.fill, 40, 10], [T5.pick, 40, 1], [T5.load, 100, 1], [T5.chk, 100, 1]] as const).map(([type_id, share_pct, divisor]) => ({
+      type_id, warehouse_id: W5, effective_from: old, source_type_id: T5.total, share_pct, divisor, note: null, created_at: AT,
+    })),
   };
 }
 
@@ -226,7 +230,7 @@ export function previewResetPull() {
 
 /** ตัวเลขยอดงานตัวอย่างสำหรับสอน (ใส่ในคู่มือด้วย) */
 export const TRAINING_NIGHT_VOLUMES: Record<string, number> = { [T5.recv]: 800, [T5.out]: 600, [T5.fill]: 300, [T5.pick]: 5000, [T5.load]: 5000, [T5.chk]: 12000, [T5.ecom]: 2000 };
-const MORNING_VOLUMES: Record<string, number> = { [T5.recv]: 550, [T5.out]: 650, [T5.fill]: 160, [T5.pick]: 3200, [T5.load]: 3500, [T5.chk]: 6000, [T5.ecom]: 1400 };
+const MORNING_VOLUMES: Record<string, number> = { [T5.recv]: 550, [T5.total]: 6000, [T5.ecom]: 1400 };
 const W32_VOLUMES: Record<string, number> = { [T32.recv]: 300, [T32.out]: 250, [T32.load]: 2000, [T32.chk]: 3000 };
 
 function seed(today: string): Store {
