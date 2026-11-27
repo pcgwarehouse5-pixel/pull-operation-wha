@@ -20,7 +20,7 @@ import { shiftText, useShiftDefs } from "@/lib/useShiftDefs";
 import type { MsgKey } from "@/i18n/th";
 
 export default function HomePage() {
-  const { profile, warehouses, myWarehouseIds, demo } = useApp();
+  const { profile, warehouses, myWarehouseIds, demo, modules } = useApp();
   const { t, fmt } = useI18n();
   const shiftDefs = useShiftDefs();
   const today = todayIso();
@@ -29,7 +29,7 @@ export default function HomePage() {
   const boss = isSupervisorUp(profile.role);
   const timekeep = !noTimekeeping(profile.role); // ผู้จัดการฝ่ายขึ้นไปไม่ลงเวลา
   const mine = warehouses.filter((w) => myWarehouseIds.includes(w.id));
-  const items = navFor(profile.role).flatMap((g) => g.items).filter((i) => i.key !== "home" && i.key !== "attendance");
+  const items = navFor(profile.role, modules).flatMap((g) => g.items).filter((i) => i.key !== "home" && i.key !== "attendance");
 
   useEffect(() => {
     if (demo) {

@@ -68,11 +68,11 @@ export function AppShell({
   actions?: ReactNode;
   minRole?: AppRole; // บทบาทขั้นต่ำที่เปิดหน้านี้ได้ (ข้อมูลยังถูกกันซ้ำด้วยกฎในฐานข้อมูล)
 }) {
-  const { profile, signOut, preview } = useApp();
+  const { profile, signOut, preview, modules } = useApp();
   const { t } = useI18n();
   const allowed = !minRole || ROLE_RANK[profile.role] >= ROLE_RANK[minRole];
   const pathname = usePathname();
-  const groups = navFor(profile.role);
+  const groups = navFor(profile.role, modules);
   const all = groups.flatMap((g) => g.items);
   const active = activeKey(pathname);
   const [menuOpen, setMenuOpen] = useState(false);

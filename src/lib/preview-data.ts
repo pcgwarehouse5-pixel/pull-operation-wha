@@ -1,13 +1,19 @@
 // ข้อมูลสมมติของโหมดดูดีไซน์ (ไม่ใช่ข้อมูลพนักงานจริง) โหลดเฉพาะตอน npm run dev
-import type { AppRole, AuditLog, DropdownOption, Employee, HeadcountBudget, Profile, Skill, Warehouse } from "./types";
+import type { AppRole, AuditLog, DropdownOption, Employee, HeadcountBudget, Profile, Skill, Unit, Warehouse } from "./types";
 
 // ข้อมูลสมมติทั้งหมด (ไม่ใช่ข้อมูลพนักงานจริง)
 const W5 = "preview-wh-5";
 const W32 = "preview-wh-32";
 
+export const PREVIEW_UNITS: Unit[] = [
+  { id: "preview-unit-wha", code: "WHA", name: "คลังสินค้า WHA (ตัวอย่าง)", modules: ["pull"], is_default: true },
+  { id: "preview-unit-shop", code: "SHOP5", name: "หน้าร้านคลัง 5 (ตัวอย่าง)", modules: [], is_default: false },
+];
+
 export const PREVIEW_WAREHOUSES: Warehouse[] = [
-  { id: W5, code: "WH5", name: "คลัง 5 (ตัวอย่าง)", address: null, latitude: 13.08, longitude: 100.92, checkin_radius_m: 200, color: "#2563eb", is_active: true },
-  { id: W32, code: "WH32", name: "คลัง 32 (ตัวอย่าง)", address: null, latitude: null, longitude: null, checkin_radius_m: 300, color: "#16a34a", is_active: true },
+  { id: W5, code: "WH5", name: "คลัง 5 (ตัวอย่าง)", address: null, latitude: 13.08, longitude: 100.92, checkin_radius_m: 200, color: "#2563eb", is_active: true, unit_id: "preview-unit-wha" },
+  { id: W32, code: "WH32", name: "คลัง 32 (ตัวอย่าง)", address: null, latitude: null, longitude: null, checkin_radius_m: 300, color: "#16a34a", is_active: true, unit_id: "preview-unit-wha" },
+  { id: "preview-wh-5s", code: "WH5S", name: "หน้าร้านคลัง 5 (ตัวอย่าง)", address: null, latitude: 13.08, longitude: 100.92, checkin_radius_m: 200, color: "#db2777", is_active: true, unit_id: "preview-unit-shop" },
 ];
 
 const base = { title: null, last_name_th: "ตัวอย่าง", position: null, department: null, employment_type: "monthly_employee", phone: null, line_id: null, status: "active" as const, created_at: "2026-11-01T00:00:00Z" };

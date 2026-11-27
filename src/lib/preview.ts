@@ -18,6 +18,19 @@ export function previewRole(): AppRole | null {
   }
 }
 
+// โหมดดูดีไซน์: จำลองว่าเป็นคนของหน่วยงานไหน ?unit=shop (หน้าร้าน ไม่มีเมนู Pull) / ?unit=wha (ค่าเริ่มต้น)
+const UNIT_KEY = "wha-preview-unit";
+export function previewUnit(): "wha" | "shop" {
+  if (process.env.NODE_ENV !== "development" || typeof window === "undefined") return "wha";
+  const q = new URLSearchParams(window.location.search).get("unit");
+  try {
+    if (q === "shop" || q === "wha") sessionStorage.setItem(UNIT_KEY, q);
+    return sessionStorage.getItem(UNIT_KEY) === "shop" ? "shop" : "wha";
+  } catch {
+    return q === "shop" ? "shop" : "wha";
+  }
+}
+
 export type PreviewData = typeof import("./preview-data");
 
 // โหลดข้อมูลสมมติเฉพาะตอนพัฒนา (ตอน build เว็บจริง บรรทัดนี้ถูกตัดทิ้ง ข้อมูลสมมติจึงไม่ติดไปด้วย)

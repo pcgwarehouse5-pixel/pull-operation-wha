@@ -37,7 +37,7 @@ function Tile({ href, icon, title, children }: { href: string; icon: IconName; t
 }
 
 export function MySummary() {
-  const { profile: me, demo } = useApp();
+  const { profile: me, demo, modules } = useApp();
   const { t, fmt } = useI18n();
   const today = todayIso();
   const year = Number(today.slice(0, 4));
@@ -81,7 +81,7 @@ export function MySummary() {
   return (
     <section className="mb-4 space-y-2.5">
       {/* ตำแหน่งงานวันนี้ */}
-      {cur && (cur.pos || todayShift?.start) && (
+      {modules.includes("pull") && cur && (cur.pos || todayShift?.start) && (
         <Tile href="/my-position" icon="grid" title={t("nav.my-position")}>
           {cur.pos ? (
             <div className="flex items-center gap-3">

@@ -18,7 +18,7 @@ import { TimesheetFormFields } from "./TimesheetFormFields";
 type Setting = { key: string; effective_from: string; value: unknown; note: string | null; created_at: string };
 type Kind = "number" | "quota" | "types" | "rates" | "steps" | "dilrules" | "date" | "time" | "tsform";
 type Opt = { value: string; label: string };
-type Meta = { key: string; label: string; unit?: string; hint: string; kind: Kind; min?: number; max?: number; source?: "leave" | "employment" | "position"; group: string };
+type Meta = { key: string; label: string; unit?: string; hint: string; kind: Kind; min?: number; max?: number; source?: "leave" | "employment" | "position" | "warehouse"; group: string };
 type Rates = Record<string, { workday?: number; holiday_normal?: number; holiday_ot?: number }>;
 type DilRules = { absent?: boolean; late?: boolean; no_punch?: boolean; leave_types?: string[] };
 
@@ -44,6 +44,7 @@ const META: Meta[] = [
   { group: "เบี้ยขยัน/ค่าเดินทาง", key: "diligence.steps", label: "เบี้ยขยันขั้นบันได (บาท/เดือน)", hint: "เดือนที่ 1, 2, 3... ที่ไม่มีเหตุติดต่อกัน", kind: "steps" },
   { group: "เบี้ยขยัน/ค่าเดินทาง", key: "diligence.rules", label: "เหตุที่ทำให้ไม่ได้เบี้ยขยัน", hint: "", kind: "dilrules", source: "leave" },
   { group: "เบี้ยขยัน/ค่าเดินทาง", key: "diligence.employment_types", label: "ประเภทพนักงานที่ได้เบี้ยขยัน", hint: "ไม่เลือกเลย = ทุกประเภท", kind: "types", source: "employment" },
+  { group: "เบี้ยขยัน/ค่าเดินทาง", key: "diligence.excluded_warehouses", label: "คลังที่ไม่มีเบี้ยขยัน", hint: "พนักงานที่มีคลังหลักเป็นคลังที่เลือก จะไม่มีเบี้ยขยัน (เช่น หน้าร้านคลัง 5) · ไม่เลือกเลย = ทุกคลังมีเบี้ยขยัน", kind: "types", source: "warehouse" },
   { group: "เบี้ยขยัน/ค่าเดินทาง", key: "travel.rate_per_day", label: "ค่าเดินทางต่อวันที่มาทำงาน", unit: "บาท", hint: "เฉพาะพนักงานที่ติ๊ก \"ได้ค่าเดินทาง\" ในทะเบียน", kind: "number", min: 0, max: 5000 },
   { group: "ตารางกะ", key: "shifts.lead_positions", label: "ตำแหน่งที่อยู่ในตารางกะหัวหน้าคลัง", hint: "คนตำแหน่งนี้ (และผู้จัดการแผนก) แยกไปอยู่ตารางกะหัวหน้าคลัง ซึ่งแก้ได้เฉพาะผู้จัดการ", kind: "types", source: "position" },
   { group: "Pull Operation", key: "pull.morning_meeting", label: "เวลาประชุมเริ่มงาน รอบเช้า", unit: "น.", hint: "หัวหน้าคลังจองคนก่อนประชุม · เปิดหน้า Pull ก่อนเวลานี้ ระบบเลือกกะเช้าวันนี้ให้ · แจ้งเตือนการจองบอกเวลานี้กับพนักงาน", kind: "time" },
@@ -58,7 +59,8 @@ const META: Meta[] = [
 const GROUPS = [...new Set(META.map((m) => m.group))];
 
 export function RulesManager() {
-  const { profile: me, demo } = useApp();
+  const { profile: me, demo, warehouses } = useApp();
+  const whOpts = useMemo<Opt[]>(() => warehouses.map((w) => ({ value: w.code, label: `${w.code} · ${w.name}` })), [warehouses]);
   const opts = useOptions(["leave_type", "employment_type", "position"]);
   const leaveTypes: Opt[] = (demo ? demo.PREVIEW_LEAVE_TYPES : (opts.leave_type ?? [])).filter((o) => o.is_active).map((o) => ({ value: o.value, label: o.label }));
   const empTypes: Opt[] = (opts.employment_type ?? []).filter((o) => o.is_active).map((o) => ({ value: o.value, label: o.label }));
@@ -93,7 +95,7 @@ export function RulesManager() {
     load();
   }, [load]);
 
-  const optsOf = (m: Meta) => (m.source === "employment" ? empTypes : m.source === "position" ? positions : leaveTypes);
+  const optsOf = (m: Meta) => (m.source === "employment" ? empTypes : m.source === "position" ? positions : m.source === "warehouse" ? whOpts : leaveTypes);
   const labelIn = (list: Opt[], v: string) => (v === "default" ? "ค่าเริ่มต้น" : (list.find((t) => t.value === v)?.label ?? v));
   const show = (m: Meta, v: unknown): string => {
     if (v === undefined || v === null) return m.kind === "date" ? "ยังไม่ตั้ง (ยังไม่เริ่มนับ)" : "-";
@@ -106,7 +108,7 @@ export function RulesManager() {
       case "date":
         return typeof v === "string" ? thaiDate(`${v}T12:00:00+07:00`) : "ยังไม่ตั้ง";
       case "types":
-        return (v as string[]).map((x) => labelIn(list, x)).join(", ") || (m.source === "employment" ? "ทุกประเภท" : "ไม่มี");
+        return (v as string[]).map((x) => labelIn(list, x)).join(", ") || (m.source === "employment" ? "ทุกประเภท" : m.source === "warehouse" ? "ทุกคลังมีเบี้ยขยัน" : "ไม่มี");
       case "quota":
         return Object.entries(v as Record<string, number>).map(([k, n]) => `${labelIn(list, k)} ${n}`).join(" · ");
       case "steps":

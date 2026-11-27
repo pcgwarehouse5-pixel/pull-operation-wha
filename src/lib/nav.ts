@@ -1,6 +1,6 @@
 // รายการเมนูทั้งแอป (ใช้ร่วมกันทั้งแถบซ้ายบนจอคอม แถบล่างบนมือถือ และหน้ารวมเมนู)
 import type { IconName } from "@/components/Icon";
-import { ROLE_RANK, noTimekeeping, type AppRole } from "./types";
+import { ROLE_RANK, noTimekeeping, type AppRole, type UnitModule } from "./types";
 
 export type NavItem = {
   key: string;
@@ -13,6 +13,7 @@ export type NavItem = {
   short?: string; // ชื่อสั้นบนแถบล่างของมือถือ
   timekeeping?: boolean; // เฉพาะคนที่ลงเวลา/อยู่ในตารางกะ (ซ่อนจากผู้จัดการฝ่ายขึ้นไป)
   activeAs?: string; // เปิดหน้านี้แล้วให้ไฮไลต์เมนูอื่นแทน (หน้าย่อยของเมนูนั้น)
+  module?: UnitModule; // เฉพาะหน่วยงานที่เปิดเมนูเสริมนี้ (เช่น หน้าร้านไม่มี Pull)
 };
 
 export const NAV_GROUPS: { id: "mine" | "staff" | "pull" | "manage"; title: string; items: NavItem[] }[] = [
@@ -25,7 +26,7 @@ export const NAV_GROUPS: { id: "mine" | "staff" | "pull" | "manage"; title: stri
       { key: "attendance-fix", href: "/attendance/fix", label: "ขอแก้เวลา", desc: "ลืมกดเข้า-ออกงาน หรือ GPS ใช้ไม่ได้ ส่งให้หัวหน้าอนุมัติ", icon: "clock", timekeeping: true, activeAs: "attendance" },
       { key: "leave", href: "/leave", label: "ลางาน", desc: "ยื่นใบลา ดูวันลาคงเหลือ", icon: "leave", timekeeping: true },
       { key: "my-shifts", href: "/my-shifts", label: "ตารางกะของฉัน", desc: "กะของฉันรายเดือน", icon: "calendar", short: "กะของฉัน", timekeeping: true },
-      { key: "my-position", href: "/my-position", label: "ตำแหน่งงานวันนี้", desc: "ตำแหน่งที่หัวหน้าจัดให้ และเวลาพัก", icon: "grid", short: "ตำแหน่ง", timekeeping: true },
+      { key: "my-position", href: "/my-position", label: "ตำแหน่งงานวันนี้", desc: "ตำแหน่งที่หัวหน้าจัดให้ และเวลาพัก", icon: "grid", short: "ตำแหน่ง", timekeeping: true, module: "pull" },
       { key: "notifications", href: "/notifications", label: "แจ้งเตือน", desc: "ใบลา คำขอแก้เวลา ตารางกะ ลืมลงเวลา", icon: "bell" },
       { key: "profile", href: "/profile", label: "ข้อมูลของฉัน", desc: "ข้อมูลส่วนตัวและรหัสผ่าน", icon: "user" },
     ],
@@ -48,12 +49,12 @@ export const NAV_GROUPS: { id: "mine" | "staff" | "pull" | "manage"; title: stri
     id: "pull",
     title: "Pull Operation",
     items: [
-      { key: "pull-board", href: "/pull", label: "สรุปกำลังพล & ดึงคน", desc: "ต้องการ / จองแล้ว / ขาด ต่อตำแหน่ง แล้วดึงคนจากคลังกลาง", icon: "users", minRole: "supervisor" },
-      { key: "pull-workload", href: "/pull/workload", label: "กรอกปริมาณงาน", desc: "ยอดงานคาดการณ์ต่อวัน/กะ เห็นคนที่ต้องการทันที", icon: "leave", minRole: "supervisor" },
-      { key: "pull-requirements", href: "/pull/requirements", label: "ผลคำนวณกำลังคน", desc: "สูตรและตัวเลขรายทักษะ ตรวจสอบย้อนกลับได้", icon: "chart", minRole: "supervisor" },
-      { key: "pull-layout", href: "/pull/layout", label: "ผังตำแหน่งพนักงาน", desc: "ใครอยู่ตำแหน่งไหน เวลาพัก ใช้ประชุมก่อนเริ่มงาน", icon: "grid", minRole: "supervisor" },
-      { key: "pull-dashboard", href: "/pull/dashboard", label: "Dashboard ผู้บริหาร", desc: "ความต้องการเทียบจองแล้ว ทุกคลัง แนวโน้ม 7 วัน", icon: "chart", minRole: "supervisor" },
-      { key: "pull-settings", href: "/pull/settings", label: "ตั้งค่า Pull", desc: "ทักษะที่ดึงได้ Productivity ประเภทงาน ชั่วโมงต่อกะ", icon: "link", minRole: "admin" },
+      { key: "pull-board", module: "pull", href: "/pull", label: "สรุปกำลังพล & ดึงคน", desc: "ต้องการ / จองแล้ว / ขาด ต่อตำแหน่ง แล้วดึงคนจากคลังกลาง", icon: "users", minRole: "supervisor" },
+      { key: "pull-workload", module: "pull", href: "/pull/workload", label: "กรอกปริมาณงาน", desc: "ยอดงานคาดการณ์ต่อวัน/กะ เห็นคนที่ต้องการทันที", icon: "leave", minRole: "supervisor" },
+      { key: "pull-requirements", module: "pull", href: "/pull/requirements", label: "ผลคำนวณกำลังคน", desc: "สูตรและตัวเลขรายทักษะ ตรวจสอบย้อนกลับได้", icon: "chart", minRole: "supervisor" },
+      { key: "pull-layout", module: "pull", href: "/pull/layout", label: "ผังตำแหน่งพนักงาน", desc: "ใครอยู่ตำแหน่งไหน เวลาพัก ใช้ประชุมก่อนเริ่มงาน", icon: "grid", minRole: "supervisor" },
+      { key: "pull-dashboard", module: "pull", href: "/pull/dashboard", label: "Dashboard ผู้บริหาร", desc: "ความต้องการเทียบจองแล้ว ทุกคลัง แนวโน้ม 7 วัน", icon: "chart", minRole: "supervisor" },
+      { key: "pull-settings", module: "pull", href: "/pull/settings", label: "ตั้งค่า Pull", desc: "ทักษะที่ดึงได้ Productivity ประเภทงาน ชั่วโมงต่อกะ", icon: "link", minRole: "admin" },
     ],
   },
   {
@@ -70,11 +71,15 @@ export const NAV_GROUPS: { id: "mine" | "staff" | "pull" | "manage"; title: stri
   },
 ];
 
-export function navFor(role: AppRole) {
+export function navFor(role: AppRole, modules: readonly UnitModule[]) {
   return NAV_GROUPS.map((g) => ({
     ...g,
     items: g.items.filter(
-      (i) => (!i.minRole || ROLE_RANK[role] >= ROLE_RANK[i.minRole]) && (!i.onlyRole || i.onlyRole === role) && !(i.timekeeping && noTimekeeping(role)),
+      (i) =>
+        (!i.minRole || ROLE_RANK[role] >= ROLE_RANK[i.minRole]) &&
+        (!i.onlyRole || i.onlyRole === role) &&
+        !(i.timekeeping && noTimekeeping(role)) &&
+        (!i.module || modules.includes(i.module)),
     ),
   })).filter((g) => g.items.length);
 }

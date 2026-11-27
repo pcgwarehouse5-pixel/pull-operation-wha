@@ -18,7 +18,7 @@ import { localizeError, useI18n, type Fmt, type T } from "@/i18n";
 type TeamRow = { user_id: string; first_name_th: string; nickname: string | null; position: string | null; work_date: string; shift_code: string; holiday_work: "OFF" | "HOL" | null };
 
 export default function MyShiftsPage() {
-  const { profile: me, demo } = useApp();
+  const { profile: me, demo, modules } = useApp();
   const { t, fmt } = useI18n();
   const opts = useOptions(["shift_type"]);
   const defs = useMemo(() => new Map((opts.shift_type ?? []).map((o) => [o.value, shiftDef(o)])), [opts.shift_type]);
@@ -74,7 +74,7 @@ export default function MyShiftsPage() {
       <PageHelper pose="point" title={t("ms.title")}>
         {t("ms.helper")}
       </PageHelper>
-      <MyPullBookings />
+      {modules.includes("pull") && <MyPullBookings />}
       <div className="mb-3 flex items-center justify-center gap-2">
         <Button variant="secondary" size="sm" aria-label={t("common.prevMonth")} onClick={() => setYm(addMonths(ym, -1))}>
           <Icon name="back" size={18} />

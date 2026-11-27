@@ -73,7 +73,13 @@ export type Warehouse = {
   checkin_radius_m: number;
   color: string | null;
   is_active: boolean;
+  unit_id?: string; // หน่วยงานที่คลังนี้สังกัด (migration 0034)
 };
+
+// หน่วยงาน: แยกข้อมูลของแต่ละหน่วยงานออกจากกัน (เช่น คลังสินค้า WHA / หน้าร้านคลัง 5)
+export type UnitModule = "pull";
+export const UNIT_MODULES: { key: UnitModule; label: string }[] = [{ key: "pull", label: "Pull Operation (ระบบดึงคน)" }];
+export type Unit = { id: string; code: string; name: string; modules: UnitModule[]; is_default: boolean };
 
 export type Profile = {
   id: string;

@@ -4,8 +4,8 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import { usePathname, useRouter } from "next/navigation";
 import type { Session } from "@supabase/supabase-js";
 import { errText, sb } from "@/lib/supabase";
-import type { AppRole, Profile, Warehouse } from "@/lib/types";
-import { loadPreviewData, previewRole, type PreviewData } from "@/lib/preview";
+import type { AppRole, Profile, Unit, UnitModule, Warehouse } from "@/lib/types";
+import { loadPreviewData, previewRole, previewUnit, type PreviewData } from "@/lib/preview";
 import { Alert, Button, Loading } from "./ui";
 
 type AppCtx = {
@@ -13,6 +13,8 @@ type AppCtx = {
   profile: Profile;
   warehouses: Warehouse[]; // ทุกคลัง (รวมที่ปิดใช้งาน)
   myWarehouseIds: string[]; // คลังหลัก + คลังเพิ่มเติมของฉัน
+  units: Unit[]; // หน่วยงานที่ฉันเห็น (ผู้ดูแลระบบสูงสุดเห็นทุกหน่วยงาน)
+  modules: UnitModule[]; // เมนูเสริมที่หน่วยงานของฉันใช้ได้ เช่น "pull"
   preview: boolean;
   demo: PreviewData | null; // ข้อมูลสมมติ (มีเฉพาะโหมดดูดีไซน์ตอนพัฒนา)
   reload: () => Promise<void>;
@@ -40,7 +42,7 @@ export function clearAuthStorage() {
 }
 const CHANGE_PASSWORD = "/change-password";
 
-type Loaded = { uid: string; profile: Profile | null; warehouses: Warehouse[]; myWarehouseIds: string[] };
+type Loaded = { uid: string; profile: Profile | null; warehouses: Warehouse[]; myWarehouseIds: string[]; units: Unit[]; modules: UnitModule[] };
 
 // ค่าที่ขึ้นต้นด้วย NEXT_PUBLIC_ ถูกฝังตอน build จึงรู้ได้ทันทีว่าตั้งค่าครบไหม
 const CONFIG_ERROR =
@@ -82,12 +84,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const load = useCallback(async (uid: string) => {
     const c = sb();
-    const [p, w, uw] = await Promise.all([
+    const [p, w, uw, un, md] = await Promise.all([
       c.from("profiles").select("*").eq("id", uid).maybeSingle(),
       c.from("warehouses").select("*").order("code"),
       c.from("user_warehouses").select("warehouse_id").eq("user_id", uid),
+      c.from("units").select("id, code, name, modules, is_default").order("code"),
+      c.rpc("my_modules"),
     ]);
-    const err = p.error || w.error || uw.error;
+    const err = p.error || w.error || uw.error || un.error || md.error;
     if (err) throw err;
     const profile = p.data as Profile | null;
     const extra = (uw.data ?? []).map((r: { warehouse_id: string }) => r.warehouse_id);
@@ -96,6 +100,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       profile,
       warehouses: (w.data ?? []) as Warehouse[],
       myWarehouseIds: [...new Set([profile?.warehouse_id, ...extra].filter(Boolean) as string[])],
+      units: (un.data ?? []) as Unit[],
+      modules: (md.data ?? []) as UnitModule[],
     });
   }, []);
 
@@ -139,13 +145,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   if (process.env.NODE_ENV === "development" && preview && !PUBLIC_PATHS.includes(pathname)) {
     const me = preview.data.previewProfile(preview.role);
+    // จำลองหน่วยงาน: ?unit=shop = คนหน้าร้าน (ไม่มี Pull) · ผู้ดูแลระบบสูงสุดเห็นทุกหน่วยงาน
+    const unitId = previewUnit() === "shop" ? "preview-unit-shop" : "preview-unit-wha";
+    const all = preview.role === "super_admin";
+    const units = preview.data.PREVIEW_UNITS.filter((u) => all || u.id === unitId);
+    const whs = preview.data.PREVIEW_WAREHOUSES.filter((w) => all || w.unit_id === unitId);
+    const home = whs.some((w) => w.id === me.warehouse_id) ? me.warehouse_id : (whs[0]?.id ?? null);
+    const meInUnit = { ...me, warehouse_id: me.warehouse_id ? home : null };
     return (
       <Ctx.Provider
         value={{
           session: {} as Session,
-          profile: me,
-          warehouses: preview.data.PREVIEW_WAREHOUSES,
-          myWarehouseIds: me.warehouse_id ? [me.warehouse_id] : [],
+          profile: meInUnit,
+          warehouses: whs,
+          myWarehouseIds: meInUnit.warehouse_id ? [meInUnit.warehouse_id] : [],
+          units,
+          modules: [...new Set(units.flatMap((u) => u.modules))],
           preview: true,
           demo: preview.data,
           reload: async () => {},
@@ -190,6 +205,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         profile: data.profile,
         warehouses: data.warehouses,
         myWarehouseIds: data.myWarehouseIds,
+        units: data.units,
+        modules: data.modules,
         preview: false,
         demo: null,
         reload: () => load(session.user.id),
