@@ -9,6 +9,8 @@ import { localizeError, useI18n } from "@/i18n";
 import type { MsgKey } from "@/i18n/th";
 import { useOptions } from "@/lib/useOptions";
 import { todayIso } from "@/lib/shifts";
+import { useLeaveHours } from "@/lib/useLeaveHours";
+import { hourChoices, hoursToDays, leaveEnd, num } from "@/lib/shop-forms";
 
 const MAX_FILE = 5 * 1024 * 1024;
 const FILE_TYPES = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
@@ -21,7 +23,10 @@ export function LeaveForm({ userId, who, onClose, onDone }: { userId?: string; w
   const [type, setType] = useState("");
   const [start, setStart] = useState(todayIso);
   const [end, setEnd] = useState(todayIso);
-  const [period, setPeriod] = useState<"full" | "morning" | "afternoon">("full");
+  const [period, setPeriod] = useState<"full" | "morning" | "afternoon" | "hours">("full");
+  const lh = useLeaveHours();
+  const [startTime, setStartTime] = useState("08:00");
+  const [hours, setHours] = useState(1);
   const [reason, setReason] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [attachTypes, setAttachTypes] = useState<string[]>([]);
@@ -32,6 +37,11 @@ export function LeaveForm({ userId, who, onClose, onDone }: { userId?: string; w
   const leaveType = type || types[0]?.value || "";
   const canAttach = forSelf && attachTypes.includes(leaveType);
   const oneDay = start === end;
+  // ลาเป็นชั่วโมง: เฉพาะหน่วยงานที่เปิด และประเภทลาที่ตั้งไว้
+  const hourlyOk = lh.enabled && lh.types.includes(leaveType);
+  const hourly = hourlyOk && oneDay && period === "hours";
+  const choices = hourChoices(lh.hoursPerDay, lh.stepMinutes);
+  const endTime = hourly ? leaveEnd(startTime, hours) : null;
 
   useEffect(() => {
     if (demo) {
@@ -51,7 +61,8 @@ export function LeaveForm({ userId, who, onClose, onDone }: { userId?: string; w
       setDays(null);
       return;
     }
-    const p = oneDay ? period : "full";
+    if (oneDay && period === "hours" && hourlyOk) return; // ลาเป็นชั่วโมงคิดจากจำนวนชั่วโมง (ด้านล่าง)
+    const p = oneDay && period !== "hours" ? period : "full";
     if (demo) {
       setDays(p === "full" ? (new Date(end).getTime() - new Date(start).getTime()) / 86400000 + 1 : 0.5);
       return;
@@ -63,7 +74,7 @@ export function LeaveForm({ userId, who, onClose, onDone }: { userId?: string; w
     return () => {
       live = false;
     };
-  }, [start, end, period, oneDay, userId, demo]);
+  }, [start, end, period, oneDay, userId, demo, hourlyOk]);
 
   function pickFile(f?: File) {
     setErr("");
@@ -77,7 +88,8 @@ export function LeaveForm({ userId, who, onClose, onDone }: { userId?: string; w
     setErr("");
     if (!leaveType) return setErr(t("lf.chooseType"));
     if (end < start) return setErr(t("lf.dateOrder"));
-    if (days !== null && days <= 0) return setErr(t("lf.noWorkDays"));
+    if (!hourly && days !== null && days <= 0) return setErr(t("lf.noWorkDays"));
+    if (hourly && !endTime) return setErr(t("lf.hoursOvernight"));
     if (demo) return onDone(t("common.demoNotSaved"));
     setBusy(true);
     let path: string | null = null;
@@ -94,10 +106,11 @@ export function LeaveForm({ userId, who, onClose, onDone }: { userId?: string; w
       p_type: leaveType,
       p_start: start,
       p_end: end,
-      p_period: oneDay ? period : "full",
+      p_period: hourly ? "hours" : oneDay && period !== "hours" ? period : "full",
       p_reason: reason.trim() || null,
       p_attachment: path,
       p_user: userId ?? null,
+      ...(hourly ? { p_start_time: startTime, p_hours: hours } : {}),
     });
     setBusy(false);
     if (error) {
@@ -126,24 +139,47 @@ export function LeaveForm({ userId, who, onClose, onDone }: { userId?: string; w
           </Field>
         </div>
         {oneDay && (
-          <div className="flex gap-1.5" role="radiogroup" aria-label={t("lf.type")}>
-            {(["full", "morning", "afternoon"] as const).map((p) => (
+          <div className={hourlyOk ? "grid grid-cols-2 gap-1.5" : "flex gap-1.5"} role="radiogroup" aria-label={t("lf.type")}>
+            {(hourlyOk ? (["full", "morning", "afternoon", "hours"] as const) : (["full", "morning", "afternoon"] as const)).map((p) => (
               <button
                 key={p}
                 type="button"
                 role="radio"
-                aria-checked={period === p}
+                aria-checked={(period === p || (p === "full" && period === "hours" && !hourlyOk))}
                 onClick={() => setPeriod(p)}
-                className={`min-h-11 flex-1 rounded-xl text-[15px] font-semibold ${period === p ? "bg-brand text-white" : "bg-white ring-1 ring-line"}`}
+                className={`min-h-11 flex-1 rounded-xl text-[15px] font-semibold ${(period === p || (p === "full" && period === "hours" && !hourlyOk)) ? "bg-brand text-white" : "bg-white ring-1 ring-line"}`}
               >
                 {t(`period.${p}` as MsgKey)}
               </button>
             ))}
           </div>
         )}
+        {hourly && (
+          <div className="grid grid-cols-2 gap-3">
+            <Field label={t("lf.startTime")}>
+              <input type="time" className={inputCls} value={startTime} step={lh.stepMinutes * 60} onChange={(e) => setStartTime(e.target.value)} />
+            </Field>
+            <Field label={t("lf.hours")}>
+              <select className={inputCls} value={hours} onChange={(e) => setHours(Number(e.target.value))}>
+                {choices.map((h) => (
+                  <option key={h} value={h}>{t("lf.hoursN", { n: num(h) })}</option>
+                ))}
+              </select>
+            </Field>
+          </div>
+        )}
         <p className="rounded-xl bg-paper px-3 py-2 text-[15px]">
-          <b>{t("lf.days", { n: days === null ? "-" : t("common.days", { n: days }) })}</b>
-          <span className="block text-[13px] text-muted">{t("lf.daysNote")}</span>
+          {hourly ? (
+            <>
+              <b>{t("lf.hoursTotal", { n: num(hours), from: startTime, to: endTime ?? "-" })}</b>
+              <span className="block text-[13px] text-muted">{t("lf.hoursNote", { d: String(hoursToDays(hours, lh.hoursPerDay)), h: num(lh.hoursPerDay) })}</span>
+            </>
+          ) : (
+            <>
+              <b>{t("lf.days", { n: days === null ? "-" : t("common.days", { n: days }) })}</b>
+              <span className="block text-[13px] text-muted">{t("lf.daysNote")}</span>
+            </>
+          )}
         </p>
         <Field label={t("lf.reason")}>
           <textarea className={`${inputCls} min-h-20 py-2`} maxLength={500} value={reason} onChange={(e) => setReason(e.target.value)} />

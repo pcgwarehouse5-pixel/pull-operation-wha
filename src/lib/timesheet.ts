@@ -1,6 +1,8 @@
 // ใบลงเวลา (พิมพ์ตามฟอร์มบริษัท): ฟอร์ม MOU (ครึ่งเดือน) และฟอร์มคนไทย (เต็มเดือน)
 // แปลงข้อมูลลงเวลา (warehouse_attendance) + OT ที่อนุมัติแล้ว (warehouse_ot) เป็นแถวรายวันของแต่ละคน
 // ทดสอบได้ด้วย tests/timesheet.test.mjs · ไฟล์นี้ห้าม import แบบ "@/" (เทสต์รันตรงด้วย node)
+// เวลาเข้า-ออกในใบ "ตามตารางกะ" (28 พ.ย. 2569): เข้าก่อนกะ = เวลาเข้ากะ · ออก = เลิกกะ + ชั่วโมง OT ที่อนุมัติ (ดู ot-times.ts)
+import { paidTimes, type BreakRule } from "./ot-times.ts";
 
 export type TsAtt = {
   user_id: string;
@@ -13,6 +15,8 @@ export type TsAtt = {
   leave_type: string | null;
   leave_period: string | null;
   status: string;
+  /** นาทีที่มาสาย (หลังหักเวลาผ่อนผัน) */
+  late_min?: number | null;
 };
 
 export type TsOt = {
@@ -109,7 +113,15 @@ const WORKED = (a: TsAtt | undefined) => !!a?.first_in;
  * แถวรายวันของพนักงาน 1 คน
  * @param leaveLabel แปลงรหัสประเภทลาเป็นข้อความ เช่น sick → "ลาป่วย"
  */
-export function buildDays(days: string[], att: TsAtt[], ot: TsOt[], today: string, leaveLabel: (code: string) => string): TsDay[] {
+export type BuildOpts = {
+  /** หักพักเมื่อทำงานวันหยุด (ตามค่าตั้งค่า OT) */
+  brk?: BreakRule;
+  /** หมายเหตุ "สาย N นาที" (หน่วยงานที่เปิดแบบฟอร์มหน้าร้าน) */
+  lateNote?: boolean;
+};
+
+export function buildDays(days: string[], att: TsAtt[], ot: TsOt[], today: string, leaveLabel: (code: string) => string, opts: BuildOpts = {}): TsDay[] {
+  const brk = opts.brk ?? { minutes: 60, after: 480 };
   const A = new Map(att.map((a) => [a.work_date, a]));
   const O = new Map(ot.map((o) => [o.work_date, o]));
   return days.map((date) => {
@@ -122,8 +134,6 @@ export function buildDays(days: string[], att: TsAtt[], ot: TsOt[], today: strin
     };
     if (row.future) return row;
 
-    row.inAt = a?.first_in ?? null;
-    row.outAt = a?.last_out ?? null;
     const half = a?.status === "leave_half" || (!!a?.leave_type && !!a.leave_period && a.leave_period !== "full");
 
     // ชั่วโมง OT: นับเฉพาะที่อนุมัติแล้ว
@@ -144,20 +154,34 @@ export function buildDays(days: string[], att: TsAtt[], ot: TsOt[], today: strin
     }
     const hasOt = row.workdayOt + row.holidayNormal + row.holidayOt > 0;
 
-    // ฟอร์มคนไทย: ช่วงเวลา
+    // เวลาตามตารางกะ (ฟอร์ม MOU: เข้า/ออก · ฟอร์มคนไทย: ช่วงปกติ / ช่วง OT)
+    const p = paidTimes(
+      {
+        off,
+        firstIn: a?.first_in ?? null,
+        lastOut: a?.last_out ?? null,
+        shiftStart: a?.shift_start ?? null,
+        shiftEnd: a?.shift_end ?? null,
+        normalHours: approved ? Number(o!.normal_hours) || 0 : 0,
+        otHours: approved ? Number(o!.ot_hours) || 0 : 0,
+        counted: approved,
+      },
+      brk,
+    );
+    row.inAt = p.from;
+    row.outAt = p.to;
     if (off) {
       // ทำงานวันหยุด = นอกเวลาทำงานปกติทั้งหมด
-      if (hasOt && row.inAt && row.outAt) {
-        row.otFrom = row.inAt;
-        row.otTo = row.outAt;
+      if (hasOt && p.otFrom && p.otTo) {
+        row.otFrom = p.otFrom;
+        row.otTo = p.otTo;
       }
     } else if (row.inAt) {
-      row.normalFrom = row.inAt;
-      const end = a?.shift_end ?? null;
-      row.normalTo = end && row.outAt && row.outAt > end ? end : row.outAt;
-      if (hasOt && end && row.outAt && row.outAt > end) {
-        row.otFrom = end;
-        row.otTo = row.outAt;
+      row.normalFrom = p.normalFrom;
+      row.normalTo = p.normalTo;
+      if (hasOt && p.otFrom && p.otTo) {
+        row.otFrom = p.otFrom;
+        row.otTo = p.otTo;
       }
     }
 
@@ -170,6 +194,7 @@ export function buildDays(days: string[], att: TsAtt[], ot: TsOt[], today: strin
       const p = a.leave_period === "morning" ? " (ครึ่งเช้า)" : a.leave_period === "afternoon" ? " (ครึ่งบ่าย)" : "";
       notes.push(`${leaveLabel(a.leave_type)}${p}`);
     }
+    if (opts.lateNote && (a?.status === "late" || a?.status === "late_early") && Number(a.late_min) > 0) notes.push(`สาย ${Number(a.late_min)} นาที`);
     if (a?.status === "absent") notes.push("ขาดงาน");
     if (a?.status === "no_out") notes.push("ไม่มีเวลาออก");
     if (a?.status === "no_in") notes.push("ไม่มีเวลาเข้า");

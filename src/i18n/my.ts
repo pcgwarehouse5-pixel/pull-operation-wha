@@ -382,6 +382,7 @@ export const my: Record<MsgKey, string> = {
   "period.full": "တစ်နေ့လုံး",
   "period.morning": "မနက်ပိုင်း တစ်ဝက်",
   "period.afternoon": "နေ့လယ်ပိုင်း တစ်ဝက်",
+  "period.hours": "နာရီအလိုက်",
   "lva.approve": "ခွင့်ပြု",
   "lva.reject": "ငြင်းပယ်",
   "lva.cancel_request": "ပယ်ဖျက်ရန် တောင်းဆို",
@@ -406,6 +407,12 @@ export const my: Record<MsgKey, string> = {
   "lf.sending": "ပို့နေသည်...",
   "lf.sent": "ခွင့်လွှာ ပို့ပြီးပါပြီ။ ခွင့်ပြုချက် စောင့်ပါ",
   "lf.uploadFail": "ဖိုင် တင်၍မရပါ: {e}",
+  "lf.startTime": "ခွင့်စမည့်အချိန်",
+  "lf.hours": "နာရီ ဘယ်နှစ်နာရီ",
+  "lf.hoursN": "{n} နာရီ",
+  "lf.hoursTotal": "ခွင့် {n} နာရီ ({from}–{to})",
+  "lf.hoursNote": "ခွင့်ရက် {d} ရက် နုတ်မည် ({h} နာရီ = ၁ ရက်)",
+  "lf.hoursOvernight": "ညသန်းခေါင်ကျော်၍ ခွင့်ယူ၍မရပါ",
 
   // ---------- แจ้งเตือน ----------
   "nt.title": "အသိပေးချက်",

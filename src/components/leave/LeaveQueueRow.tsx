@@ -9,6 +9,8 @@ import { THAI_DAYS_SHORT, thaiMonthShort, todayIso, weekday } from "@/lib/shifts
 import { useI18n } from "@/i18n";
 import type { MsgKey } from "@/i18n/th";
 import { openAttachment } from "./LeaveForm";
+import { hourSpan, leaveDays, num } from "@/lib/shop-forms";
+import { useLeaveHours } from "@/lib/useLeaveHours";
 
 /** คอลัมน์บนจอกว้าง ใช้ร่วมกับหัวตาราง จึงตรงกันทุกแถว */
 export const LEAVE_ROW_GRID = "xl:grid-cols-[150px_minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,1.2fr)_300px]";
@@ -36,6 +38,7 @@ export function LeaveQueueRow({
   onError: (t: string) => void;
 }) {
   const { t, fmt } = useI18n();
+  const lh = useLeaveHours();
   const [open, setOpen] = useState(false);
   const oneDay = r.start_date === r.end_date;
   const waitingExec = r.status === "pending" && r.steps_done >= 1;
@@ -62,8 +65,12 @@ export function LeaveQueueRow({
         {/* ประเภทและจำนวนวัน */}
         <div className="col-start-2 min-w-0 xl:col-start-auto">
           <p className="text-[15px] leading-snug font-semibold">
-            {t("lv.of", { type: typeLabel })} <span className="num font-medium text-muted">· {t("common.days", { n: r.days })}</span>
-            {r.period !== "full" && <span className="text-[13px] font-normal text-muted"> · {t(`period.${r.period}` as MsgKey)}</span>}
+            {t("lv.of", { type: typeLabel })} <span className="num font-medium text-muted">· {r.period === "hours" && r.hours ? t("lf.hoursN", { n: num(Number(r.hours)) }) : t("common.days", { n: r.days })}</span>
+            {r.period === "hours" && r.hours ? (
+              <span className="text-[13px] font-normal text-muted"> · {hourSpan(r)} น.</span>
+            ) : (
+              r.period !== "full" && <span className="text-[13px] font-normal text-muted"> · {t(`period.${r.period}` as MsgKey)}</span>
+            )}
           </p>
           {(showStatus || r.over_quota || (r.steps_required > 1 && r.status === "pending")) && (
             <div className="mt-1 flex flex-wrap items-center gap-1">
@@ -118,7 +125,7 @@ export function LeaveQueueRow({
               <div className="flex flex-wrap gap-1.5">
                 {balance.map((b) => (
                   <Badge key={b.leave_type} tone={b.leave_type === r.leave_type ? "blue" : "slate"}>
-                    {b.label} {b.quota === null ? `ใช้ ${Number(b.approved) + Number(b.pending)}` : `เหลือ ${Number(b.remaining)}/${Number(b.quota)}`}
+                    {b.label} {b.quota === null ? `ใช้ ${leaveDays(Number(b.approved) + Number(b.pending), lh.hoursPerDay)}` : `เหลือ ${leaveDays(Number(b.remaining), lh.hoursPerDay)}/${Number(b.quota)}`}
                   </Badge>
                 ))}
               </div>

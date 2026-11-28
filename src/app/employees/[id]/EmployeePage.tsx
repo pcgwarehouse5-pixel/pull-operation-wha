@@ -37,6 +37,7 @@ function toValues(e: Employee): EmployeeValues {
     phone: e.phone ?? "",
     line_id: e.line_id ?? "",
     birth_date: e.birth_date ?? "",
+    hire_date: e.hire_date ?? "",
     flags: Object.fromEntries(EMPLOYEE_FLAGS.map((f) => [f.key, !!e[f.key]])),
   };
 }

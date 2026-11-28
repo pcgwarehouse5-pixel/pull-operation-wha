@@ -13,21 +13,24 @@ import { Alert, Button, Empty, Loading, inputCls } from "@/components/ui";
 import { errText, fetchAll, sb } from "@/lib/supabase";
 import { useOptions } from "@/lib/useOptions";
 import { todayIso } from "@/lib/shifts";
+import { useWhModule } from "@/lib/useUnitModule";
+import type { BreakRule } from "@/lib/ot-times";
 import { buildDays, formOf, halfDays, monthDays, parseForm, personName, ratesFor, settingAt, unmappedMouRates, type TimesheetForm, type TsAtt, type TsDay, type TsOt, type WhTexts } from "@/lib/timesheet";
 import { MouForm, ThaiForm, type TsPerson } from "./TimesheetForms";
 
 const sarabun = Sarabun({ subsets: ["thai", "latin"], weight: ["400", "700"], variable: "--font-ts", display: "swap" });
 
 type Att = TsAtt & { employee_code: string; first_name_th: string; last_name_th: string | null; position: string | null };
-type Data = { att: Att[]; ot: TsOt[]; people: TsPerson[]; form: TimesheetForm; rates: unknown };
+type Data = { att: Att[]; ot: TsOt[]; people: TsPerson[]; form: TimesheetForm; rates: unknown; brk: BreakRule };
 type Kind = "mou" | "thai";
 
-const ATT_COLS = "user_id,work_date,shift_code,shift_start,shift_end,first_in,last_out,leave_type,leave_period,status,employee_code,first_name_th,last_name_th,position";
+const ATT_COLS = "user_id,work_date,shift_code,shift_start,shift_end,first_in,last_out,leave_type,leave_period,status,late_min,employee_code,first_name_th,last_name_th,position";
 const OT_COLS = "user_id,work_date,day_type,normal_hours,normal_rate,ot_hours,ot_rate,approval";
 const EMPTY_WH: WhTexts = { mou_dept: "", mou_ul: "", thai_dept: "", thai_ul: "" };
 
 /** โหลดข้อมูลทั้งเดือนของคลัง (คอมโพเนนต์นี้ถูกสร้างใหม่ทุกครั้งที่เปลี่ยนคลัง/เดือน ผ่าน key) */
 export function TimesheetReport({ wh, whCode, ym }: { wh: string; whCode: string; ym: string }) {
+  const lateNote = useWhModule(wh, "shop_forms");
   const { demo } = useApp();
   const [data, setData] = useState<Data | null>(null);
   const [err, setErr] = useState("");
@@ -46,6 +49,7 @@ export function TimesheetReport({ wh, whCode, ym }: { wh: string; whCode: string
           people: demo.previewTimesheetPeople(),
           form: parseForm(demo.PREVIEW_TIMESHEET_FORM),
           rates: { default: { workday: 1.5, holiday_normal: 1, holiday_ot: 3 } },
+          brk: { minutes: 60, after: 480 },
         };
       }
       const otTo = last < today ? last : today;
@@ -57,7 +61,7 @@ export function TimesheetReport({ wh, whCode, ym }: { wh: string; whCode: string
         fetchAll<TsPerson>((f, t) =>
           sb().from("profiles").select("id,employee_code,title,first_name_th,last_name_th,position,salary_code,employment_type").eq("warehouse_id", wh).order("employee_code").range(f, t),
         ),
-        sb().from("app_settings").select("key,effective_from,value").in("key", ["timesheet.form", "ot.rates"]),
+        sb().from("app_settings").select("key,effective_from,value").in("key", ["timesheet.form", "ot.rates", "ot.break_minutes", "ot.break_after_minutes"]),
       ]);
       if (sets.error) throw sets.error;
       const rows = (sets.data ?? []) as { key: string; effective_from: string; value: unknown }[];
@@ -67,6 +71,10 @@ export function TimesheetReport({ wh, whCode, ym }: { wh: string; whCode: string
         people,
         form: parseForm(settingAt(rows.filter((r) => r.key === "timesheet.form"), first)),
         rates: settingAt(rows.filter((r) => r.key === "ot.rates"), first),
+        brk: {
+          minutes: Number(settingAt(rows.filter((r) => r.key === "ot.break_minutes"), first) ?? 60),
+          after: Number(settingAt(rows.filter((r) => r.key === "ot.break_after_minutes"), first) ?? 480),
+        },
       };
     })()
       .then((d) => live && setData(d))
@@ -78,10 +86,10 @@ export function TimesheetReport({ wh, whCode, ym }: { wh: string; whCode: string
 
   if (err) return <Alert tone="error">{err}</Alert>;
   if (!data) return <Loading />;
-  return <Body data={data} ym={ym} whTexts={data.form.wh[whCode] ?? EMPTY_WH} />;
+  return <Body data={data} ym={ym} whTexts={data.form.wh[whCode] ?? EMPTY_WH} lateNote={lateNote} />;
 }
 
-function Body({ data, ym, whTexts }: { data: Data; ym: string; whTexts: WhTexts }) {
+function Body({ data, ym, whTexts, lateNote }: { data: Data; ym: string; whTexts: WhTexts; lateNote: boolean }) {
   const now = todayIso();
   const [kind, setKind] = useState<Kind>("mou");
   // รอบที่น่าจะพิมพ์: เดือนนี้ก่อนวันที่ 28 = รอบแรก · นอกนั้น = รอบหลัง
@@ -103,12 +111,12 @@ function Body({ data, ym, whTexts }: { data: Data; ym: string; whTexts: WhTexts 
           <span className="text-[14px] text-muted">พิมพ์เต็มเดือน · วันที่ยังไม่ถึงเว้นว่าง</span>
         )}
       </div>
-      <Picker key={`${kind}-${half}`} data={data} ym={ym} kind={kind} days={kind === "mou" ? halfDays(ym, half) : monthDays(ym)} whTexts={whTexts} />
+      <Picker key={`${kind}-${half}`} data={data} ym={ym} kind={kind} days={kind === "mou" ? halfDays(ym, half) : monthDays(ym)} whTexts={whTexts} lateNote={lateNote} />
     </>
   );
 }
 
-function Picker({ data, ym, kind, days, whTexts }: { data: Data; ym: string; kind: Kind; days: string[]; whTexts: WhTexts }) {
+function Picker({ data, ym, kind, days, whTexts, lateNote }: { data: Data; ym: string; kind: Kind; days: string[]; whTexts: WhTexts; lateNote: boolean }) {
   const { demo } = useApp();
   const opts = useOptions(["leave_type", "position"]);
   const leaveOpts = demo ? demo.PREVIEW_LEAVE_TYPES : opts.leave_type;
@@ -133,11 +141,11 @@ function Picker({ data, ym, kind, days, whTexts }: { data: Data; ym: string; kin
         const p: TsPerson = prof.get(id) ?? { id, employee_code: a.employee_code, title: null, first_name_th: a.first_name_th, last_name_th: a.last_name_th, position: a.position, salary_code: null, employment_type: null };
         const person = { ...p, position: posLabel(p.position) };
         const scheduled = rows.some((r) => inDays.has(r.work_date) && (r.shift_code || r.first_in));
-        return { person, scheduled, rows: buildDays(days, rows, ot.get(id) ?? [], today, leave) };
+        return { person, scheduled, rows: buildDays(days, rows, ot.get(id) ?? [], today, leave, { brk: data.brk, lateNote }) };
       })
       .filter((x) => formOf(x.person.employment_type) === kind)
       .sort((a, b) => a.person.employee_code.localeCompare(b.person.employee_code));
-  }, [data, days, kind, leaveOpts, opts.position, today]);
+  }, [data, days, kind, leaveOpts, opts.position, today, lateNote]);
 
   const [picked, setPicked] = useState<Set<string>>(() => new Set(list.filter((x) => x.scheduled).map((x) => x.person.id)));
   const [q, setQ] = useState("");

@@ -64,6 +64,7 @@ export const EMPLOYEE_FIELDS = [
   "phone",
   "line_id",
   "birth_date",
+  "hire_date",
 ] as const;
 
 export function pickEmployeeFields(src: Record<string, unknown>): Record<string, string | null> {
@@ -74,6 +75,7 @@ export function pickEmployeeFields(src: Record<string, unknown>): Record<string,
     out[k] = v === "" || v === "-" ? null : v.slice(0, 120);
   }
   if (out.birth_date && !/^\d{4}-\d{2}-\d{2}$/.test(out.birth_date)) out.birth_date = null;
+  if (out.hire_date && !/^\d{4}-\d{2}-\d{2}$/.test(out.hire_date)) out.hire_date = null;
   return out;
 }
 

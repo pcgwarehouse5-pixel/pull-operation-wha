@@ -13,12 +13,15 @@ import { RejectModal } from "@/components/attendance/RejectModal";
 import { sb } from "@/lib/supabase";
 import { type LeaveApproval, type LeaveBalance, type LeaveRequest } from "@/lib/attendance";
 import { localizeError, useI18n } from "@/i18n";
+import { leaveDays } from "@/lib/shop-forms";
+import { useLeaveHours } from "@/lib/useLeaveHours";
 
 type Msg = { tone: "success" | "error"; text: string };
 
 export default function LeavePage() {
   const { profile: me, demo } = useApp();
   const { t, fmt } = useI18n();
+  const lh = useLeaveHours();
   const [year, setYear] = useState(() => new Date().getFullYear());
   const [bal, setBal] = useState<LeaveBalance[] | null>(null);
   const [reqs, setReqs] = useState<LeaveRequest[] | null>(null);
@@ -114,7 +117,7 @@ export default function LeavePage() {
                 ) : (
                   <>
                     <p className={`num text-[28px] leading-tight font-bold ${Number(b.remaining) < 0 ? "text-bad" : "text-brand"}`}>
-                      {Number(b.remaining)} <span className="text-[14px] font-semibold text-muted">{t("lv.ofQuota", { q: Number(b.quota) })}</span>
+                      {leaveDays(Number(b.remaining), lh.hoursPerDay)} <span className="text-[14px] font-semibold text-muted">{t("lv.ofQuota", { q: Number(b.quota) })}</span>
                     </p>
                     <span className="mt-1.5 block h-1.5 overflow-hidden rounded-full bg-paper" aria-hidden="true">
                       <span className={`block h-full rounded-full ${pct >= 100 ? "bg-bad" : "bg-brand"}`} style={{ width: `${pct}%` }} />

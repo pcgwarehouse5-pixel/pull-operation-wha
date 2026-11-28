@@ -17,6 +17,8 @@ import { monthDates, todayIso } from "@/lib/shifts";
 import { fmtHours, otBuckets, rateLabel, type OtRow } from "@/lib/ot";
 import { LEAVE_STATUS, type LeaveBalance, type LeaveRequest } from "@/lib/attendance";
 import { currentPosition } from "@/lib/my-position";
+import { leaveDays } from "@/lib/shop-forms";
+import { useLeaveHours } from "@/lib/useLeaveHours";
 
 function Tile({ href, icon, title, children }: { href: string; icon: IconName; title: string; children: ReactNode }) {
   const { t } = useI18n();
@@ -39,6 +41,7 @@ function Tile({ href, icon, title, children }: { href: string; icon: IconName; t
 export function MySummary() {
   const { profile: me, demo, modules } = useApp();
   const { t, fmt } = useI18n();
+  const lh = useLeaveHours();
   const today = todayIso();
   const year = Number(today.slice(0, 4));
   const pos = useMyPositions(1);
@@ -133,7 +136,7 @@ export function MySummary() {
                 <li key={b.leave_type} className="rounded-xl bg-paper px-2 py-1.5 text-center">
                   <span className="block truncate text-[12px] text-muted">{b.label}</span>
                   <span className={`num block text-[20px] leading-tight font-bold ${b.remaining !== null && Number(b.remaining) < 0 ? "text-bad" : "text-brand"}`}>
-                    {b.quota === null ? "-" : Number(b.remaining)}
+                    {b.quota === null ? "-" : leaveDays(Number(b.remaining), lh.hoursPerDay)}
                   </span>
                   {b.quota !== null && <span className="block text-[11px] text-muted">{t("lv.ofQuota", { q: Number(b.quota) })}</span>}
                 </li>

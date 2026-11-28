@@ -14,9 +14,14 @@ import { useOptions, labelOf } from "@/lib/useOptions";
 import { isGlobal } from "@/lib/types";
 import { addMonths, currentMonth, monthDates, thaiMonthLabel, todayIso } from "@/lib/shifts";
 import { TimesheetReport } from "@/components/timesheet/TimesheetReport";
+import { LeaveFormReport, ShiftPlanReport } from "@/components/shop/ShopReports";
+import { useWhModule } from "@/lib/useUnitModule";
 import { DAY_TYPE, fmtHours, otBuckets, rateLabel, ratesOf, type TeamOtRow } from "@/lib/ot";
+import { paidTimes, shiftWindowMin, type BreakRule } from "@/lib/ot-times";
+import { settingAt } from "@/lib/timesheet";
+import { useShiftDefs } from "@/lib/useShiftDefs";
 
-type Tab = "overview" | "ot" | "diligence" | "travel" | "leave" | "timesheet";
+type Tab = "overview" | "ot" | "diligence" | "travel" | "leave" | "timesheet" | "leaveform" | "shiftplan";
 type Person = { user_id: string; employee_code: string; first_name_th: string; last_name_th: string | null; nickname: string | null; position: string | null; salary_code?: string | null };
 type Period = { start: string; end: string };
 const fullName = (p: Person) => [p.first_name_th, p.last_name_th].filter(Boolean).join(" ");
@@ -32,6 +37,9 @@ export default function ReportsPage() {
   const [period, setPeriod] = useState<Period | null>(null);
   const whName = visible.find((w) => w.id === wh)?.name ?? "";
   const whCode = visible.find((w) => w.id === wh)?.code ?? "";
+  // แบบฟอร์มหน้าร้าน: เฉพาะคลังในหน่วยงานที่เปิดเมนูนี้
+  const shop = useWhModule(wh, "shop_forms");
+  const tabNow: Tab = !shop && (tab === "leaveform" || tab === "shiftplan") ? "leave" : tab;
 
   // รอบเงินเดือนของเดือนที่เลือก (ตามวันตัดรอบในหน้าตั้งค่า)
   useEffect(() => {
@@ -71,16 +79,17 @@ export default function ReportsPage() {
               ["travel", "ค่าเดินทาง"],
               ["leave", "สรุปการลา"],
               ["timesheet", "ใบลงเวลา"],
+              ...(shop ? ([["leaveform", "แบบฟอร์มลางาน"], ["shiftplan", "ใบแจ้งตารางกะ"]] as const) : []),
             ] as const
           ).map(([k, l]) => (
-            <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)} className={`min-h-11 rounded-full px-4 text-[15px] font-semibold whitespace-nowrap ${tab === k ? "bg-brand text-white" : "bg-white ring-1 ring-line"}`}>
+            <button key={k} role="tab" aria-selected={tabNow === k} onClick={() => setTab(k)} className={`min-h-11 rounded-full px-4 text-[15px] font-semibold whitespace-nowrap ${tabNow === k ? "bg-brand text-white" : "bg-white ring-1 ring-line"}`}>
               {l}
             </button>
           ))}
         </div>
       </div>
 
-      {tab !== "overview" && (
+      {tabNow !== "overview" && (
         <div className="mb-3 flex flex-wrap items-center gap-2 print:hidden">
           {visible.length > 1 && (
             <select className={`${inputCls} !w-auto`} value={wh} onChange={(e) => setWh(e.target.value)} aria-label="คลัง">
@@ -93,10 +102,10 @@ export default function ReportsPage() {
             <Icon name="back" size={18} />
           </Button>
           <span className="min-w-32 text-center font-bold text-brand">{thaiMonthLabel(ym)}</span>
-          <Button variant="secondary" size="sm" aria-label="เดือนถัดไป" disabled={ym >= currentMonth()} onClick={() => setYm(addMonths(ym, 1))}>
+          <Button variant="secondary" size="sm" aria-label="เดือนถัดไป" disabled={tabNow === "shiftplan" ? ym >= addMonths(currentMonth(), 2) : ym >= currentMonth()} onClick={() => setYm(addMonths(ym, 1))}>
             <Icon name="next" size={18} />
           </Button>
-          {period && tab !== "timesheet" && (
+          {period && tabNow !== "timesheet" && tabNow !== "leaveform" && tabNow !== "shiftplan" && (
             <span className="text-[14px] text-muted">
               รอบ {thai(period.start)} – {thai(period.end)}
               {range && range.end < period.end ? ` (ข้อมูลถึง ${thai(range.end)})` : ""}
@@ -105,13 +114,15 @@ export default function ReportsPage() {
         </div>
       )}
 
-      {tab === "overview" && <Overview />}
-      {tab !== "overview" && tab !== "timesheet" && (!range || !wh) && <Loading />}
-      {tab === "ot" && range && wh && <OtReport wh={wh} whName={whName} range={range} period={period!} />}
-      {tab === "diligence" && range && wh && <DiligenceReport wh={wh} whName={whName} month={`${ym}-01`} period={period!} />}
-      {tab === "travel" && range && wh && <TravelReport wh={wh} whName={whName} range={range} period={period!} />}
-      {tab === "leave" && range && wh && <LeaveReport wh={wh} whName={whName} period={period!} />}
-      {tab === "timesheet" && wh && <TimesheetReport key={`${wh}-${ym}`} wh={wh} whCode={whCode} ym={ym} />}
+      {tabNow === "overview" && <Overview />}
+      {tabNow !== "overview" && tabNow !== "timesheet" && (!range || !wh) && <Loading />}
+      {tabNow === "ot" && range && wh && <OtReport wh={wh} whName={whName} range={range} period={period!} />}
+      {tabNow === "diligence" && range && wh && <DiligenceReport wh={wh} whName={whName} month={`${ym}-01`} period={period!} />}
+      {tabNow === "travel" && range && wh && <TravelReport wh={wh} whName={whName} range={range} period={period!} />}
+      {tabNow === "leave" && range && wh && <LeaveReport wh={wh} whName={whName} period={period!} />}
+      {tabNow === "timesheet" && wh && <TimesheetReport key={`${wh}-${ym}`} wh={wh} whCode={whCode} ym={ym} />}
+      {tabNow === "leaveform" && wh && <LeaveFormReport key={`${wh}-${ym.slice(0, 4)}`} wh={wh} year={Number(ym.slice(0, 4))} />}
+      {tabNow === "shiftplan" && wh && <ShiftPlanReport key={`${wh}-${ym}`} wh={wh} ym={ym} />}
     </AppShell>
   );
 }
@@ -275,6 +286,30 @@ function OtReport({ wh, whName, range, period }: { wh: string; whName: string; r
   }, [approved]);
   const grand = otBuckets(approved);
 
+  // เวลาเข้า-ออกในใบ OT รายคน "ตามตารางกะ" (เข้าก่อนกะ = เวลาเข้ากะ · ออก = เลิกกะ + ชั่วโมง OT)
+  const defs = useShiftDefs();
+  const [brkRows, setBrkRows] = useState<{ key: string; effective_from: string; value: unknown }[]>([]);
+  useEffect(() => {
+    if (demo) return;
+    sb()
+      .from("app_settings")
+      .select("key,effective_from,value")
+      .in("key", ["ot.break_minutes", "ot.break_after_minutes"])
+      .then(({ data }) => setBrkRows((data ?? []) as typeof brkRows));
+  }, [demo]);
+  const span = (d: TeamOtRow) => {
+    const brk: BreakRule = {
+      minutes: Number(settingAt(brkRows.filter((r) => r.key === "ot.break_minutes"), d.work_date) ?? 60),
+      after: Number(settingAt(brkRows.filter((r) => r.key === "ot.break_after_minutes"), d.work_date) ?? 480),
+    };
+    const def = d.shift_code ? defs.get(d.shift_code) : undefined;
+    const w = def?.working ? shiftWindowMin(d.work_date, def.start, def.end) : { start: null, end: null };
+    return paidTimes(
+      { off: d.day_type !== "normal", firstIn: d.first_in, lastOut: d.last_out, shiftStart: w.start, shiftEnd: w.end, normalHours: Number(d.normal_hours), otHours: Number(d.ot_hours), counted: true },
+      brk,
+    );
+  };
+
   function csv() {
     downloadCsv(`สรุปOT_${whName.replace(/\s+/g, "")}_${period.start}_${period.end}.csv`, [
       ["รหัสพนักงาน", "รหัสเงินเดือน", "ชื่อ-นามสกุล", "ตำแหน่ง", ...rates.map((r) => `${rateLabel(r)} (ชม.)`), "รวม (ชม.)"],
@@ -382,13 +417,14 @@ function OtReport({ wh, whName, range, period }: { wh: string; whName: string; r
                       <tbody>
                         {days.map((d) => {
                           const bd = otBuckets([d]);
+                          const sp = span(d);
                           return (
                             <tr key={d.work_date}>
                               <td>{shortDay(d.work_date)}</td>
                               <td>{DAY_TYPE[d.day_type]}</td>
                               <td>{d.shift_code ?? "-"}</td>
-                              <td>{thaiTime(d.first_in)}</td>
-                              <td>{thaiTime(d.last_out)}</td>
+                              <td>{sp.from ? thaiTime(sp.from) : ""}</td>
+                              <td>{sp.to ? thaiTime(sp.to) : ""}</td>
                               {rates.map((r) => (
                                 <td key={r} style={{ textAlign: "right" }}>{bd.get(r) ? fmtHours(bd.get(r)!) : ""}</td>
                               ))}

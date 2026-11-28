@@ -29,14 +29,14 @@ test("เวลาแสดงตามเวลาไทย และชั่�
   assert.deepEqual([hrs(0), hrs(2), hrs(2.5), hrs(null)], ["", "2", "2.5", ""]);
 });
 
-test("วันทำงานปกติ: เวลาเข้า-ออก แรงงาน 1 วัน ช่วงปกติถึงเลิกกะ ช่วง OT หลังเลิกกะ", () => {
+test("วันทำงานปกติ: เวลาตามตารางกะ (เข้า 07:52 → 08:00 · ออก 19:10 OT 2 ชม. → 19:00) แรงงาน 1 วัน", () => {
   const d = "2026-11-16";
   const [r] = buildDays([d], [att(d, { last_out: t(d, "19:10") })], [ot(d)], "2026-11-26", label);
   assert.equal(r.off, false);
   assert.equal(r.workUnits, 1);
-  assert.deepEqual([hhmm(r.inAt), hhmm(r.outAt)], ["07:52", "19:10"]);
-  assert.deepEqual([hhmm(r.normalFrom), hhmm(r.normalTo)], ["07:52", "17:00"]);
-  assert.deepEqual([hhmm(r.otFrom), hhmm(r.otTo)], ["17:00", "19:10"]);
+  assert.deepEqual([hhmm(r.inAt), hhmm(r.outAt)], ["08:00", "19:00"]);
+  assert.deepEqual([hhmm(r.normalFrom), hhmm(r.normalTo)], ["08:00", "17:00"]);
+  assert.deepEqual([hhmm(r.otFrom), hhmm(r.otTo)], ["17:00", "19:00"]);
   assert.equal(r.byRate.get(1.5), 2);
   assert.equal(r.workdayOt, 2);
 });
@@ -48,7 +48,8 @@ test("OT ที่ยังไม่อนุมัติ/ต้องอนุ�
     assert.equal(r.byRate.size, 0);
     assert.equal(r.otFrom, null);
     assert.equal(r.otWaiting, true, approval);
-    assert.deepEqual([hhmm(r.normalFrom), hhmm(r.normalTo)], ["07:52", "17:00"]);
+    assert.deepEqual([hhmm(r.normalFrom), hhmm(r.normalTo)], ["08:00", "17:00"]);
+    assert.equal(hhmm(r.outAt), "17:00", "OT ยังไม่อนุมัติ เวลาออกไม่เกินเลิกกะ");
   }
 });
 
@@ -63,7 +64,8 @@ test("วันหยุดของคนนั้น: ระบายเทา
   assert.equal(r.off, true);
   assert.equal(r.workUnits, null);
   assert.equal(r.normalFrom, null);
-  assert.deepEqual([hhmm(r.otFrom), hhmm(r.otTo)], ["07:55", "19:30"]);
+  // ทำ 11:35 ชม. หักพัก 1 ชม. = 10:35 → ปกติ 8 + OT 2.5 → แสดง 07:55–19:25 (ตรงกับชั่วโมงที่จ่าย)
+  assert.deepEqual([hhmm(r.otFrom), hhmm(r.otTo)], ["07:55", "19:25"]);
   assert.deepEqual([r.byRate.get(1), r.byRate.get(3), r.holidayNormal, r.holidayOt, r.workdayOt], [8, 2.5, 8, 2.5, 0]);
 });
 
@@ -124,4 +126,14 @@ test("ตัวช่วยอื่น: ฟอร์มตามประเภ
   assert.equal(f.thai.company, "");
   assert.deepEqual(f.wh.WH5, { mou_dept: "", mou_ul: "128", thai_dept: "", thai_ul: "" });
   assert.deepEqual(parseForm(null).wh, {});
+});
+
+test("หมายเหตุสาย N นาที (เฉพาะเมื่อเปิด) · มาสายแสดงเวลาเข้าจริง", () => {
+  const d = "2026-11-18";
+  const late = att(d, { first_in: t(d, "08:12"), status: "late", late_min: 12 });
+  const [a] = buildDays([d], [late], [], "2026-11-26", label);
+  assert.equal(a.remark, "");
+  const [b] = buildDays([d], [late], [], "2026-11-26", label, { lateNote: true });
+  assert.equal(b.remark, "สาย 12 นาที");
+  assert.equal(hhmm(b.inAt), "08:12");
 });

@@ -15,6 +15,8 @@ async function base() {
       ('shift_type', 'OFF', 'หยุด', '{}'),
       ('shift_type', 'HOL', 'นักขัตฤกษ์', '{}'),
       ('leave_type', 'sick', 'ป่วย', '{}');
+    -- เทสต์ชุดนี้ใช้เกณฑ์ OT แบบเดิม (60 นาทีทุกคน) · เกณฑ์แยกประเภทที่เริ่ม 1 ธ.ค. 2569 ทดสอบใน db-shop-forms.test.mjs
+    delete from public.app_settings where key = 'ot.min_minutes' and effective_from = '2026-12-01';
   `);
   return db;
 }

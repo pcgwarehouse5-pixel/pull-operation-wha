@@ -16,9 +16,10 @@ import { parseForm, type TimesheetForm } from "@/lib/timesheet";
 import { TimesheetFormFields } from "./TimesheetFormFields";
 
 type Setting = { key: string; effective_from: string; value: unknown; note: string | null; created_at: string };
-type Kind = "number" | "quota" | "types" | "rates" | "steps" | "dilrules" | "date" | "time" | "tsform";
+type Kind = "number" | "quota" | "types" | "rates" | "steps" | "dilrules" | "date" | "time" | "tsform" | "permin" | "fields";
+type FieldDef = { k: string; label: string; max: number; codes?: boolean };
 type Opt = { value: string; label: string };
-type Meta = { key: string; label: string; unit?: string; hint: string; kind: Kind; min?: number; max?: number; source?: "leave" | "employment" | "position" | "warehouse"; group: string };
+type Meta = { key: string; label: string; unit?: string; hint: string; kind: Kind; min?: number; max?: number; source?: "leave" | "employment" | "position" | "warehouse"; group: string; fields?: FieldDef[] };
 type Rates = Record<string, { workday?: number; holiday_normal?: number; holiday_ot?: number }>;
 type DilRules = { absent?: boolean; late?: boolean; no_punch?: boolean; leave_types?: string[] };
 
@@ -32,9 +33,12 @@ const META: Meta[] = [
   { group: "ลงเวลา", key: "attendance.correction_max_days", label: "ขอแก้เวลาย้อนหลังได้ไม่เกิน", unit: "วัน", hint: "", kind: "number", min: 1, max: 90 },
   { group: "ลา", key: "leave.exec_approval_min_days", label: "ลาตั้งแต่กี่วันต้องให้ผู้จัดการแผนกขึ้นไปอนุมัติต่อ", unit: "วัน", hint: "ต่ำกว่านี้ หัวหน้างาน/แอดมินคลังอนุมัติจบได้เลย", kind: "number", min: 1, max: 60 },
   { group: "ลา", key: "leave.quota", label: "โควตาวันลาต่อปี (ค่ามาตรฐาน)", hint: `เว้นว่าง = ไม่จำกัด · ${LAW}`, kind: "quota", source: "leave" },
+  { group: "ลา", key: "leave.hours_per_day", label: "ลาเป็นชั่วโมง: กี่ชั่วโมงนับเป็น 1 วันลา", unit: "ชั่วโมง", hint: "ใช้กับหน่วยงานที่เปิดเมนูลาเป็นชั่วโมง (หน้าร้าน) · ลาเป็นชั่วโมงได้ไม่ถึงค่านี้ ถ้าครบให้ลาเต็มวัน", kind: "number", min: 1, max: 12 },
+  { group: "ลา", key: "leave.hour_step_minutes", label: "ลาเป็นชั่วโมง: ลาได้ทีละ", unit: "นาที", hint: "60 = ทีละ 1 ชั่วโมง · 30 = ทีละครึ่งชั่วโมง", kind: "number", min: 15, max: 240 },
+  { group: "ลา", key: "leave.hourly_types", label: "ลาเป็นชั่วโมง: ประเภทลาที่ลาเป็นชั่วโมงได้", hint: "ตามแบบฟอร์มลางานหน้าร้าน: ป่วย / กิจ / พักผ่อน", kind: "types", source: "leave" },
   { group: "ลา", key: "leave.attachment_types", label: "ประเภทลาที่แนบเอกสารได้", hint: "ใบรับรองแพทย์เป็นข้อมูลสุขภาพ (ข้อมูลอ่อนไหวตาม PDPA) เปิดเฉพาะที่จำเป็น", kind: "types", source: "leave" },
   { group: "OT", key: "ot.rates", label: "อัตรา OT แยกประเภทพนักงาน (เท่าของค่าจ้างต่อชั่วโมง)", hint: `"ค่าเริ่มต้น" ใช้กับประเภทที่ไม่ได้ตั้งเฉพาะ · ${LAW}`, kind: "rates", source: "employment" },
-  { group: "OT", key: "ot.min_minutes", label: "ไม่นับ OT ถ้าเกินเวลาเลิกกะไม่ถึง", unit: "นาที", hint: "ตามที่บริษัทเลือก (เกณฑ์นี้อาจถูกโต้แย้งได้ถ้าพนักงานทำงานจริงตามคำสั่ง ปรึกษานักกฎหมายแรงงาน)", kind: "number", min: 0, max: 240 },
+  { group: "OT", key: "ot.min_minutes", label: "ไม่นับ OT ถ้าเกินเวลาเลิกกะไม่ถึง (แยกประเภทพนักงานได้)", unit: "นาที", hint: "ตามที่บริษัทเลือก (เกณฑ์นี้อาจถูกโต้แย้งได้ถ้าพนักงานทำงานจริงตามคำสั่ง และการตั้งต่างกันระหว่างลูกจ้างไทยกับต่างด้าวมีความเสี่ยง ปรึกษานักกฎหมายแรงงาน)", kind: "permin", source: "employment", min: 0, max: 240 },
   { group: "OT", key: "ot.round_minutes", label: "ปัดชั่วโมง OT ลงทีละ", unit: "นาที", hint: "", kind: "number", min: 1, max: 60 },
   { group: "OT", key: "ot.break_minutes", label: "หักเวลาพักเมื่อทำงานวันหยุด", unit: "นาที", hint: "", kind: "number", min: 0, max: 120 },
   { group: "OT", key: "ot.break_after_minutes", label: "ทำงานวันหยุดครบกี่นาทีจึงหักพัก", unit: "นาที", hint: "", kind: "number", min: 0, max: 720 },
@@ -51,6 +55,30 @@ const META: Meta[] = [
   { group: "Pull Operation", key: "pull.night_meeting", label: "เวลาประชุมเริ่มงาน รอบดึก", unit: "น.", hint: "ตั้งแต่ประชุมเช้าถึงก่อนเวลานี้ ระบบเลือกกะดึกวันนี้ให้ · ตั้งแต่เวลานี้ เลือกกะเช้าพรุ่งนี้", kind: "time" },
   { group: "Pull Operation", key: "pull.morning_from_hour", label: "กะเช้า: เวลาเข้างานตั้งแต่", unit: "นาฬิกา", hint: "รหัสกะที่เริ่มงานตั้งแต่เวลานี้ ถึงเวลาด้านล่าง นับเป็นกะเช้า (ใช้แยกคนในคลังกลางตามกะ)", kind: "number", min: 0, max: 23 },
   { group: "Pull Operation", key: "pull.morning_to_hour", label: "กะเช้า: เวลาเข้างานถึง (รวมทั้งชั่วโมงนั้น)", unit: "นาฬิกา", hint: "เช่น 13 = เข้างานถึง 13:59 ยังเป็นกะเช้า หลังจากนั้นเป็นกะดึก", kind: "number", min: 0, max: 23 },
+  {
+    group: "แบบฟอร์มหน้าร้าน", key: "shop.shift_form", label: "ใบแจ้งตารางการปฏิบัติงาน (หน้าร้าน)", kind: "fields",
+    hint: "พิมพ์ที่ รายงาน → ใบแจ้งตารางกะ · รหัสกะที่แสดงเป็นตัวเลข เช่น STD1=1 (กะอื่นแสดงชั่วโมงเข้างาน)",
+    fields: [
+      { k: "company", label: "ชื่อบริษัท (กรอบบนสุด)", max: 200 },
+      { k: "title", label: "ชื่อฟอร์ม", max: 200 },
+      { k: "group", label: "กลุ่มธุรกิจ", max: 100 },
+      { k: "signer_name", label: "ชื่อผู้ลงนาม (ในวงเล็บ)", max: 100 },
+      { k: "signer_title", label: "ตำแหน่งผู้ลงนาม", max: 100 },
+      { k: "signer_role", label: "คำท้ายเส้นลงนาม", max: 50 },
+      { k: "codes", label: "รหัสกะ = ตัวเลขในช่อง (คั่นด้วยจุลภาค เช่น STD1=1, STD2=2)", max: 300, codes: true },
+      { k: "legend", label: "หมายเหตุท้ายฟอร์ม", max: 300 },
+    ],
+  },
+  {
+    group: "แบบฟอร์มหน้าร้าน", key: "shop.leave_form", label: "แบบฟอร์มลางาน (หน้าร้าน)", kind: "fields",
+    hint: "พิมพ์ที่ รายงาน → แบบฟอร์มลางาน · สังกัดใช้แผนกในทะเบียนพนักงาน ถ้าว่างใช้ค่าด้านล่าง",
+    fields: [
+      { k: "group", label: "ข้อความมุมซ้ายบน", max: 100 },
+      { k: "title", label: "ชื่อฟอร์ม", max: 100 },
+      { k: "company", label: "บริษัท", max: 200 },
+      { k: "dept", label: "สังกัด (เมื่อพนักงานไม่มีแผนก)", max: 100 },
+    ],
+  },
   { group: "ใบลงเวลา", key: "timesheet.form", label: "ข้อความในฟอร์มใบลงเวลา (MOU / คนไทย)", hint: "ใช้ตอนพิมพ์ใบลงเวลาในหน้ารายงาน · ชื่อบริษัท ชื่อฟอร์ม หมายเหตุท้ายฟอร์ม และ ฝ่าย/แผนก กับ UL ของแต่ละคลัง", kind: "tsform" },
   { group: "แจ้งเตือน", key: "notify.missing_in_minutes", label: "กะเริ่มแล้วกี่นาทียังไม่ลงเวลา จึงแจ้งเตือนพนักงาน", unit: "นาที", hint: "", kind: "number", min: 5, max: 240 },
   { group: "แจ้งเตือน", key: "notify.absent_streak_days", label: "ขาดงานติดต่อกันกี่วันทำงาน จึงแจ้งหัวหน้า/แอดมิน", unit: "วัน", hint: "เป็นการแจ้งให้ตรวจสอบเท่านั้น ไม่ได้ทำให้พ้นสภาพพนักงาน", kind: "number", min: 1, max: 14 },
@@ -117,6 +145,14 @@ export function RulesManager() {
         return Object.entries(v as Rates)
           .map(([k, r]) => `${labelIn(list, k)}: วันทำงาน ${r.workday ?? "-"} / ทำงานวันหยุด ${r.holiday_normal ?? "-"} / OT วันหยุด ${r.holiday_ot ?? "-"}`)
           .join(" · ");
+      case "permin": {
+        if (typeof v === "number") return `${v} นาที (ทุกประเภท)`;
+        return Object.entries(v as Record<string, number>).map(([k, n]) => `${labelIn(list, k)} ${n}`).join(" · ") + " นาที";
+      }
+      case "fields": {
+        const o = (v ?? {}) as Record<string, unknown>;
+        return (m.fields ?? []).slice(0, 4).map((fd) => (fd.codes ? codesText(o[fd.k]) : String(o[fd.k] ?? ""))).filter(Boolean).join(" · ") || "-";
+      }
       case "tsform": {
         const f = parseForm(v);
         const wh = Object.entries(f.wh).map(([k, w]) => `${k}: UL ${w.mou_ul || "-"} (MOU) / ${w.thai_ul || "-"} (คนไทย)`);
@@ -222,6 +258,15 @@ function EditSetting({ meta, current, options, leaveTypes, onClose, onSaved }: {
     );
   });
   const [dil, setDil] = useState<DilRules>(() => (meta.kind === "dilrules" ? { ...(current as DilRules) } : {}));
+  const [perMin, setPerMin] = useState<Record<string, string>>(() => {
+    const cur = meta.kind === "permin" ? current : null;
+    const obj = typeof cur === "number" ? { default: cur } : ((cur ?? {}) as Record<string, number>);
+    return Object.fromEntries(["default", ...options.map((o) => o.value)].map((k) => [k, obj[k] === undefined ? "" : String(obj[k])]));
+  });
+  const [fields, setFields] = useState<Record<string, string>>(() => {
+    const o = (meta.kind === "fields" ? (current ?? {}) : {}) as Record<string, unknown>;
+    return Object.fromEntries((meta.fields ?? []).map((fd) => [fd.k, fd.codes ? codesText(o[fd.k]) : String(o[fd.k] ?? "")]));
+  });
   const [from, setFrom] = useState(todayIso);
   const [note, setNote] = useState("");
   const [err, setErr] = useState("");
@@ -279,6 +324,35 @@ function EditSetting({ meta, current, options, leaveTypes, onClose, onSaved }: {
       }
       case "dilrules":
         return { absent: !!dil.absent, late: !!dil.late, no_punch: !!dil.no_punch, leave_types: dil.leave_types ?? [] };
+      case "permin": {
+        const out: Record<string, number> = {};
+        for (const [k, v] of Object.entries(perMin)) {
+          if (v.trim() === "") continue;
+          const n = Number(v);
+          if (!Number.isFinite(n) || n < (meta.min ?? 0) || n > (meta.max ?? 1e6)) return `ใส่ตัวเลข ${meta.min ?? 0}–${meta.max} นาที`;
+          out[k] = n;
+        }
+        if (out.default === undefined) return "ต้องมีค่าเริ่มต้น";
+        return Object.keys(out).length === 1 ? out.default : out;
+      }
+      case "fields": {
+        const out: Record<string, unknown> = {};
+        for (const fd of meta.fields ?? []) {
+          const v = (fields[fd.k] ?? "").trim().slice(0, fd.max);
+          if (!fd.codes) {
+            out[fd.k] = v;
+            continue;
+          }
+          const codes: Record<string, string> = {};
+          for (const part of v.split(/[,\n]+/).map((x) => x.trim()).filter(Boolean)) {
+            const [c, t] = part.split("=").map((x) => x.trim());
+            if (!c || !t || c.length > 30 || t.length > 6) return `รหัสกะเขียนแบบ STD1=1 คั่นด้วยจุลภาค (ผิดที่ "${part}")`;
+            codes[c] = t;
+          }
+          out[fd.k] = codes;
+        }
+        return out;
+      }
     }
   }
 
@@ -384,6 +458,25 @@ function EditSetting({ meta, current, options, leaveTypes, onClose, onSaved }: {
             )}
           </div>
         )}
+        {meta.kind === "permin" && (
+          <div className="grid grid-cols-2 gap-2">
+            {Object.keys(perMin).map((k) => (
+              <Field key={k} label={k === "default" ? "ค่าเริ่มต้น (นาที)" : `${options.find((o) => o.value === k)?.label ?? k} (นาที)`}>
+                <input type="number" inputMode="numeric" min={meta.min} max={meta.max} className={inputCls} value={perMin[k]} placeholder={k === "default" ? "" : "ใช้ค่าเริ่มต้น"} onChange={(e) => setPerMin({ ...perMin, [k]: e.target.value })} />
+              </Field>
+            ))}
+          </div>
+        )}
+        {meta.kind === "fields" &&
+          (meta.fields ?? []).map((fd) => (
+            <Field key={fd.k} label={fd.label}>
+              {fd.k === "legend" ? (
+                <textarea className={`${inputCls} min-h-20 py-2`} maxLength={fd.max} value={fields[fd.k]} onChange={(e) => setFields({ ...fields, [fd.k]: e.target.value })} />
+              ) : (
+                <input className={inputCls} maxLength={fd.max} value={fields[fd.k]} onChange={(e) => setFields({ ...fields, [fd.k]: e.target.value })} />
+              )}
+            </Field>
+          ))}
         {meta.kind === "tsform" && (
           <TimesheetFormFields value={ts} onChange={setTs} warehouses={warehouses.filter((w) => w.is_active).map((w) => ({ code: w.code, name: w.name }))} />
         )}
@@ -544,4 +637,9 @@ function OverrideForm({ year, types, whIds, onClose, onSaved }: { year: number; 
       </div>
     </Modal>
   );
+}
+
+/** {STD1: "1", STD2: "2"} → "STD1=1, STD2=2" */
+function codesText(v: unknown): string {
+  return v && typeof v === "object" ? Object.entries(v as Record<string, unknown>).map(([k, x]) => `${k}=${String(x)}`).join(", ") : "";
 }

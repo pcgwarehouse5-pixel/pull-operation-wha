@@ -7,7 +7,7 @@ const W32 = "preview-wh-32";
 
 export const PREVIEW_UNITS: Unit[] = [
   { id: "preview-unit-wha", code: "WHA", name: "คลังสินค้า WHA (ตัวอย่าง)", modules: ["pull"], is_default: true },
-  { id: "preview-unit-shop", code: "SHOP5", name: "หน้าร้านคลัง 5 (ตัวอย่าง)", modules: [], is_default: false },
+  { id: "preview-unit-shop", code: "SHOP5", name: "หน้าร้านคลัง 5 (ตัวอย่าง)", modules: ["leave_hours", "shop_forms"], is_default: false },
 ];
 
 export const PREVIEW_WAREHOUSES: Warehouse[] = [
@@ -82,6 +82,7 @@ export function previewEmployees(): Employee[] {
     ...p,
     salary_code: i === 1 ? null : `S${String(i + 1).padStart(4, "0")}`,
     birth_date: null,
+    hire_date: null,
     subcontractor_company: null,
     resigned_date: i === 3 ? "2026-10-31" : null,
     status: i === 3 ? "resigned" : "active",
@@ -351,4 +352,31 @@ export function previewTimesheetPeople() {
     { id: "p2", employee_code: "D0002", title: "นาย", first_name_th: "ทดสอบ", last_name_th: "ตัวอย่าง", position: "Checker", salary_code: "S0002", employment_type: "mou" },
     { id: "preview-me", employee_code: "DEMO01", title: null, first_name_th: "ผู้ใช้", last_name_th: "ตัวอย่าง", position: "RT", salary_code: null, employment_type: "mou" },
   ];
+}
+
+// ---------- แบบฟอร์มหน้าร้าน (ข้อมูลสมมติ ใช้เฉพาะโหมดดูดีไซน์ตอนพัฒนา) ----------
+export function previewShopPeople() {
+  return [
+    { id: "s1", employee_code: "D9001", title: "นางสาว", first_name_th: "ทดลอง", last_name_th: "หน้าร้าน", position: "พนักงานขาย", department: null, hire_date: "2001-10-01" },
+    { id: "s2", employee_code: "D9002", title: "นาย", first_name_th: "ตัวอย่าง", last_name_th: "หน้าร้าน", position: "แคชเชียร์", department: null, hire_date: "2019-07-17" },
+    { id: "preview-me", employee_code: "DEMO01", title: null, first_name_th: "ผู้ใช้", last_name_th: "ตัวอย่าง", position: "หัวหน้าหน้าร้าน", department: null, hire_date: null },
+  ];
+}
+
+export function previewLeaveFormRows(year: number) {
+  const r = (o: Record<string, unknown>) => ({ request_id: null, leave_type: null, start_date: null, end_date: null, period: null, start_time: null, hours: null, days: null, reason: null, approved_by: null, vacation_quota: 12, ...o });
+  return [
+    r({ user_id: "s1", request_id: "x1", leave_type: "vacation", start_date: `${year}-03-02`, end_date: `${year}-03-02`, period: "hours", start_time: "13:00:00", hours: 4, days: 0.5, reason: "ธุระส่วนตัว (ตัวอย่าง)", approved_by: "หัวหน้า ตัวอย่าง" }),
+    r({ user_id: "s1", request_id: "x2", leave_type: "sick", start_date: `${year}-04-05`, end_date: `${year}-04-06`, period: "full", days: 2, reason: "ไข้หวัด (ตัวอย่าง)", approved_by: "หัวหน้า ตัวอย่าง" }),
+    r({ user_id: "s1", request_id: "x3", leave_type: "personal", start_date: `${year}-05-07`, end_date: `${year}-05-07`, period: "hours", start_time: "08:00:00", hours: 2, days: 0.25, approved_by: "หัวหน้า ตัวอย่าง" }),
+    r({ user_id: "s2" }),
+    r({ user_id: "preview-me" }),
+  ];
+}
+
+export function previewShopShifts(days: string[]) {
+  const codes = ["STD1", "STD1", "STD1", "STD1", "STD1", "OFF", "OFF"];
+  return previewShopPeople().flatMap((p, k) =>
+    days.map((d, i) => ({ user_id: p.id, work_date: d, shift_code: k === 1 && i % 7 === 2 ? "WH_3" : codes[(i + k) % 7] })),
+  );
 }

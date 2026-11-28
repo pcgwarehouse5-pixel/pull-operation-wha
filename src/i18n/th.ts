@@ -381,6 +381,7 @@ export const th = {
   "period.full": "เต็มวัน",
   "period.morning": "ครึ่งวันเช้า",
   "period.afternoon": "ครึ่งวันบ่าย",
+  "period.hours": "เป็นชั่วโมง",
   "lva.approve": "อนุมัติ",
   "lva.reject": "ไม่อนุมัติ",
   "lva.cancel_request": "ขอยกเลิก",
@@ -405,6 +406,12 @@ export const th = {
   "lf.sending": "กำลังส่ง...",
   "lf.sent": "ส่งใบลาแล้ว รออนุมัติ",
   "lf.uploadFail": "อัปโหลดไฟล์ไม่สำเร็จ: {e}",
+  "lf.startTime": "เริ่มลาเวลา",
+  "lf.hours": "ลากี่ชั่วโมง",
+  "lf.hoursN": "{n} ชม.",
+  "lf.hoursTotal": "ลา {n} ชม. ({from}–{to} น.)",
+  "lf.hoursNote": "หักวันลา {d} วัน ({h} ชม. = 1 วัน)",
+  "lf.hoursOvernight": "ช่วงเวลาลาข้ามเที่ยงคืนไม่ได้",
 
   // ---------- แจ้งเตือน ----------
   "nt.title": "แจ้งเตือน",

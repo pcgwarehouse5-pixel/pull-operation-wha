@@ -7,6 +7,7 @@ import { LEAVE_STATUS, type LeaveApproval, type LeaveRequest } from "@/lib/atten
 import { useI18n } from "@/i18n";
 import type { MsgKey } from "@/i18n/th";
 import { openAttachment } from "./LeaveForm";
+import { hourSpan, num } from "@/lib/shop-forms";
 
 export function LeaveItem({
   r, typeLabel, who, approvals, actions, onError,
@@ -22,9 +23,10 @@ export function LeaveItem({
   const [open, setOpen] = useState(false);
   const st = LEAVE_STATUS[r.status];
   const waitingExec = r.status === "pending" && r.steps_done >= 1;
+  const hourly = r.period === "hours" && r.hours;
   const range =
     r.start_date === r.end_date
-      ? `${fmt.day(r.start_date)}${r.period !== "full" ? ` (${t(`period.${r.period}` as MsgKey)})` : ""}`
+      ? `${fmt.day(r.start_date)}${hourly ? ` (${hourSpan(r)})` : r.period !== "full" ? ` (${t(`period.${r.period}` as MsgKey)})` : ""}`
       : `${fmt.day(r.start_date)} – ${fmt.day(r.end_date)}`;
   return (
     <Card className="!p-3.5">
@@ -33,7 +35,7 @@ export function LeaveItem({
         <span className={`mt-0.5 w-1.5 self-stretch rounded-full ${r.status === "approved" ? "bg-ok" : r.status === "rejected" ? "bg-bad" : r.status === "cancelled" ? "bg-[#a9b2c8]" : "bg-warn"}`} aria-hidden="true" />
         <div className="min-w-0 flex-1">
           <p className="text-[17px] leading-tight font-bold">
-            {t("lv.of", { type: typeLabel })} <span className="num font-semibold text-muted">· {t("common.days", { n: r.days })}</span>
+            {t("lv.of", { type: typeLabel })} <span className="num font-semibold text-muted">· {hourly ? t("lf.hoursN", { n: num(Number(r.hours)) }) : t("common.days", { n: r.days })}</span>
           </p>
           <p className="text-[15px]">{range}</p>
         </div>

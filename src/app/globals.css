@@ -285,3 +285,62 @@ html[lang="my"] :is(.leading-none, .leading-tight, .leading-snug) {
 .ts-mou {
   font-family: Tahoma, var(--font-ts), "Leelawadee UI", sans-serif;
 }
+
+/* แบบฟอร์มหน้าร้าน A4 แนวนอน (src/components/shop) · พิมพ์ผ่าน .ts-print-root เดียวกับใบลงเวลา */
+.shop-page {
+  width: 297mm;
+  height: 210mm;
+  box-sizing: border-box;
+  padding: 9mm 10mm;
+  overflow: hidden;
+  background: #fff;
+  color: #000;
+  font-family: var(--font-ts), Tahoma, "Leelawadee UI", sans-serif;
+  font-size: 10pt;
+  line-height: 1.3;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.shop-page p {
+  margin: 0;
+}
+.shop-tbl {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+.shop-tbl th,
+.shop-tbl td {
+  border: 1px solid #000;
+  padding: 0 1mm;
+  text-align: center;
+  vertical-align: middle;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.shop-tbl th {
+  font-weight: 400;
+}
+.shop-tbl td.shop-l {
+  text-align: left;
+}
+.shop-tbl td.shop-wrap {
+  white-space: normal;
+  line-height: 1.15;
+}
+.shop-sun {
+  background: #8c8c8c;
+}
+@media print {
+  @page shop {
+    size: A4 landscape;
+    margin: 0;
+  }
+  .shop-page {
+    page: shop;
+    break-after: page;
+  }
+  .shop-page:last-child {
+    break-after: auto;
+  }
+}

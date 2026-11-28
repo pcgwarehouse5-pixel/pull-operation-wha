@@ -77,8 +77,12 @@ export type Warehouse = {
 };
 
 // หน่วยงาน: แยกข้อมูลของแต่ละหน่วยงานออกจากกัน (เช่น คลังสินค้า WHA / หน้าร้านคลัง 5)
-export type UnitModule = "pull";
-export const UNIT_MODULES: { key: UnitModule; label: string }[] = [{ key: "pull", label: "Pull Operation (ระบบดึงคน)" }];
+export type UnitModule = "pull" | "leave_hours" | "shop_forms";
+export const UNIT_MODULES: { key: UnitModule; label: string }[] = [
+  { key: "pull", label: "Pull Operation (ระบบดึงคน)" },
+  { key: "leave_hours", label: "ลาเป็นชั่วโมง" },
+  { key: "shop_forms", label: "แบบฟอร์มหน้าร้าน (แบบฟอร์มลางาน · ใบแจ้งตารางการปฏิบัติงาน · หมายเหตุสายในใบลงเวลา)" },
+];
 export type Unit = { id: string; code: string; name: string; modules: UnitModule[]; is_default: boolean };
 
 export type Profile = {
@@ -103,6 +107,7 @@ export type Profile = {
 // ข้อมูลพนักงานแบบเต็ม (หน้าทะเบียนพนักงาน)
 export type Employee = Profile & {
   department: string | null;
+  hire_date: string | null;
   salary_code: string | null;
   birth_date: string | null;
   subcontractor_company: string | null;

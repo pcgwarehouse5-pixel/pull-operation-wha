@@ -72,8 +72,11 @@ export type LeaveRequest = {
   leave_type: string;
   start_date: string;
   end_date: string;
-  period: "full" | "morning" | "afternoon";
+  period: "full" | "morning" | "afternoon" | "hours";
   days: number;
+  /** ลาเป็นชั่วโมง (period = hours) */
+  start_time?: string | null;
+  hours?: number | null;
   reason: string | null;
   attachment_path: string | null;
   status: LeaveStatus;

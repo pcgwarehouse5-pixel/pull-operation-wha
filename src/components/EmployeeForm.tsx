@@ -18,6 +18,7 @@ export type EmployeeValues = {
   phone: string;
   line_id: string;
   birth_date: string;
+  hire_date: string;
   flags: Record<string, boolean>;
 };
 
@@ -35,6 +36,7 @@ export const EMPTY_EMPLOYEE: EmployeeValues = {
   phone: "",
   line_id: "",
   birth_date: "",
+  hire_date: "",
   flags: { ot_eligible: true, show_in_ot_report: true, show_in_org_chart: true, travel_eligible: false, exclude_from_shift: false, auto_check_in: false },
 };
 
@@ -54,6 +56,7 @@ export function toRow(v: EmployeeValues) {
     phone: n(v.phone),
     line_id: n(v.line_id),
     birth_date: n(v.birth_date),
+    hire_date: n(v.hire_date),
     ...v.flags,
   };
 }
@@ -137,6 +140,9 @@ export function EmployeeForm({
         </Field>
         <Field label="LINE ID">
           <input className={inputCls} value={value.line_id} onChange={(e) => set("line_id", e.target.value)} disabled={readOnly} autoCapitalize="none" maxLength={50} />
+        </Field>
+        <Field label="วันที่เริ่มงาน" hint="ใช้พิมพ์ในแบบฟอร์มลางานและใบแจ้งตารางการปฏิบัติงาน">
+          <input type="date" className={inputCls} value={value.hire_date} onChange={(e) => set("hire_date", e.target.value)} disabled={readOnly} />
         </Field>
         <Field label="วันเกิด" hint="ไม่บังคับ">
           <input type="date" className={inputCls} value={value.birth_date} onChange={(e) => set("birth_date", e.target.value)} disabled={readOnly} />
