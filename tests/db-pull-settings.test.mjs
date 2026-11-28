@@ -257,7 +257,7 @@ test("ค่าเริ่มต้นจาก Excel/แอปเดิม ใ
     from public.pull_type_splits s join public.pull_workload_types t on t.id = s.type_id join public.pull_workload_types src on src.id = s.source_type_id
     where s.warehouse_id = $1 order by t.sort_order`, [WH5]);
   assert.deepEqual(splits.map((s) => `${s.name}<-${s.src}:${s.share}%/${s.div}@${s.from}`), [
-    "งานจ่าย พาเลทเต็ม<-ยอดจ่ายรวม:60%/32@2026-11-28", "งานเติม Pickface<-ยอดจ่ายรวม:40%/10@2026-11-28", "งานจ่าย Picker<-ยอดจ่ายรวม:40%/1@2026-11-28",
+    "งานจ่าย พาเลทเต็ม<-ยอดจ่ายรวม:60%/32@2026-11-28", "งานเติม Pickface<-ยอดจ่ายรวม:40%/32@2026-11-28", "งานจ่าย Picker<-ยอดจ่ายรวม:40%/1@2026-11-28",
     "งานโหลดสินค้า<-ยอดจ่ายรวม:100%/1@2026-11-28", "งานเช็คจ่าย<-ยอดจ่ายรวม:100%/1@2026-11-28",
   ]);
   assert.equal((await rows(db, `select 1 from public.pull_skills where warehouse_id = $1`, [WH5])).length, 13);

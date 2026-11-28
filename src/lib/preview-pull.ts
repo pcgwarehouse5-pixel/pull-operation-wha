@@ -93,7 +93,7 @@ export function previewPullConfig(): PullConfig {
     hours: [...hours(W5, 10, 9.5), ...hours(W32, 9, 9.5)],
     counts,
     // คลัง 5 กรอกยอดจ่ายรวมเป็นชิ้น แล้วแตกยอดให้งานจ่าย (เหมือน migration 0037)
-    splits: ([[T5.out, 60, 32], [T5.fill, 40, 10], [T5.pick, 40, 1], [T5.load, 100, 1], [T5.chk, 100, 1]] as const).map(([type_id, share_pct, divisor]) => ({
+    splits: ([[T5.out, 60, 32], [T5.fill, 40, 32], [T5.pick, 40, 1], [T5.load, 100, 1], [T5.chk, 100, 1]] as const).map(([type_id, share_pct, divisor]) => ({
       type_id, warehouse_id: W5, effective_from: old, source_type_id: T5.total, share_pct, divisor, note: null, created_at: AT,
     })),
   };
